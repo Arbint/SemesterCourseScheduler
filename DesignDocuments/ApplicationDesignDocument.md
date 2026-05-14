@@ -3,7 +3,7 @@
 This is a web app that helps the department chair to schedule courses for the semester.
 
 ## App Structure
-
+----------------------------
 ### Backend
 
 #### Database structure:
@@ -31,6 +31,10 @@ The backend has a data base that has the following tables:
     - Course Name (a String that is the name of the course, like Game Programming III)
 
     - Duration (1 hour 15 mintues, 2 hour 45 minute, course are usually in either 1 hour 15 mintues or 2 hour 45 minutes, but can have unique durations)
+
+    - Capacity (int value for the max amount of student allowed in the course)
+
+    - Section (int value, some course has multiple sections, they are the same course taught by different instrutors at different times,they are essentailly a different course from the scheduling point of view)
 
 * Taught With
 
@@ -69,6 +73,9 @@ The backend has a data base that has the following tables:
         * a course could occupy 1 or more cells in the table based on the duration, for example if a course is in Room FH 3059 and the time is from 7:30 AM - 10:15 AM, it will occupy both the cell on 7:30 AM - 8:45 AM, and 9:00 AM - 10:15 AM.
 
 
+* Semester:
+    A semester is a list of schedule tables. 
+
 #### Backend code:
 On top of the Rest API access to backend database. the backend code should have the following features:
 
@@ -80,4 +87,58 @@ On top of the Rest API access to backend database. the backend code should have 
 
     * Co-requisite courses that are scheduled at the same time is not allowed.
 
+---------------
 
+### Frontend
+
+#### Theme
+Create a centralized .css file to define the theme of the front end, we prefer a theme that is similar to One Dark Pro that you would found in VS Code.
+
+#### Icon and Favicon
+The Icon and Favicon are the same is is located at: ./assets/icon.png
+
+#### Frontend Structure
+
+The front end in composed with multiple tabs:
+
+* Faculty:
+
+    This tab allows the user to add and remove courses, define their properties as described in the data base.
+
+* Courses:
+
+    This tab allows the user to add and remove courses, define their properties as decribed in the data base.
+
+* Rooms:
+
+    This tab allows the user to add and remove rooms, define their properties as decribed in the data base.
+
+* Time Slots:
+
+    This tab allows the user to add and remove time slots, define their properties as decribed in the data base.
+
+* Constraints:
+
+    This tab has 2 parts: 
+
+    * Taught with: allows the user to add, remove, and configure taught with groups.
+
+    * Co-Requisite: allows the user to add, remove, and configure co-requisites groups.
+
+* Schedule Tables:
+
+    This tab is the primary working area for doing the schedule, it is broken down to 3 columns
+
+    * Course List
+
+        this is a list of courses that shows the courses in the Courses table in the data base. each course is a component that has 4 row:
+
+        * Code Row: composed of {Department Code} {Course Number}-{Section Number}
+        * Name Row: Course Name
+        * Instructor: Instructor of the course
+        * Capacity: The capacity of the course
+
+    * Tables List
+
+        This is the place for the user to added in tables, each table has a 
+    * Error List
