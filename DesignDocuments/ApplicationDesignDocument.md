@@ -9,12 +9,29 @@ This is a web app that helps the department chair to schedule courses for the se
 #### Database structure:
 The backend has a data base that has the following tables:
 
+* Semesters
+
+    There are 3 semseters:
+
+    * Fall
+    * Spring
+    * Summer
+
+* Terms
+
+    Each term is composed with three components
+
+    * Semseter
+    * Year (2025, 2026 ...)
+    * Schedule Tables (see schedule tables below)
+
 * Faculty
 
     - First Name
     - Last Name
     - Rank (Full Time, Part Time)
     - Tags (list of arbitrary strings)
+
 
 * Courses
 
@@ -35,6 +52,11 @@ The backend has a data base that has the following tables:
     - Capacity (int value for the max amount of student allowed in the course)
 
     - Section (int value, some course has multiple sections, they are the same course taught by different instrutors at different times,they are essentailly a different course from the scheduling point of view)
+
+    - Semester.
+
+        The Semester(s) the course is offered, a list of semesters.
+
 
 * Taught With
 
@@ -65,7 +87,8 @@ The backend has a data base that has the following tables:
     - Monday to Friday
 
 * Schedule Tables:
-    to schedule a semester, the user will create multiple schedule tables, a schedule table would have:
+
+    Schedule tables are the schedules build for a specific term, the user will create multiple schedule tables for a term, a schedule table would have:
     * Week days (what weekdays the schedule is planned)
     a table with:
         * rows: time slots from the Time Slots table. 
@@ -73,28 +96,48 @@ The backend has a data base that has the following tables:
         * a course could occupy 1 or more cells in the table based on the duration, for example if a course is in Room FH 3059 and the time is from 7:30 AM - 10:15 AM, it will occupy both the cell on 7:30 AM - 8:45 AM, and 9:00 AM - 10:15 AM.
 
 
-* Semester:
-    A semester is a list of schedule tables. 
-
 #### Backend code:
 On top of the Rest API access to backend database. the backend code should have the following features:
 
-* Conflict Detection 
+* Conflict Detection
 
-    These are conflicts the backend should detect:
+    * The pattern of conflict detection is based on a base class called ConflictAuditor that takes in the database in it's constructor, and the conflict detection is done by calling the Audit method, which returns a list of ConlifctReport (there is no conflict detected if the list is empty):
 
-    * Faculty time conflict, a faculty cannot teach 2 courses at the same time unless they are taught with eachother.
+        ```py
+        class ConflictReport:
+            def __init__(self, courses, descrpiton):
+                self.courses = courses
+                self.description = description
 
-    * Co-requisite courses that are scheduled at the same time is not allowed.
+        class ConflictAuditor:
+            def __init__(self, dataBase): 
+                self.dataBase = dataBase
+
+            def Audit(self)->list[ConflictReport]:
+                return []
+        ```
+
+        Put these 2 base classes in a file called ConflictAutdit.py, and implement the concrete ConflictAuditors in a different file called ConflictAuditors.py
+
+        * The back end should automatically find all child classes of ConflictAuditors in ConflictAuditors.py and use them to find conflicts.
+
+    * To start with, these are the conflicts the backend should implement:
+
+        * Faculty time conflict, a faculty cannot teach 2 courses at the same time unless they are taught with eachother.
+
+        * Co-requisite courses that are scheduled at the same time is not allowed.
+
 
 ---------------
 
 ### Frontend
 
 #### Theme
+
 Create a centralized .css file to define the theme of the front end, we prefer a theme that is similar to One Dark Pro that you would found in VS Code.
 
 #### Icon and Favicon
+
 The Icon and Favicon are the same is is located at: ./assets/icon.png
 
 #### Frontend Structure
@@ -125,10 +168,14 @@ The front end in composed with multiple tabs:
 
     * Co-Requisite: allows the user to add, remove, and configure co-requisites groups.
 
-* Schedule Tables:
+* Term Schedules:
 
-    This tab is the primary working area for doing the schedule, it is broken down to 3 columns
+    This tab is the primary working area for doing the schedule for a term, it starts with a master vetical layout of 2 areas:
 
+    * The top is a small area that is the configuration areas:
+    
+    
+    it is broken down to 3 columns
     * Course List
 
         this is a list of courses that shows the courses in the Courses table in the data base. each course is a component that has 4 row:
@@ -140,5 +187,16 @@ The front end in composed with multiple tabs:
 
     * Tables List
 
-        This is the place for the user to added in tables, each table has a 
-    * Error List
+        This is the place for the user to added in tables, each table has: 
+
+        * Weekday check boxes
+
+        * Term - dropdown list
+
+        * Year - a widget that allows the user to pick a year, like 2024, 2026, 2027...
+
+        * the table that allows the user to drag classes from the Course List to the cells of the table to assign a class to a room and time range.
+
+    * Conflict List
+
+        the list of conflict it founds in the current schedule. what courses in the table, and what the conflict it is. 
