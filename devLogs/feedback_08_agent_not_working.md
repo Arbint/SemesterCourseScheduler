@@ -1,0 +1,1 @@
+when I ask the agent to do auto schedule for me, it some how thinks everything is already scheduled, can you help debug and figure out why that is the case? maybe the database is still not synced with what the user see in the frontend web page?

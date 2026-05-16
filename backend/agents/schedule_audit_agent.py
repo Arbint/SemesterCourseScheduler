@@ -38,22 +38,22 @@ Always highlight relevant courses using highlight_courses().
     def GetAgentTools(self):
         return [
             {
-                "name": "get_schedule_summary",
+                "name": self.get_schedule_summary.__name__,
                 "description": "Get the full schedule summary for the term",
                 "input_schema": {"type": "object", "properties": {}}
             },
             {
-                "name": "get_faculty_load",
+                "name": self.get_faculty_load.__name__,
                 "description": "Get each faculty member's section count and full load",
                 "input_schema": {"type": "object", "properties": {}}
             },
             {
-                "name": "get_coreq_groups",
+                "name": self.get_coreq_groups.__name__,
                 "description": "Get all co-requisite groups with their course lists",
                 "input_schema": {"type": "object", "properties": {}}
             },
             {
-                "name": "highlight_courses",
+                "name": self.highlight_courses.__name__,
                 "description": "Highlight specific courses in the frontend",
                 "input_schema": {
                     "type": "object",
@@ -68,7 +68,7 @@ Always highlight relevant courses using highlight_courses().
                 }
             },
             {
-                "name": "propose_schedule_change",
+                "name": self.propose_schedule_change.__name__,
                 "description": "Propose a set of schedule changes for user approval",
                 "input_schema": {
                     "type": "object",
@@ -95,7 +95,7 @@ Always highlight relevant courses using highlight_courses().
                 }
             },
             {
-                "name": "apply_approved_proposal",
+                "name": self.apply_approved_proposal.__name__,
                 "description": "Apply a previously approved proposal to the database",
                 "input_schema": {
                     "type": "object",
@@ -106,7 +106,7 @@ Always highlight relevant courses using highlight_courses().
                 }
             },
             {
-                "name": "auto_schedule",
+                "name": self.auto_schedule.__name__,
                 "description": "Automatically schedule all unscheduled entries in the term",
                 "input_schema": {"type": "object", "properties": {}}
             },
@@ -114,6 +114,7 @@ Always highlight relevant courses using highlight_courses().
 
     def get_schedule_summary(self):
         from models import Term, TimeSlot, Room
+        self.db.expire_all()
         term = self.db.query(Term).filter_by(id=self.term_id).first()
         if not term:
             return {"error": "Term not found"}
@@ -209,7 +210,7 @@ Always highlight relevant courses using highlight_courses().
         }
 
     def apply_approved_proposal(self, proposal_id: str):
-        from models import ScheduleEntry, TimeSlot
+        from models import ScheduleEntry, ScheduleTable, TimeSlot, Weekday
         changes = self._proposals.get(proposal_id)
         if changes is None:
             return {"error": "Proposal not found"}
@@ -220,6 +221,7 @@ Always highlight relevant courses using highlight_courses().
                 entry = self.db.query(ScheduleEntry).filter_by(id=change["entry_id"]).first()
                 if entry:
                     entry.faculty_id = change.get("faculty_id")
+
             elif action == "move":
                 entry = self.db.query(ScheduleEntry).filter_by(id=change["entry_id"]).first()
                 if entry:
@@ -232,6 +234,36 @@ Always highlight relevant courses using highlight_courses().
                         entry.time_slots = slots
                     if "faculty_id" in change:
                         entry.faculty_id = change.get("faculty_id")
+
+            elif action == "create_table":
+                # Create the table and assign entries to it in one atomic step.
+                # auto_schedule uses this action so table creation is deferred until
+                # apply time (never pre-created during the chat session).
+                weekday_names = change.get("weekday_names", [])
+                wdays = (
+                    self.db.query(Weekday)
+                    .filter(Weekday.name.in_(weekday_names))
+                    .order_by(Weekday.display_order)
+                    .all()
+                )
+                table = ScheduleTable(term_id=self.term_id)
+                self.db.add(table)
+                self.db.flush()
+                table.weekdays = wdays
+
+                for assign in change.get("entry_assignments", []):
+                    entry = self.db.query(ScheduleEntry).filter_by(id=assign["entry_id"]).first()
+                    if not entry:
+                        continue
+                    entry.schedule_table_id = table.id
+                    if assign.get("room_id"):
+                        entry.room_id = assign["room_id"]
+                    if assign.get("time_slot_ids"):
+                        slots = self.db.query(TimeSlot).filter(
+                            TimeSlot.id.in_(assign["time_slot_ids"])
+                        ).all()
+                        entry.time_slots = slots
+
             elif action == "create_entry":
                 entry = ScheduleEntry(
                     term_id=self.term_id,
@@ -246,6 +278,7 @@ Always highlight relevant courses using highlight_courses().
                     self.db.flush()
                     slots = self.db.query(TimeSlot).filter(TimeSlot.id.in_(change["time_slot_ids"])).all()
                     entry.time_slots = slots
+
             elif action == "delete_entry":
                 entry = self.db.query(ScheduleEntry).filter_by(id=change["entry_id"]).first()
                 if entry:
@@ -256,77 +289,87 @@ Always highlight relevant courses using highlight_courses().
         return {"ok": True, "applied": len(changes)}
 
     def auto_schedule(self):
-        from models import Term, ScheduleTable, TimeSlot, Room, Faculty, ScheduleEntry, Weekday
+        from models import Term, TimeSlot, Room, ScheduleEntry, CourseOffering
         term = self.db.query(Term).filter_by(id=self.term_id).first()
         if not term:
             return {"error": "Term not found"}
 
-        unscheduled = [e for e in term.schedule_entries if not e.schedule_table_id]
+        # Expire cached relationships so we read the latest DB state.
+        self.db.expire(term)
+
+        # Restore placeholder entries for courses offered in this semester that
+        # have no entry at all (can happen if all sections were deleted manually).
+        offered = self.db.query(CourseOffering).filter_by(semester_id=term.semester_id).all()
+        entry_course_ids = {e.course_id for e in self.db.query(ScheduleEntry).filter_by(term_id=self.term_id).all()}
+        for offering in offered:
+            if offering.course_id not in entry_course_ids:
+                self.db.add(ScheduleEntry(term_id=self.term_id, course_id=offering.course_id, section=1))
+        self.db.flush()
+
+        unscheduled = self.db.query(ScheduleEntry).filter(
+            ScheduleEntry.term_id == self.term_id,
+            ScheduleEntry.schedule_table_id.is_(None),
+        ).all()
+
         if not unscheduled:
-            return {"message": "All entries are already scheduled"}
+            # Double-check: count scheduled sections to give an accurate message
+            total = self.db.query(ScheduleEntry).filter_by(term_id=self.term_id).count()
+            if total == 0:
+                return {"message": "No courses are offered in this term. Add courses to the catalog and mark them as offered first."}
+            return {"message": "All course sections are already scheduled in tables. Nothing left to auto-schedule."}
 
         rooms = self.db.query(Room).order_by(Room.capacity.desc()).all()
         time_slots = self.db.query(TimeSlot).order_by(TimeSlot.display_order).all()
-        weekdays = self.db.query(Weekday).order_by(Weekday.display_order).all()
-
-        weekday_map = {w.name.value: w for w in weekdays}
 
         # Group entries by frequency
         by_freq: dict[int, list] = {}
         for e in unscheduled:
-            f = e.course.frequency
-            by_freq.setdefault(f, []).append(e)
+            by_freq.setdefault(e.course.frequency, []).append(e)
 
-        # Create tables for each frequency group
-        tables_needed = []
-        for freq, entries in by_freq.items():
-            if freq == 2:
-                # Mon+Wed and Tue+Thu
-                for day_pair in [["mon", "tue"], ["wed", "thu"]]:
-                    days = [weekday_map[d] for d in day_pair if d in weekday_map]
-                    table = ScheduleTable(term_id=self.term_id)
-                    table.weekdays = days
-                    self.db.add(table)
-                    tables_needed.append((freq, table, entries[:len(entries)//2]))
-                    entries = entries[len(entries)//2:]
-                    if entries:
-                        table2 = ScheduleTable(term_id=self.term_id)
-                        table2.weekdays = [weekday_map[d] for d in ["tue", "thu"] if d in weekday_map]
-                        self.db.add(table2)
-                        tables_needed.append((freq, table2, entries))
-            else:
-                days = [weekday_map["thu"]] if "thu" in weekday_map else list(weekday_map.values())[:freq]
-                table = ScheduleTable(term_id=self.term_id)
-                table.weekdays = days[:freq]
-                self.db.add(table)
-                tables_needed.append((freq, table, entries))
-
-        self.db.flush()
-
+        # Build create_table actions — NO DB objects are created here.
+        # Tables are created atomically inside apply_approved_proposal so that
+        # nothing is written to the DB until the user actually approves.
         changes = []
-        for freq, table, entries in tables_needed:
-            slot_idx = 0
-            for entry in entries:
-                needed_slots = max(1, entry.course.duration_minutes // 75)
-                if slot_idx + needed_slots > len(time_slots):
-                    slot_idx = 0
+        for freq, freq_entries in by_freq.items():
+            if freq == 2:
+                half = max(len(freq_entries) // 2, 1)
+                batches = [
+                    (["mon", "wed"], freq_entries[:half]),
+                    (["tue", "thu"], freq_entries[half:]),
+                ]
+            else:
+                all_days = ["mon", "tue", "wed", "thu", "fri"]
+                batches = [(all_days[:freq], freq_entries)]
 
-                slots = time_slots[slot_idx:slot_idx + needed_slots]
-                slot_idx += needed_slots
-
-                # Pick first available room with enough capacity
-                room = next((r for r in rooms if r.capacity >= entry.course.capacity), rooms[0] if rooms else None)
-
+            for weekday_names, batch in batches:
+                if not batch:
+                    continue
+                entry_assignments = []
+                slot_idx = 0
+                for entry in batch:
+                    needed_slots = max(1, entry.course.duration_minutes // 75)
+                    if slot_idx + needed_slots > len(time_slots):
+                        slot_idx = 0
+                    slots = time_slots[slot_idx:slot_idx + needed_slots]
+                    slot_idx += needed_slots
+                    room = next(
+                        (r for r in rooms if r.capacity >= entry.course.capacity),
+                        rooms[0] if rooms else None
+                    )
+                    entry_assignments.append({
+                        "entry_id": entry.id,
+                        "room_id": room.id if room else None,
+                        "time_slot_ids": [s.id for s in slots],
+                    })
                 changes.append({
-                    "action": "move",
-                    "entry_id": entry.id,
-                    "table_id": table.id,
-                    "room_id": room.id if room else None,
-                    "time_slot_ids": [s.id for s in slots],
+                    "action": "create_table",
+                    "weekday_names": weekday_names,
+                    "entry_assignments": entry_assignments,
                 })
 
+        total_sections = sum(len(c["entry_assignments"]) for c in changes)
         return self.propose_schedule_change(
-            description=f"Auto-schedule: place {len(changes)} course sections across new schedule tables",
+            description=f"Auto-schedule: create {len(changes)} schedule table(s) and assign {total_sections} course section(s)",
             changes=changes
         )
 

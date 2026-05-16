@@ -172,5 +172,23 @@ def delete_entry(entry_id: int, db: Session = Depends(get_db)):
     entry = db.query(ScheduleEntry).filter(ScheduleEntry.id == entry_id).first()
     if not entry:
         raise HTTPException(404, "Entry not found")
+
+    term_id = entry.term_id
+    course_id = entry.course_id
+    was_scheduled = entry.schedule_table_id is not None
+
     db.delete(entry)
+    db.flush()
+
+    # If we removed a scheduled section and no entries remain for this course in
+    # the term, restore a blank placeholder so the course reappears as unscheduled
+    # (both in the Course List and for the auto-scheduler).
+    if was_scheduled:
+        remaining = db.query(ScheduleEntry).filter(
+            ScheduleEntry.term_id == term_id,
+            ScheduleEntry.course_id == course_id,
+        ).count()
+        if remaining == 0:
+            db.add(ScheduleEntry(term_id=term_id, course_id=course_id, section=1))
+
     db.commit()
