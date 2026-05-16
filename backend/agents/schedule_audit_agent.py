@@ -19,8 +19,11 @@ You can:
 - Summarize the current schedule
 - Audit for issues (long days, big gaps, unbalanced load, conflicts)
 - Highlight specific courses the user should pay attention to
-- Propose schedule changes for user approval
+- Propose schedule changes for user approval (assign faculty, move courses, etc.)
 - Auto-schedule an entire semester
+
+Before assigning instructors, always call get_faculty() to retrieve the full faculty list with IDs and teaching capabilities.
+Before proposing room or time-slot changes, call get_rooms() and get_time_slots() to retrieve their IDs.
 
 When auditing, always check for:
 1. Long days: faculty teaching 3+ classes on same weekday
@@ -114,6 +117,21 @@ CRITICAL RULES:
                 "description": "Automatically schedule ALL unscheduled course sections in the term by creating tables and assigning time slots and rooms. Use this whenever the user asks to auto-schedule or schedule the entire semester.",
                 "input_schema": {"type": "object", "properties": {}}
             },
+            {
+                "name": self.get_faculty.__name__,
+                "description": "Get all faculty members with their IDs, names, full load, and the courses they are qualified to teach. Use this before assigning instructors to look up faculty IDs and capabilities.",
+                "input_schema": {"type": "object", "properties": {}}
+            },
+            {
+                "name": self.get_rooms.__name__,
+                "description": "Get all available rooms with their IDs, labels, and capacities.",
+                "input_schema": {"type": "object", "properties": {}}
+            },
+            {
+                "name": self.get_time_slots.__name__,
+                "description": "Get all available time slots with their IDs, labels, and display order.",
+                "input_schema": {"type": "object", "properties": {}}
+            },
         ]
 
     def get_schedule_summary(self):
@@ -199,6 +217,48 @@ CRITICAL RULES:
                 ]
             })
         return result
+
+    def get_faculty(self):
+        from models import Faculty, Term
+        term = self.db.query(Term).filter_by(id=self.term_id).first()
+        if not term:
+            return {"error": "Term not found"}
+
+        # Build current load map from this term's entries
+        load_map: dict[int, int] = {}
+        for entry in term.schedule_entries:
+            if entry.faculty_id:
+                load_map[entry.faculty_id] = load_map.get(entry.faculty_id, 0) + 1
+
+        result = []
+        for f in self.db.query(Faculty).order_by(Faculty.last_name).all():
+            current_load = load_map.get(f.id, 0)
+            result.append({
+                "faculty_id": f.id,
+                "name": f"{f.first_name} {f.last_name}",
+                "full_load": f.full_load,
+                "current_sections": current_load,
+                "overloaded": current_load > f.full_load,
+                "can_teach": [
+                    f"{cap.course.dept_code}{cap.course.course_number} {cap.course.course_name}"
+                    for cap in f.teaching_capabilities
+                ]
+            })
+        return result
+
+    def get_rooms(self):
+        from models import Room
+        return [
+            {"room_id": r.id, "label": r.label, "capacity": r.capacity}
+            for r in self.db.query(Room).order_by(Room.label).all()
+        ]
+
+    def get_time_slots(self):
+        from models import TimeSlot
+        return [
+            {"time_slot_id": ts.id, "label": ts.label, "display_order": ts.display_order}
+            for ts in self.db.query(TimeSlot).order_by(TimeSlot.display_order).all()
+        ]
 
     def highlight_courses(self, course_ids: list[int]):
         # This is intercepted by the chat route to extract highlighted IDs
