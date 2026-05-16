@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Database
+backend/scheduler.db
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Env
+.env
+.env.local
+*.env
+
+# Editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
