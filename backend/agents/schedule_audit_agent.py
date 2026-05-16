@@ -32,6 +32,8 @@ When auditing, always check for:
 
 CRITICAL RULES:
 - To auto-schedule the entire semester (or any large batch), ALWAYS call auto_schedule() — never try to manually construct a proposal with propose_schedule_change() for this purpose.
+- When the user asks to REDO, REPLACE, or RESCHEDULE an existing schedule, call auto_schedule(clear_existing=true) to wipe the existing tables first.
+- When scheduling for the first time or filling in only the unscheduled courses, call auto_schedule() with no arguments.
 - For targeted manual changes (moving one course, reassigning faculty, etc.), use propose_schedule_change().
 - Always wait for user approval before applying any proposal. Never call apply_approved_proposal() without the user explicitly saying to apply or approve.
 - Always highlight relevant courses using highlight_courses() when auditing.
@@ -114,8 +116,16 @@ CRITICAL RULES:
             },
             {
                 "name": self.auto_schedule.__name__,
-                "description": "Automatically schedule ALL unscheduled course sections in the term by creating tables and assigning time slots and rooms. Use this whenever the user asks to auto-schedule or schedule the entire semester.",
-                "input_schema": {"type": "object", "properties": {}}
+                "description": "Automatically schedule course sections by creating tables and assigning time slots, rooms, and faculty. Pass clear_existing=true when the user wants to redo or replace the existing schedule; omit it (or pass false) to schedule only the remaining unscheduled sections.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "clear_existing": {
+                            "type": "boolean",
+                            "description": "If true, wipe all existing tables and assignments for this term before scheduling from scratch."
+                        }
+                    }
+                }
             },
             {
                 "name": self.get_faculty.__name__,
@@ -322,6 +332,8 @@ CRITICAL RULES:
                     entry.schedule_table_id = table.id
                     if assign.get("room_id"):
                         entry.room_id = assign["room_id"]
+                    if assign.get("faculty_id"):
+                        entry.faculty_id = assign["faculty_id"]
                     if assign.get("time_slot_ids"):
                         slots = self.db.query(TimeSlot).filter(
                             TimeSlot.id.in_(assign["time_slot_ids"])
@@ -352,8 +364,11 @@ CRITICAL RULES:
         del self._proposals[proposal_id]
         return {"ok": True, "applied": len(changes)}
 
-    def auto_schedule(self):
-        from models import Term, TimeSlot, Room, ScheduleEntry, CourseOffering
+    def auto_schedule(self, clear_existing: bool = False):
+        from models import (
+            Term, TimeSlot, Room, ScheduleEntry, CourseOffering, ScheduleTable,
+            FacultyTeaching, schedule_entry_timeslots, schedule_table_weekdays,
+        )
 
         # Expire all cached ORM objects so we read the latest DB state.
         self.db.expire_all()
@@ -362,18 +377,44 @@ CRITICAL RULES:
         if not term:
             return {"error": "Term not found"}
 
-        # Restore placeholder entries for courses offered in this semester that
-        # have no entry at all (can happen when all sections were cascade-deleted
-        # with their tables).  Entries must be committed — not just flushed —
-        # so that the approval endpoint's fresh DB session can find them by ID.
+        if clear_existing:
+            # Wipe all existing schedule data for this term so we start fresh.
+            # Delete the association rows first (bulk SQL avoids ORM cascade loops).
+            entry_ids = [
+                e.id for e in self.db.query(ScheduleEntry).filter_by(term_id=self.term_id).all()
+            ]
+            if entry_ids:
+                self.db.execute(
+                    schedule_entry_timeslots.delete().where(
+                        schedule_entry_timeslots.c.entry_id.in_(entry_ids)
+                    )
+                )
+            table_ids = [
+                t.id for t in self.db.query(ScheduleTable).filter_by(term_id=self.term_id).all()
+            ]
+            if table_ids:
+                self.db.execute(
+                    schedule_table_weekdays.delete().where(
+                        schedule_table_weekdays.c.schedule_table_id.in_(table_ids)
+                    )
+                )
+            self.db.query(ScheduleEntry).filter_by(term_id=self.term_id).delete(synchronize_session=False)
+            self.db.query(ScheduleTable).filter_by(term_id=self.term_id).delete(synchronize_session=False)
+            self.db.flush()
+
+        # Ensure every offered course has at least one placeholder entry.
+        # Entries must be committed — not just flushed — so that the approval
+        # endpoint's fresh DB session can find them by ID.
         offered = self.db.query(CourseOffering).filter_by(semester_id=term.semester_id).all()
-        entry_course_ids = {e.course_id for e in self.db.query(ScheduleEntry).filter_by(term_id=self.term_id).all()}
+        entry_course_ids = {
+            e.course_id for e in self.db.query(ScheduleEntry).filter_by(term_id=self.term_id).all()
+        }
         restored = False
         for offering in offered:
             if offering.course_id not in entry_course_ids:
                 self.db.add(ScheduleEntry(term_id=self.term_id, course_id=offering.course_id, section=1))
                 restored = True
-        if restored:
+        if restored or clear_existing:
             self.db.commit()
 
         unscheduled = self.db.query(ScheduleEntry).filter(
@@ -387,9 +428,26 @@ CRITICAL RULES:
                 return {"message": "No courses are offered in this term. Add courses to the catalog and mark them as offered first."}
             return {"message": "All course sections are already scheduled in tables. Nothing left to auto-schedule."}
 
-        # Sort rooms ascending by capacity so smallest-fitting room is preferred.
         rooms = self.db.query(Room).order_by(Room.capacity.asc()).all()
         time_slots = self.db.query(TimeSlot).order_by(TimeSlot.display_order).all()
+
+        # Build faculty capability map: course_id -> list of Faculty
+        fac_caps: dict[int, list] = {}
+        for ft in self.db.query(FacultyTeaching).all():
+            fac_caps.setdefault(ft.course_id, []).append(ft.faculty)
+
+        # Seed faculty load from any already-scheduled entries that survive.
+        fac_load: dict[int, int] = {}  # faculty_id -> section count
+        for e in self.db.query(ScheduleEntry).filter(
+            ScheduleEntry.term_id == self.term_id,
+            ScheduleEntry.schedule_table_id.isnot(None),
+            ScheduleEntry.faculty_id.isnot(None),
+        ).all():
+            fac_load[e.faculty_id] = fac_load.get(e.faculty_id, 0) + 1
+
+        # Track which (weekday_pattern, slot_idx) pairs each faculty is assigned
+        # to, so we avoid double-booking them across multiple tables.
+        fac_slots: dict[int, set] = {}  # faculty_id -> set of (wk_key, slot_idx)
 
         # Group entries by frequency
         by_freq: dict[int, list] = {}
@@ -412,16 +470,14 @@ CRITICAL RULES:
                 if not batch:
                     continue
 
-                # Greedy bin-packing: place each course into the earliest
-                # available (slot, room) pair that satisfies capacity.
-                # This spreads courses across multiple rooms (columns) and
-                # time slots (rows) rather than stacking them all in one column.
+                wk_key = tuple(sorted(weekday_names))
                 occupied: set[tuple[int, int]] = set()  # (slot_idx, room_id)
-
                 entry_assignments = []
+
                 for entry in batch:
                     needed_slots = max(1, entry.course.duration_minutes // 75)
                     placed = False
+
                     for si in range(len(time_slots) - needed_slots + 1):
                         slot_range = list(range(si, si + needed_slots))
                         for room in rooms:
@@ -430,17 +486,39 @@ CRITICAL RULES:
                             if all((si2, room.id) not in occupied for si2 in slot_range):
                                 for si2 in slot_range:
                                     occupied.add((si2, room.id))
-                                entry_assignments.append({
+
+                                # Assign faculty: pick capable, under-load, conflict-free
+                                faculty_id = None
+                                capable = fac_caps.get(entry.course_id, [])
+                                available = [
+                                    f for f in capable
+                                    if fac_load.get(f.id, 0) < f.full_load
+                                    and all(
+                                        (wk_key, si2) not in fac_slots.get(f.id, set())
+                                        for si2 in slot_range
+                                    )
+                                ]
+                                if available:
+                                    best = min(available, key=lambda f: fac_load.get(f.id, 0))
+                                    faculty_id = best.id
+                                    fac_load[best.id] = fac_load.get(best.id, 0) + 1
+                                    for si2 in slot_range:
+                                        fac_slots.setdefault(best.id, set()).add((wk_key, si2))
+
+                                assignment = {
                                     "entry_id": entry.id,
                                     "room_id": room.id,
                                     "time_slot_ids": [time_slots[si2].id for si2 in slot_range],
-                                })
+                                }
+                                if faculty_id is not None:
+                                    assignment["faculty_id"] = faculty_id
+                                entry_assignments.append(assignment)
                                 placed = True
                                 break
                         if placed:
                             break
+
                     if not placed:
-                        # Overflow: use largest room at first slot
                         fallback_room = rooms[-1] if rooms else None
                         entry_assignments.append({
                             "entry_id": entry.id,
@@ -455,8 +533,14 @@ CRITICAL RULES:
                 })
 
         total_sections = sum(len(c["entry_assignments"]) for c in changes)
+        assigned_faculty = sum(
+            1 for c in changes for a in c["entry_assignments"] if a.get("faculty_id")
+        )
         return self.propose_schedule_change(
-            description=f"Auto-schedule: create {len(changes)} schedule table(s) and assign {total_sections} course section(s)",
+            description=(
+                f"Auto-schedule: create {len(changes)} table(s), assign {total_sections} "
+                f"section(s) with faculty assigned to {assigned_faculty}/{total_sections}."
+            ),
             changes=changes
         )
 
