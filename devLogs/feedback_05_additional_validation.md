@@ -1,0 +1,1 @@
+looks like when an instructor of a section is changed, it coulde cause conflict for the faculty, please add audit validation and prevent the change if it causes a faculty to teach courses at the same time that are not taught with each other.

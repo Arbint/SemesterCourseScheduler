@@ -25,3 +25,6 @@ frontend/.vite/
 *.swp
 .idea/
 .vscode/
+
+# Src Data
+srcData/*

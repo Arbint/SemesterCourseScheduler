@@ -189,21 +189,33 @@ if "!LOCAL_IP!"=="" (
 )
 if "!LOCAL_IP!"=="" set "LOCAL_IP=<your-lan-ip>"
 
+:: ---------- Find free ports ---------------------------------------------------
+echo  [...] Finding available ports...
+cd /d "%SCRIPT_DIR%\backend"
+set "BACKEND_PORT=8000"
+set "FRONTEND_PORT=5173"
+for /f "tokens=*" %%p in ('uv run python "%SCRIPT_DIR%\find_port.py" 8000 8020') do set "BACKEND_PORT=%%p"
+for /f "tokens=*" %%p in ('uv run python "%SCRIPT_DIR%\find_port.py" 5173 5193') do set "FRONTEND_PORT=%%p"
+echo  [OK] Backend port: !BACKEND_PORT!   Frontend port: !FRONTEND_PORT!
+
+:: Write port file so vite.config.ts picks up the backend port
+echo !BACKEND_PORT!> "%SCRIPT_DIR%\.backend_port"
+
 :: ---------- Start Backend in a new window ------------------------------------
 echo.
 echo  [...] Starting backend server...
-start "SCS Backend" /D "%SCRIPT_DIR%\backend" cmd /k "title SCS Backend && uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+start "SCS Backend" /D "%SCRIPT_DIR%\backend" cmd /k "title SCS Backend && uv run uvicorn main:app --host 0.0.0.0 --port !BACKEND_PORT! --reload"
 
 timeout /t 3 /nobreak >nul
 
 :: ---------- Start Frontend in a new window -----------------------------------
 echo  [...] Starting frontend server...
-start "SCS Frontend" /D "%SCRIPT_DIR%\frontend" cmd /k "title SCS Frontend && npm run dev -- --host"
+start "SCS Frontend" /D "%SCRIPT_DIR%\frontend" cmd /k "title SCS Frontend && npm run dev -- --host --port !FRONTEND_PORT!"
 
 timeout /t 4 /nobreak >nul
 
 :: ---------- Open browser -----------------------------------------------------
-start http://localhost:5173
+start http://localhost:!FRONTEND_PORT!
 
 :: ---------- Print access info ------------------------------------------------
 echo.
@@ -211,18 +223,18 @@ echo  ====================================================
 echo    Semester Course Scheduler is running!
 echo  ====================================================
 echo.
-echo    Local:     http://localhost:5173
-echo    Network:   http://!LOCAL_IP!:5173
-echo    API Docs:  http://localhost:8000/docs
+echo    Local:     http://localhost:!FRONTEND_PORT!
+echo    Network:   http://!LOCAL_IP!:!FRONTEND_PORT!
+echo    API Docs:  http://localhost:!BACKEND_PORT!/docs
 echo.
 echo    Other computers on your LAN can open:
-echo    http://!LOCAL_IP!:5173
+echo    http://!LOCAL_IP!:!FRONTEND_PORT!
 echo.
 echo  ====================================================
 echo.
 echo  Two server windows were opened:
-echo    "SCS Backend"   -- Python / FastAPI  (port 8000)
-echo    "SCS Frontend"  -- Vite / React      (port 5173)
+echo    "SCS Backend"   -- Python / FastAPI  (port !BACKEND_PORT!)
+echo    "SCS Frontend"  -- Vite / React      (port !FRONTEND_PORT!)
 echo.
 echo  Close those windows to stop the servers.
 echo  You can close THIS window now.

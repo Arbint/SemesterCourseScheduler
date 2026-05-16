@@ -73,3 +73,25 @@ app.include_router(schedule_entries.router)
 app.include_router(sections.router)
 app.include_router(chat.router)
 app.include_router(static_data.router)
+
+
+if __name__ == "__main__":
+    import socket
+    import pathlib
+    import uvicorn
+
+    def _find_free_port(start: int = 8000, end: int = 8020) -> int:
+        for p in range(start, end + 1):
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                try:
+                    s.bind(("", p))
+                    return p
+                except OSError:
+                    continue
+        return start
+
+    port = _find_free_port()
+    pathlib.Path(__file__).parent.parent.joinpath(".backend_port").write_text(str(port))
+    print(f"Backend starting on port {port}")
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)

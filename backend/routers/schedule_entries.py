@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from database import get_db
-from models import ScheduleEntry, ScheduleTable, TimeSlot, Term
+from models import ScheduleEntry, ScheduleTable, TimeSlot, Term, Course
 from schemas import (
     ScheduleEntryCreate, ScheduleEntryUpdate, ScheduleEntryFacultyPatch,
     ScheduleEntryOut, EntryWithWarnings
@@ -12,8 +12,27 @@ router = APIRouter(tags=["schedule_entries"])
 
 
 def _refresh_term(db: Session, term_id: int) -> Term:
+    """Reload the term with all relationships the auditors need, pre-loaded."""
     db.expire_all()
-    return db.query(Term).filter(Term.id == term_id).first()
+    return (
+        db.query(Term)
+        .options(
+            selectinload(Term.schedule_entries)
+                .selectinload(ScheduleEntry.schedule_table)
+                .selectinload(ScheduleTable.weekdays),
+            selectinload(Term.schedule_entries)
+                .selectinload(ScheduleEntry.time_slots),
+            selectinload(Term.schedule_entries)
+                .selectinload(ScheduleEntry.room),
+            selectinload(Term.schedule_entries)
+                .selectinload(ScheduleEntry.faculty),
+            selectinload(Term.schedule_entries)
+                .selectinload(ScheduleEntry.course)
+                .selectinload(Course.taught_with_membership),
+        )
+        .filter(Term.id == term_id)
+        .first()
+    )
 
 
 @router.get("/api/terms/{term_id}/entries", response_model=list[ScheduleEntryOut])
@@ -123,15 +142,29 @@ def update_entry(entry_id: int, data: ScheduleEntryUpdate, db: Session = Depends
     )
 
 
-@router.patch("/api/entries/{entry_id}/faculty", response_model=ScheduleEntryOut)
+@router.patch("/api/entries/{entry_id}/faculty", response_model=EntryWithWarnings)
 def patch_faculty(entry_id: int, data: ScheduleEntryFacultyPatch, db: Session = Depends(get_db)):
     entry = db.query(ScheduleEntry).filter(ScheduleEntry.id == entry_id).first()
     if not entry:
         raise HTTPException(404, "Entry not found")
+
+    term_id = entry.term_id
     entry.faculty_id = data.faculty_id
+    db.flush()
+
+    term = _refresh_term(db, term_id)
+    critical, warnings = run_audits(db, term)
+
+    if critical:
+        db.rollback()
+        raise HTTPException(409, detail=[r.to_dict() for r in critical])
+
     db.commit()
     db.refresh(entry)
-    return ScheduleEntryOut.from_orm(entry)
+    return EntryWithWarnings(
+        entry=ScheduleEntryOut.from_orm(entry),
+        warnings=[w.description for w in warnings]
+    )
 
 
 @router.delete("/api/entries/{entry_id}", status_code=204)

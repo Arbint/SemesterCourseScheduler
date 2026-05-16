@@ -493,8 +493,15 @@ export function TermSchedulesTab() {
   }
 
   const updateTableWeekdays = async (tableId: number, weekdayIds: number[]) => {
-    const updated = await tablesApi.update(tableId, weekdayIds)
-    setTables(prev => prev.map(t => t.id === tableId ? updated : t))
+    const prevTables = tables
+    setTables(prev => prev.map(t => t.id === tableId ? { ...t, weekday_ids: weekdayIds } : t))
+    try {
+      const updated = await tablesApi.update(tableId, weekdayIds)
+      setTables(prev => prev.map(t => t.id === tableId ? updated : t))
+    } catch (e: any) {
+      setTables(prevTables)
+      showToast(e.response?.data?.detail || 'Failed to update weekdays')
+    }
   }
 
   const deleteTable = async (tableId: number) => {
@@ -505,8 +512,18 @@ export function TermSchedulesTab() {
   }
 
   const handleFacultyChange = async (entryId: number, facultyId: number | null) => {
-    const updated = await entriesApi.patchFaculty(entryId, facultyId)
-    setEntries(prev => prev.map(e => e.id === entryId ? { ...e, faculty_id: updated.faculty_id } : e))
+    try {
+      const { entry: updated, warnings } = await entriesApi.patchFaculty(entryId, facultyId)
+      setEntries(prev => prev.map(e => e.id === entryId ? { ...e, faculty_id: updated.faculty_id } : e))
+      if (warnings.length) setWarnings(warnings)
+    } catch (e: any) {
+      const detail = e.response?.data?.detail
+      if (Array.isArray(detail)) {
+        showToast(detail.map((d: any) => d.description).join('; '))
+      } else {
+        showToast(detail || 'Failed to assign instructor')
+      }
+    }
   }
 
   const handleDeleteEntry = async (entryId: number) => {

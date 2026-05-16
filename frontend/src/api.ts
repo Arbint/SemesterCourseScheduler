@@ -193,7 +193,7 @@ export const entriesApi = {
   update: (id: number, d: { room_id?: number; time_slot_ids?: number[]; schedule_table_id?: number; faculty_id?: number }) =>
     api.put<EntryWithWarnings>(`/entries/${id}`, d).then(r => r.data),
   patchFaculty: (id: number, faculty_id: number | null) =>
-    api.patch<ScheduleEntry>(`/entries/${id}/faculty`, { faculty_id }).then(r => r.data),
+    api.patch<EntryWithWarnings>(`/entries/${id}/faculty`, { faculty_id }).then(r => r.data),
   delete: (id: number) => api.delete(`/entries/${id}`),
   patchSectionCount: (termId: number, courseId: number, count: number) =>
     api.patch(`/terms/${termId}/courses/${courseId}/section-count`, { count }),

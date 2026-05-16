@@ -134,19 +134,28 @@ if [[ -z "$LOCAL_IP" ]] && command -v hostname &>/dev/null; then
 fi
 [[ -z "$LOCAL_IP" ]] && LOCAL_IP="<your-lan-ip>"
 
+# ── Find free ports ───────────────────────────────────────────────────────────
+info "Finding available ports..."
+BACKEND_PORT=$(python3 "$SCRIPT_DIR/find_port.py" 8000 8020)
+FRONTEND_PORT=$(python3 "$SCRIPT_DIR/find_port.py" 5173 5193)
+log "Backend port: $BACKEND_PORT  |  Frontend port: $FRONTEND_PORT"
+
+# Write port file so vite.config.ts picks up the backend port
+echo "$BACKEND_PORT" > "$SCRIPT_DIR/.backend_port"
+
 # ── Start servers ─────────────────────────────────────────────────────────────
 echo ""
-info "Starting backend  →  http://0.0.0.0:8000"
+info "Starting backend  →  http://0.0.0.0:${BACKEND_PORT}"
 cd "$SCRIPT_DIR/backend"
-uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload &
+uv run uvicorn main:app --host 0.0.0.0 --port "$BACKEND_PORT" --reload &
 BACKEND_PID=$!
 
-# Give backend a moment to bind
+# Give backend a moment to bind before starting frontend
 sleep 2
 
-info "Starting frontend →  http://0.0.0.0:5173"
+info "Starting frontend →  http://0.0.0.0:${FRONTEND_PORT}"
 cd "$SCRIPT_DIR/frontend"
-npm run dev -- --host &
+npm run dev -- --host --port "$FRONTEND_PORT" &
 FRONTEND_PID=$!
 
 sleep 3
@@ -156,12 +165,12 @@ echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║     Semester Course Scheduler — Running      ║${NC}"
 echo -e "${GREEN}╠══════════════════════════════════════════════╣${NC}"
-echo -e "${GREEN}║${NC}  Local:     ${CYAN}http://localhost:5173${NC}"
-echo -e "${GREEN}║${NC}  Network:   ${CYAN}http://${LOCAL_IP}:5173${NC}"
-echo -e "${GREEN}║${NC}  API Docs:  ${CYAN}http://localhost:8000/docs${NC}"
+echo -e "${GREEN}║${NC}  Local:     ${CYAN}http://localhost:${FRONTEND_PORT}${NC}"
+echo -e "${GREEN}║${NC}  Network:   ${CYAN}http://${LOCAL_IP}:${FRONTEND_PORT}${NC}"
+echo -e "${GREEN}║${NC}  API Docs:  ${CYAN}http://localhost:${BACKEND_PORT}/docs${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════════════╝${NC}"
 echo ""
-echo "  Any device on your LAN can open:  http://${LOCAL_IP}:5173"
+echo "  Any device on your LAN can open:  http://${LOCAL_IP}:${FRONTEND_PORT}"
 echo ""
 echo "  Press Ctrl+C to stop both servers."
 

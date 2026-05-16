@@ -20,7 +20,7 @@ class FacultyTimeConflict(ConflictAuditor):
 
     def Audit(self, term) -> list[ConflictReport]:
         reports = []
-        entries = [e for e in term.schedule_entries if e.faculty_id and e.time_slots and e.schedule_table_id]
+        entries = [e for e in term.schedule_entries if e.faculty_id and e.time_slots and e.schedule_table_id and e.schedule_table]
 
         for i, a in enumerate(entries):
             for b in entries[i + 1:]:
@@ -62,7 +62,7 @@ class CoReqTimeConflict(ConflictAuditor):
             # All sections for each course in the term
             sections_by_course = {}
             for cid in course_ids:
-                sections = [e for e in term.schedule_entries if e.course_id == cid and e.time_slots and e.schedule_table_id]
+                sections = [e for e in term.schedule_entries if e.course_id == cid and e.time_slots and e.schedule_table_id and e.schedule_table]
                 if sections:
                     sections_by_course[cid] = sections
 
@@ -114,7 +114,7 @@ class RoomConflict(ConflictAuditor):
 
     def Audit(self, term) -> list[ConflictReport]:
         reports = []
-        entries = [e for e in term.schedule_entries if e.room_id and e.time_slots and e.schedule_table_id]
+        entries = [e for e in term.schedule_entries if e.room_id and e.time_slots and e.schedule_table_id and e.schedule_table]
 
         for i, a in enumerate(entries):
             for b in entries[i + 1:]:
@@ -155,7 +155,7 @@ class FrequencyConflict(ConflictAuditor):
     def Audit(self, term) -> list[ConflictReport]:
         reports = []
         for entry in term.schedule_entries:
-            if not entry.schedule_table_id:
+            if not entry.schedule_table_id or not entry.schedule_table:
                 continue
             table_days = len(entry.schedule_table.weekdays)
             course_freq = entry.course.frequency
