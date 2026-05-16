@@ -2,6 +2,20 @@
 
 This is a web app that helps the department chair to schedule courses for the semester.
 
+## Recommended Tech Stack
+
+| Layer | Technology | Notes |
+|---|---|---|
+| Backend framework | FastAPI (Python) | Async, auto-generates OpenAPI docs, integrates cleanly with the existing Python agent code |
+| ORM | SQLAlchemy | Standard Python ORM; pairs with Alembic for database migrations |
+| Database | SQLite | Zero-config, single-file, sufficient for a single-user scheduling tool |
+| Frontend framework | React + TypeScript | Best ecosystem for complex interactive UIs |
+| Drag-and-drop | dnd-kit | Modern, accessible, flexible — well-suited for custom table grids |
+| Excel export | openpyxl | Required for `.xlsx` output with cell colors, merged cells, and formatting |
+| AI integration | Anthropic Claude API | Via the existing `src/agents/agent.py` base class; Python backend calls it directly |
+
+Please don't do docker container yet.
+
 ## App Structure
 ----------------------------
 ### Backend
@@ -96,9 +110,9 @@ The backend has a data base that has the following tables:
 
     Schedule tables are the schedules build for a specific term, the user will create multiple schedule tables for a term, a schedule table would have:
 
-    * Week days (what weekdays the schedule is planned)
+    * Weekdays (what weekdays the schedule is planned)
 
-        Note: some courses are offered on both Tuesday and Thursday, and some others are offered on Thursdays only, if that is the case, a user would have to create 2 tables, one has Tuesday and Thursday, and the other one has only Thursday. This also means conflict checking should be across all tables in the term.(see conflict detection)
+        Note: some courses are offered on both Tuesday and Thursday, and some others are offered on Thursdays only, if that is the case, a user would have to create 2 tables, one has Tuesday and Thursday, and the other one has only Thursday. This also means conflict checking should be across all tables in the term.(see conflict detection), the schedule for each of the weekday in the weekdays in the scheudle table should be identical, which means if a course is scheduled on Monday & Wednesday, then it should be offered on both days at the same time.
         
     conceptually, a schedule table is a table that has:
 
@@ -112,7 +126,7 @@ The backend has a data base that has the following tables:
 
 * Schedule Entries:
 
-    * A Schedule Table should be modeled with a list os schedule entires, each entry contains:
+    * A Schedule Table should be modeled with a list os schedule entires, each entry represent a section of a course being offered, it contains:
 
         * course_id
         * schedule_table_id
@@ -139,7 +153,7 @@ On top of the Rest API access to backend database. the backend code should have 
             def __init__(self, dataBase, isCritical): 
                 self.dataBase = dataBase
 
-                # if a critical auditor returns a none empty ConflictReport list, the operation should fail. for non-critical auditor, a warning would apear in the list. 
+                # if a critical auditor returns a none empty ConflictReport list, the operation should fail, for non-critical auditor, a warning would apear in the Warning List (See front end)
                 self.isCritical = isCritical
 
             def Audit(self, term)->list[ConflictReport]:
@@ -156,7 +170,11 @@ On top of the Rest API access to backend database. the backend code should have 
 
         * Co-requisite courses that are scheduled at the same time is not allowed. however, if there are multiple sections, then it will be an error if all sections are colliding. This one should also be a critcial auditor
 
+        * room capacity auditor, critical
+
         * room conflict auditor, critictal
+
+        * frequency conflict auditor, critical (if a course is offered only once a week, but it is being dragged in to a schedule table that has a weekdays of Mon & Wed, it should fail.)
 
         * Faculty load auditor, none critical
 
@@ -173,7 +191,17 @@ On top of the Rest API access to backend database. the backend code should have 
 
     * Unbalanced load - some faculty has way more load than others
 
-    * Auto Schedule - the AI should be able to automatically schedule the courses
+    * Auto Schedule - the AI should be able to automatically schedule and entire semester. It should take care of:
+
+        * create the correct amount of schedule tables needed so there is a place for all course section to be scheduled. for example, if the majority of the courses offered twice a day, and one or two are schedule once a day, the angent could create 3 tables.
+
+            * Monday & Wednesday table to shedule half of the courses that are offered twice a week
+            * Tuesday & Thursday table to schedule the other half of the courses taht are offered twice a week.
+            * Thurday only table to schedule the courses that are offered only in one day.
+
+        * evenly distribute faculty load.
+
+        * prefer faculty to teach mutliple sections of the same course than multiple different courses.
 
     The Agent should be able to promote solutions to the user, and tools to apply the changes if the user approves.
     
@@ -195,11 +223,11 @@ The front end in composed with multiple tabs:
 
 * Faculty:
 
-    This tab allows the user to add and remove faculty, define their properties as described in the data base.
+    This tab allows the user to add and remove faculty, define their properties as described in the data base. this part should also allow user to define the teaching capability.
 
-* Courses:
+* Course Catalog:
 
-    This tab allows the user to add and remove courses, define their properties as decribed in the data base.
+    This tab allows the user to add and remove courses, define their properties as decribed in the data base. this part should also allow the user to define the course offering.
 
 * Rooms:
 
@@ -225,7 +253,23 @@ The front end in composed with multiple tabs:
 
         * A Dropdown list to select existing terms to edit them, the last option in the drop down list allows the user to create a new term.
 
-        * A Export button to download the schedules of the term to a well formated .csv file.
+        * A Export button to download the schedules of the term to a well formated excel spreedsheet file that contains:
+
+            Term info: semester and year
+
+            Schedule tables, seperated by an empty row, for each table:
+            
+            a merged cell that has the text of weekday(s) it is scheduled on, the cell should be filled with a light gray color, and under that:
+
+            * rooms as columns
+
+            * time slots as rows
+
+            * courses in cell
+
+                * a course occupy multiple cells in a column if they occupy multiple time slots
+                * color coded by instructor
+
     
     * The bottom area is the main area, it is broken down to 4 columns that the user can drag their edge to change their width.
 
@@ -237,13 +281,9 @@ The front end in composed with multiple tabs:
 
             * Name Row: Course Name
 
-            * Instructor: Instructor of the course, this should be a drop down list that the user can assign an instructor to the course, this should be filtered by the Faculty Teaching Capability join table.
-
             * Capacity: The capacity of the course
 
             * Number of Sections: how many sections are needed for this term, a spin box, when the number changes, the Schedule Entries in the Term in the data base should change, and the last section in the schedule table should also be removed from the data base and front end Tables List.
-
-            * The Course Component should be color coded by instructor.
 
             * The Course Component should be able to show a hightlight box around it, A red hightlight box should appear around the course if it has no section scheduled yet, and an orange one if not all sections needed are scheduled. The AI Agent should be able to use this highlight box when giving response to indicate which courses it is talking about (see AI Audit)
 
@@ -255,21 +295,23 @@ The front end in composed with multiple tabs:
 
             * Weekday check boxes
 
-            * the table that allows the user to drag classes from the Course List to the cells of the table to schedule a course section to a room and time range. The length of the course determines how many cells it should occupy, if there is not enough time slots left or time slot is occupied by another course, the drop should fail.
+            * the table that allows the user to drag classes from the Course List to the cells of the table to schedule a course section to a room and time range. The length of the course determines how many cells it should occupy, if there is not enough time slots left or time slot is occupied by another course, the drop should fail. Each weekday in the weekdays of the table should be identitcal, meaning that there is only one table for all the weekdays in the scheduel table.
 
             * When a course is dropped to the table, it should not disapear from the course list, what really happens is we created a schedule table entry, and a section of a course is added, the user can drag the same course again from the course list to another slot in the same table or another schedule table to schedule another section. section starts with section 1, and then 2, 3.
+
+            * A section that is scheduled (successfully dropped on the table) should have an instructor dropdown list that the user can assign an instructor to the course, this should be filtered by the Faculty Teaching Capability join table. Once a faculty is assigned, the section should be color coded by instructor, if no instructor is assigned yet, use a neutral color.
 
             * The user can also drag a course from one time slot to another in the same schedule table, or drag it from one to another scedule box.
 
             * The user can also press the delete button to delete a scheduled section (schedule table entry)
 
-            * Any Conflict Auditor that is Critical should be checked on every drag and drop.
+            * Auditor Auditing should be triggered on every drag and drop, a drag and drop that triggers a ctitical issue should fail, and a pop up on the upper right corner will show what the error is, if it is a non-critical, the issue should only apear in the warning list.
 
-            It is imporant that the drap and drop feature is robust, be sure to keep the feature in mind since the beginning. The content of the course dragged into the table should have the same strcture as the Course Component.
+            It is imporant that the drap and drop feature is robust, be sure to keep the feature in mind since the beginning. The content of the course dragged into the table should have the same strcture as the Course Component + a instructor dropdown list.
 
         * Warning List
 
-            the list of warning it founds in the current schedule by the auditors. what courses, which table, and what is the issue. 
+            the list of warning it founds in the current schedule by the auditors. what courses, which table, and what is the issue. this list refreshes every time a drag and drop operaion is done successfully.
 
         * AI Audit
 
@@ -280,5 +322,4 @@ The front end in composed with multiple tabs:
             * on top of the response, the agent should be able to highlight the courses it is talking about in its response.
 
             * the agent should be able to promote changes and ask the user to approve or not and apply the changes when approved.
-
 

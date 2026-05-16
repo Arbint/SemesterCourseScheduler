@@ -80,7 +80,11 @@ The Course List has no mention of differentiating courses already placed in the 
 15. Conflict detection trigger is unspecified
 Is conflict detection run on every drag-and-drop, on a manual "run audit" button, or periodically? Real-time is better UX but more complex to wire up.
 
+    Answer: I have added specification
+
 16. CSV export format is undefined
 What columns does the export have? How are multi-day meetings represented? Does it export one table or all tables in the term?
+
+    Ansser: I have added the specification
 
 
