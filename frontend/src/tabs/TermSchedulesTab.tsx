@@ -149,6 +149,25 @@ function ScheduledSectionCard({
   )
 }
 
+// --- Column Resizer Handle ---
+function ColumnResizer({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => void }) {
+  return (
+    <div
+      onMouseDown={onMouseDown}
+      style={{
+        width: 4,
+        flexShrink: 0,
+        cursor: 'col-resize',
+        background: 'var(--border-color)',
+        transition: 'background 0.15s',
+        zIndex: 10,
+      }}
+      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--accent)' }}
+      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--border-color)' }}
+    />
+  )
+}
+
 // --- Drop Cell ---
 function TableCell({
   tableId, timeSlotId, roomId, rowSpan = 1, entries, courses, allFaculty,
@@ -433,6 +452,57 @@ export function TermSchedulesTab() {
   const [savingTerm, setSavingTerm] = useState(false)
   const courseMap = new Map(courses.map(c => [c.id, c]))
 
+  // --- Resizable columns ---
+  const [courseWidth, setCourseWidth] = useState(220)
+  const [warningWidth, setWarningWidth] = useState(200)
+  const [aiWidth, setAiWidth] = useState(280)
+  const resizerDrag = useRef<{
+    idx: number; startX: number
+    startCourse: number; startWarning: number; startAI: number
+  } | null>(null)
+
+  useEffect(() => {
+    const MIN = 120
+    const onMouseMove = (e: MouseEvent) => {
+      if (!resizerDrag.current) return
+      const { idx, startX, startCourse, startWarning, startAI } = resizerDrag.current
+      const delta = e.clientX - startX
+      if (idx === 0) {
+        setCourseWidth(Math.max(MIN, startCourse + delta))
+      } else if (idx === 1) {
+        setWarningWidth(Math.max(MIN, startWarning - delta))
+      } else {
+        // Zero-sum between Warnings and AI
+        const clamped = Math.max(MIN - startWarning, Math.min(startAI - MIN, delta))
+        setWarningWidth(startWarning + clamped)
+        setAiWidth(startAI - clamped)
+      }
+    }
+    const onMouseUp = () => {
+      if (resizerDrag.current) {
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+        resizerDrag.current = null
+      }
+    }
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [])
+
+  const startResize = (idx: number) => (e: React.MouseEvent) => {
+    e.preventDefault()
+    resizerDrag.current = {
+      idx, startX: e.clientX,
+      startCourse: courseWidth, startWarning: warningWidth, startAI: aiWidth
+    }
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }
+
   const loadStatic = async () => {
     const [t, s, w, r, ts, f] = await Promise.all([
       termsApi.list(), semestersApi.list(), weekdaysApi.list(),
@@ -657,10 +727,10 @@ export function TermSchedulesTab() {
           )}
         </div>
 
-        {/* Main area: 4 columns */}
+        {/* Main area: 4 resizable columns */}
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           {/* Course List */}
-          <div style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--border-color)', overflowY: 'auto', padding: 12 }}>
+          <div style={{ width: courseWidth, flexShrink: 0, overflowY: 'auto', padding: 12 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Course List</div>
             {termCourses.length === 0 && (
               <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>No courses for this semester.</div>
@@ -677,8 +747,10 @@ export function TermSchedulesTab() {
             ))}
           </div>
 
+          <ColumnResizer onMouseDown={startResize(0)} />
+
           {/* Tables List */}
-          <div style={{ flex: 3, overflowY: 'auto', padding: 16, borderRight: '1px solid var(--border-color)' }}>
+          <div style={{ flex: 1, minWidth: 300, overflowY: 'auto', padding: 16 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>Schedule Tables</div>
             {tables.map(table => (
               <ScheduleTableView
@@ -707,8 +779,10 @@ export function TermSchedulesTab() {
             )}
           </div>
 
+          <ColumnResizer onMouseDown={startResize(1)} />
+
           {/* Warning List */}
-          <div style={{ width: 200, flexShrink: 0, borderRight: '1px solid var(--border-color)', overflowY: 'auto', padding: 12 }}>
+          <div style={{ width: warningWidth, flexShrink: 0, overflowY: 'auto', padding: 12 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Warnings</div>
             {warnings.length === 0 ? (
               <div style={{ color: 'var(--success)', fontSize: 12 }}>No warnings</div>
@@ -719,8 +793,10 @@ export function TermSchedulesTab() {
             ))}
           </div>
 
+          <ColumnResizer onMouseDown={startResize(2)} />
+
           {/* AI Audit */}
-          <div style={{ width: 280, flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ width: aiWidth, flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '12px 12px 8px', borderBottom: '1px solid var(--border-color)' }}>AI Audit</div>
             {selectedTermId ? (
               <AIChatPanel
