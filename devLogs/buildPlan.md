@@ -24,6 +24,8 @@ Runnable skeleton: FastAPI says hello, React renders a blank page, SQLite file i
 
 ### Steps
 
+```NOTE``` use uv to manage the backend.
+
 **1.1 Directory layout**
 ```
 backend/

@@ -6,7 +6,7 @@ This is a web app that helps the department chair to schedule courses for the se
 
 | Layer | Technology | Notes |
 |---|---|---|
-| Backend framework | FastAPI (Python) | Async, auto-generates OpenAPI docs, integrates cleanly with the existing Python agent code |
+| Backend framework | FastAPI (Python) | Async, auto-generates OpenAPI docs, integrates cleanly with the existing Python agent code, use UV to manage the backend|
 | ORM | SQLAlchemy | Standard Python ORM; pairs with Alembic for database migrations |
 | Database | SQLite | Zero-config, single-file, sufficient for a single-user scheduling tool |
 | Frontend framework | React + TypeScript | Best ecosystem for complex interactive UIs |
