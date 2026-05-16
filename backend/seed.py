@@ -127,70 +127,80 @@ for fn, ln, rank, tags, fl in FACULTY_DATA:
     faculty_map[ln] = f
 db.commit()
 
+def _duration(course_number: int) -> int:
+    """Derive duration from credit hours encoded as the second digit of the course number.
+    1 credit hour → 75 min, 3 credit hours → 165 min, anything else → 75 min.
+    """
+    credits = (course_number // 100) % 10
+    if credits == 3:
+        return 165
+    return 75  # 1-credit seminars and any unrecognised credit value
+
 # ── Courses + Offerings ───────────────────────────────────────────────────────
-# (dept, number, name, duration_min, capacity, frequency, [semester_keys])
+# (dept, number, name, capacity, frequency, [semester_keys])
+# duration_minutes is derived automatically from the course number via _duration()
 # frequency: 1=once/week, 2=twice/week (MW or TuTh), 3=three times/week (MWF)
 COURSES_DATA = [
     # ── Fall courses ────────────────────────────────────────────────────────
-    ("ANGD", 1101, "Orientation to ANGD",               75, 60, 1, ["fall"]),
-    ("ANGD", 1380, "Anatomy for Animators",              75, 35, 2, ["fall"]),
-    ("ANGD", 2330, "History of Animation",               75, 40, 2, ["fall"]),
-    ("ANGD", 2333, "Environment Production I",           75, 18, 2, ["fall"]),
-    ("ANGD", 2340, "Animation I: Adv Body Mechanics",   75, 18, 2, ["fall"]),
-    ("ANGD", 2351, "Production Management I",            75, 15, 1, ["fall"]),
-    ("ANGD", 2353, "Modeling & Texture Pipeline",        75, 12, 2, ["fall"]),
-    ("ANGD", 2371, "Game Programming I",                 75, 18, 2, ["fall"]),
-    ("ANGD", 3331, "Environment Production III",         75, 18, 2, ["fall"]),
-    ("ANGD", 3341, "Animation III: Adv Pantomime Acting",75, 18, 2, ["fall"]),
-    ("ANGD", 3343, "Motion Capture for Animators",       75, 18, 2, ["fall"]),
-    ("ANGD", 3351, "Production Management III",          75, 12, 1, ["fall"]),
-    ("ANGD", 3361, "Character Modeling II",              75, 18, 2, ["fall"]),
-    ("ANGD", 3371, "Game Programming III",               75, 15, 2, ["fall"]),
-    ("ANGD", 4350, "Senior Thesis Production I",         75, 18, 2, ["fall"]),
+    ("ANGD", 1101, "Orientation to ANGD",               60, 1, ["fall"]),
+    ("ANGD", 1380, "Anatomy for Animators",              35, 2, ["fall"]),
+    ("ANGD", 2330, "History of Animation",               40, 2, ["fall"]),
+    ("ANGD", 2333, "Environment Production I",           18, 2, ["fall"]),
+    ("ANGD", 2340, "Animation I: Adv Body Mechanics",   18, 2, ["fall"]),
+    ("ANGD", 2351, "Production Management I",            15, 1, ["fall"]),
+    ("ANGD", 2353, "Modeling & Texture Pipeline",        12, 2, ["fall"]),
+    ("ANGD", 2371, "Game Programming I",                 18, 2, ["fall"]),
+    ("ANGD", 3331, "Environment Production III",         18, 2, ["fall"]),
+    ("ANGD", 3341, "Animation III: Adv Pantomime Acting",18, 2, ["fall"]),
+    ("ANGD", 3343, "Motion Capture for Animators",       18, 2, ["fall"]),
+    ("ANGD", 3351, "Production Management III",          12, 1, ["fall"]),
+    ("ANGD", 3361, "Character Modeling II",              18, 2, ["fall"]),
+    ("ANGD", 3371, "Game Programming III",               15, 2, ["fall"]),
+    ("ANGD", 4350, "Senior Thesis Production I",         18, 2, ["fall"]),
     # ── Spring courses ──────────────────────────────────────────────────────
-    ("ANGD", 1302, "Element of Design",                  75, 25, 2, ["spring"]),
-    ("ANGD", 2334, "Environment Production II",          75, 18, 2, ["spring"]),
-    ("ANGD", 2341, "Period Styles",                      75, 20, 2, ["spring"]),
-    ("ANGD", 2342, "Animation II: Animation for Games",  75, 18, 2, ["spring"]),
-    ("ANGD", 2352, "Production Management II",           75, 15, 1, ["spring"]),
-    ("ANGD", 2355, "Animation Pipeline",                 75, 18, 2, ["spring"]),
-    ("ANGD", 2361, "Character Modeling I",               75, 18, 2, ["spring"]),
-    ("ANGD", 2372, "Game Programming II",                75, 15, 2, ["spring"]),
-    ("ANGD", 3330, "History of Games",                   75, 40, 2, ["spring"]),
-    ("ANGD", 3332, "Environment Production IV",          75, 18, 2, ["spring"]),
-    ("ANGD", 3342, "Animation IV: Performance Animation",75, 18, 2, ["spring"]),
-    ("ANGD", 3345, "Advanced Animation for Games",       75, 18, 2, ["spring"]),
-    ("ANGD", 3352, "Production Management IV",           75, 12, 1, ["spring"]),
-    ("ANGD", 3355, "Tools of Production Management",     75, 15, 2, ["spring"]),
-    ("ANGD", 3362, "Character Modeling III",             75, 18, 2, ["spring"]),
-    ("ANGD", 3372, "Game Programming IV",                75, 15, 2, ["spring"]),
-    ("ANGD", 4140, "Senior Thesis Workshop",             75, 20, 2, ["spring"]),
-    ("ANGD", 4340, "Business of Animation and Game Design",75,20, 2, ["spring"]),
-    ("ANGD", 4360, "Senior Thesis Production II",        75, 18, 2, ["spring"]),
-    ("ANGD", 4381, "Prototyping and Game Design",        75, 15, 2, ["spring"]),
-    ("ANGD", 4399, "Realizing 3D",                       75, 15, 2, ["spring"]),
-    ("THAR", 2330, "Performance for Animators",          75, 20, 2, ["spring"]),
+    ("ANGD", 1302, "Element of Design",                  25, 2, ["spring"]),
+    ("ANGD", 2334, "Environment Production II",          18, 2, ["spring"]),
+    ("ANGD", 2341, "Period Styles",                      20, 2, ["spring"]),
+    ("ANGD", 2342, "Animation II: Animation for Games",  18, 2, ["spring"]),
+    ("ANGD", 2352, "Production Management II",           15, 1, ["spring"]),
+    ("ANGD", 2355, "Animation Pipeline",                 18, 2, ["spring"]),
+    ("ANGD", 2361, "Character Modeling I",               18, 2, ["spring"]),
+    ("ANGD", 2372, "Game Programming II",                15, 2, ["spring"]),
+    ("ANGD", 3330, "History of Games",                   40, 2, ["spring"]),
+    ("ANGD", 3332, "Environment Production IV",          18, 2, ["spring"]),
+    ("ANGD", 3342, "Animation IV: Performance Animation",18, 2, ["spring"]),
+    ("ANGD", 3345, "Advanced Animation for Games",       18, 2, ["spring"]),
+    ("ANGD", 3352, "Production Management IV",           12, 1, ["spring"]),
+    ("ANGD", 3355, "Tools of Production Management",     15, 2, ["spring"]),
+    ("ANGD", 3362, "Character Modeling III",             18, 2, ["spring"]),
+    ("ANGD", 3372, "Game Programming IV",                15, 2, ["spring"]),
+    ("ANGD", 4140, "Senior Thesis Workshop",             20, 2, ["spring"]),
+    ("ANGD", 4340, "Business of Animation and Game Design",20,2, ["spring"]),
+    ("ANGD", 4360, "Senior Thesis Production II",        18, 2, ["spring"]),
+    ("ANGD", 4381, "Prototyping and Game Design",        15, 2, ["spring"]),
+    ("ANGD", 4399, "Realizing 3D",                       15, 2, ["spring"]),
+    ("THAR", 2330, "Performance for Animators",          20, 2, ["spring"]),
     # ── Summer courses ──────────────────────────────────────────────────────
-    ("ANGD", 2384, "Elements of Gameplay",               75, 15, 2, ["summer"]),
+    ("ANGD", 2384, "Elements of Gameplay",               15, 2, ["summer"]),
     # ── Fall + Spring ───────────────────────────────────────────────────────
-    ("ANGD", 1312, "Hardsurface Modeling",               75, 18, 2, ["fall", "spring"]),
-    ("ANGD", 1313, "Game Engines",                       75, 18, 2, ["fall", "spring"]),
-    ("ANGD", 1314, "Organic Modeling",                   75, 18, 2, ["fall", "spring"]),
-    ("ANGD", 1315, "Principles of Animation",            75, 18, 2, ["fall", "spring"]),
-    ("ANGD", 2321, "Technical Direction",                75, 15, 2, ["fall", "spring"]),
-    ("ANGD", 3315, "Visual Narrative Conventions",       75, 40, 2, ["fall", "spring"]),
-    ("ANGD", 3325, "Figure Drawing For Animators",       75, 20, 1, ["fall", "spring"]),
-    ("ANGD", 4100, "Animation Industry Seminar",         75,120, 1, ["fall", "spring"]),
+    ("ANGD", 1312, "Hardsurface Modeling",               18, 2, ["fall", "spring"]),
+    ("ANGD", 1313, "Game Engines",                       18, 2, ["fall", "spring"]),
+    ("ANGD", 1314, "Organic Modeling",                   18, 2, ["fall", "spring"]),
+    ("ANGD", 1315, "Principles of Animation",            18, 2, ["fall", "spring"]),
+    ("ANGD", 2321, "Technical Direction",                15, 2, ["fall", "spring"]),
+    ("ANGD", 3315, "Visual Narrative Conventions",       40, 2, ["fall", "spring"]),
+    ("ANGD", 3325, "Figure Drawing For Animators",       20, 1, ["fall", "spring"]),
+    ("ANGD", 4100, "Animation Industry Seminar",        120, 1, ["fall", "spring"]),
     # ── Fall + Spring + Summer ──────────────────────────────────────────────
-    ("ANGD", 4305, "Senior Portfolio",                   75, 20, 2, ["fall", "spring", "summer"]),
+    ("ANGD", 4305, "Senior Portfolio",                   20, 2, ["fall", "spring", "summer"]),
 ]
 
 course_map = {}  # course_number → Course
 sem_lookup = {"fall": FALL, "spring": SPRING, "summer": SUMMER}
 
-for dept, num, name, dur, cap, freq, sem_keys in COURSES_DATA:
+for dept, num, name, cap, freq, sem_keys in COURSES_DATA:
     c = Course(dept_code=dept, course_number=num, course_name=name,
-               duration_minutes=dur, capacity=cap, frequency=freq)
+               duration_minutes=_duration(num), capacity=cap, frequency=freq)
     db.add(c)
     db.flush()
     course_map[num] = c

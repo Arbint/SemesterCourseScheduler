@@ -1,0 +1,1 @@
+looks like now when a course with 165 minute is dragged in to the graph, it's size is not high enough to occupy 2 slots, can you fix that?
