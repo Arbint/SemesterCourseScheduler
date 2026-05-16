@@ -188,7 +188,9 @@ function ScheduledSectionCard({
         opacity: isDragging ? 0.4 : 1,
         userSelect: 'none',
         position: 'relative',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        height: '100%',
+        boxSizing: 'border-box',
       }}
     >
       <div style={{ fontWeight: 600, color: '#ddd' }}>{course.dept_code} {course.course_number} §{entry.section}</div>
@@ -270,28 +272,31 @@ function TableCell({
       rowSpan={rowSpan}
       style={{
         border: '1px solid var(--border-color)',
-        padding: 4,
+        padding: 0,
         verticalAlign: 'top',
         minWidth: 130,
         height: 72,
         background: isOver ? 'rgba(97,175,239,0.1)' : undefined,
         transition: 'background 0.1s',
+        position: 'relative',
       }}
     >
-      {cellEntries.map(e => {
-        const course = courses.get(e.course_id)
-        if (!course) return null
-        return (
-          <ScheduledSectionCard
-            key={e.id}
-            entry={e}
-            course={course}
-            allFaculty={allFaculty}
-            onFacultyChange={fid => onFacultyChange(e.id, fid)}
-            onDelete={() => onDeleteEntry(e.id)}
-          />
-        )
-      })}
+      <div style={{ position: 'absolute', inset: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {cellEntries.map(e => {
+          const course = courses.get(e.course_id)
+          if (!course) return null
+          return (
+            <ScheduledSectionCard
+              key={e.id}
+              entry={e}
+              course={course}
+              allFaculty={allFaculty}
+              onFacultyChange={fid => onFacultyChange(e.id, fid)}
+              onDelete={() => onDeleteEntry(e.id)}
+            />
+          )
+        })}
+      </div>
     </td>
   )
 }
