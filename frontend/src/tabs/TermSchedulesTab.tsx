@@ -151,12 +151,13 @@ function ScheduledSectionCard({
 
 // --- Drop Cell ---
 function TableCell({
-  tableId, timeSlotId, roomId, entries, courses, allFaculty,
+  tableId, timeSlotId, roomId, timeSlots, entries, courses, allFaculty,
   onFacultyChange, onDeleteEntry
 }: {
   tableId: number
   timeSlotId: number
   roomId: number
+  timeSlots: TimeSlot[]
   entries: ScheduleEntry[]
   courses: Map<number, Course>
   allFaculty: Faculty[]
@@ -175,6 +176,17 @@ function TableCell({
     e.time_slot_ids.includes(timeSlotId)
   )
 
+  // An entry "starts" in this cell if this slot is the earliest of its slots.
+  const sortedSlotIds = timeSlots.map(ts => ts.id) // already sorted by display_order
+  const startingEntries = cellEntries.filter(e => {
+    const firstId = sortedSlotIds.find(sid => e.time_slot_ids.includes(sid))
+    return firstId === timeSlotId
+  })
+  const continuationEntries = cellEntries.filter(e => {
+    const firstId = sortedSlotIds.find(sid => e.time_slot_ids.includes(sid))
+    return firstId !== timeSlotId
+  })
+
   return (
     <td
       ref={setNodeRef}
@@ -187,7 +199,7 @@ function TableCell({
         transition: 'background 0.1s',
       }}
     >
-      {cellEntries.map(e => {
+      {startingEntries.map(e => {
         const course = courses.get(e.course_id)
         if (!course) return null
         return (
@@ -199,6 +211,25 @@ function TableCell({
             onFacultyChange={fid => onFacultyChange(e.id, fid)}
             onDelete={() => onDeleteEntry(e.id)}
           />
+        )
+      })}
+      {continuationEntries.map(e => {
+        const course = courses.get(e.course_id)
+        return (
+          <div
+            key={`cont-${e.id}`}
+            style={{
+              background: facultyColor(e.faculty_id),
+              borderLeft: '3px solid rgba(255,255,255,0.2)',
+              borderRadius: '0 4px 4px 0',
+              padding: '5px 8px',
+              fontSize: 10,
+              color: 'rgba(220,220,220,0.7)',
+              userSelect: 'none',
+            }}
+          >
+            {course ? `${course.dept_code} ${course.course_number} §${e.section}` : '—'}
+          </div>
         )
       })}
     </td>
@@ -274,6 +305,7 @@ function ScheduleTableView({
                     tableId={table.id}
                     timeSlotId={ts.id}
                     roomId={r.id}
+                    timeSlots={timeSlots}
                     entries={entries}
                     courses={courses}
                     allFaculty={allFaculty}
