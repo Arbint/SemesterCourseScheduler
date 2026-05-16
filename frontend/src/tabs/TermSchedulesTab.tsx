@@ -20,6 +20,75 @@ function facultyColor(facultyId: number | null): string {
   return PASTEL[facultyId % PASTEL.length]
 }
 
+// --- Term Selector with per-item delete buttons ---
+function TermSelector({
+  terms, selectedTermId, onSelect, onDelete, onNew
+}: {
+  terms: Term[]
+  selectedTermId: number | null
+  onSelect: (val: string) => void
+  onDelete: (termId: number) => void
+  onNew: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const selected = terms.find(t => t.id === selectedTermId)
+  const label = selected
+    ? `${selected.semester_name.charAt(0).toUpperCase() + selected.semester_name.slice(1)} ${selected.year}`
+    : 'Select term...'
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{ minWidth: 170, textAlign: 'left', padding: '5px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border-color)', borderRadius: 4, color: 'var(--text-primary)', cursor: 'pointer', fontSize: 13 }}
+      >
+        {label} <span style={{ float: 'right', opacity: 0.5 }}>▾</span>
+      </button>
+      {open && (
+        <div style={{ position: 'absolute', top: 'calc(100% + 2px)', left: 0, background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 4, boxShadow: '0 4px 12px rgba(0,0,0,0.35)', zIndex: 1000, minWidth: 200 }}>
+          {terms.map(t => {
+            const tLabel = `${t.semester_name.charAt(0).toUpperCase() + t.semester_name.slice(1)} ${t.year}`
+            return (
+              <div key={t.id} style={{ display: 'flex', alignItems: 'center' }}>
+                <button
+                  onClick={() => { onSelect(String(t.id)); setOpen(false) }}
+                  style={{ flex: 1, textAlign: 'left', padding: '8px 12px', background: 'transparent', border: 'none', cursor: 'pointer', color: t.id === selectedTermId ? 'var(--accent)' : 'var(--text-primary)', fontSize: 13 }}
+                >
+                  {tLabel}
+                </button>
+                <button
+                  onClick={e => { e.stopPropagation(); onDelete(t.id); setOpen(false) }}
+                  title="Delete term"
+                  style={{ padding: '4px 8px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1 }}
+                >
+                  ✕
+                </button>
+              </div>
+            )
+          })}
+          <div style={{ borderTop: '1px solid var(--border-color)', margin: '2px 0' }} />
+          <button
+            onClick={() => { onNew(); setOpen(false) }}
+            style={{ width: '100%', textAlign: 'left', padding: '8px 12px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: 13 }}
+          >
+            + New Term
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // --- Draggable Course Card (from Course List) ---
 function DraggableCourseCard({
   course, entries, neededSections, onSectionChange, highlighted
@@ -204,6 +273,7 @@ function TableCell({
         padding: 4,
         verticalAlign: 'top',
         minWidth: 130,
+        height: 72,
         background: isOver ? 'rgba(97,175,239,0.1)' : undefined,
         transition: 'background 0.1s',
       }}
@@ -580,6 +650,29 @@ export function TermSchedulesTab() {
     } finally { setSavingTerm(false) }
   }
 
+  const handleTermDelete = async (termId: number) => {
+    if (!window.confirm('Delete this term and all its schedule data? This cannot be undone.')) return
+    try {
+      await termsApi.delete(termId)
+      const remaining = terms.filter(t => t.id !== termId)
+      setTerms(remaining)
+      if (selectedTermId === termId) {
+        if (remaining.length > 0) {
+          setSelectedTermId(remaining[0].id)
+          loadTerm(remaining[0].id, remaining[0])
+        } else {
+          setSelectedTermId(null)
+          setTables([])
+          setEntries([])
+          setCourses([])
+          setWarnings([])
+        }
+      }
+    } catch (e: any) {
+      showToast(e.response?.data?.detail || 'Failed to delete term')
+    }
+  }
+
   const addTable = async () => {
     if (!selectedTermId) return
     const table = await tablesApi.create(selectedTermId, [])
@@ -609,7 +702,7 @@ export function TermSchedulesTab() {
     try {
       const { entry: updated, warnings } = await entriesApi.patchFaculty(entryId, facultyId)
       setEntries(prev => prev.map(e => e.id === entryId ? { ...e, faculty_id: updated.faculty_id } : e))
-      if (warnings.length) setWarnings(warnings)
+      setWarnings(warnings)
     } catch (e: any) {
       const detail = e.response?.data?.detail
       if (Array.isArray(detail)) {
@@ -664,7 +757,7 @@ export function TermSchedulesTab() {
           time_slot_ids: slotIds,
         })
         setEntries(prev => [...prev.filter(e => e.id !== result.entry.id), result.entry])
-        if (result.warnings.length) setWarnings(result.warnings)
+        setWarnings(result.warnings)
       } else if (activeData?.type === 'entry') {
         const entryId = activeData.entry_id
         const existing = entries.find(e => e.id === entryId)
@@ -682,7 +775,7 @@ export function TermSchedulesTab() {
           time_slot_ids: slotIds,
         })
         setEntries(prev => prev.map(e => e.id === entryId ? result.entry : e))
-        if (result.warnings.length) setWarnings(result.warnings)
+        setWarnings(result.warnings)
       }
     } catch (e: any) {
       const detail = e.response?.data?.detail
@@ -706,17 +799,13 @@ export function TermSchedulesTab() {
       <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 44px)' }}>
         {/* Top bar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 20px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-surface)' }}>
-          <select
-            value={selectedTermId ?? ''}
-            onChange={e => handleTermChange(e.target.value)}
-            style={{ minWidth: 160 }}
-          >
-            <option value="" disabled>Select term...</option>
-            {terms.map(t => (
-              <option key={t.id} value={t.id}>{t.semester_name.charAt(0).toUpperCase() + t.semester_name.slice(1)} {t.year}</option>
-            ))}
-            <option value="new">+ New Term</option>
-          </select>
+          <TermSelector
+            terms={terms}
+            selectedTermId={selectedTermId}
+            onSelect={handleTermChange}
+            onDelete={handleTermDelete}
+            onNew={() => setShowNewTermModal(true)}
+          />
           {selectedTermId && (
             <button
               className="btn-secondary"

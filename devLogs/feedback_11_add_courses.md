@@ -5,3 +5,5 @@ there are 2 example schedules under srcData in a form of an excel spreedsheet. P
 * use the rooms defined in the Fall-2026-Schedule.xlsx, don't add the rooms defined in the Spring 2026 Schedule.xlsx.
 
 * build the faculty databased based on the schedules, the capability should also be extracted based on the courses they taught in the 2 schedules.
+
+* also, add a X button in each entry of the term drop down list to remove the term. pop up a warning to confirm if the user trys to do that.

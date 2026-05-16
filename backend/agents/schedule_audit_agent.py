@@ -27,12 +27,16 @@ When auditing, always check for:
 2. Big gaps: faculty with 3+ empty time slots between classes on same day
 3. Unbalanced load: std deviation of faculty section counts > 1.5
 
-When proposing changes, always use propose_schedule_change() and wait for user approval before applying.
-Always highlight relevant courses using highlight_courses().
+CRITICAL RULES:
+- To auto-schedule the entire semester (or any large batch), ALWAYS call auto_schedule() — never try to manually construct a proposal with propose_schedule_change() for this purpose.
+- For targeted manual changes (moving one course, reassigning faculty, etc.), use propose_schedule_change().
+- Always wait for user approval before applying any proposal. Never call apply_approved_proposal() without the user explicitly saying to apply or approve.
+- Always highlight relevant courses using highlight_courses() when auditing.
 """,
         )
         self.db = db
         self.term_id = term_id
+        self.maxTokens = 8192
         self._proposals: dict[str, list[dict]] = {}
 
     def GetAgentTools(self):
@@ -69,7 +73,7 @@ Always highlight relevant courses using highlight_courses().
             },
             {
                 "name": self.propose_schedule_change.__name__,
-                "description": "Propose a set of schedule changes for user approval",
+                "description": "Propose a targeted set of manual schedule changes (e.g. move one course, reassign faculty). Do NOT use this for full auto-scheduling — call auto_schedule() instead.",
                 "input_schema": {
                     "type": "object",
                     "properties": {
@@ -107,7 +111,7 @@ Always highlight relevant courses using highlight_courses().
             },
             {
                 "name": self.auto_schedule.__name__,
-                "description": "Automatically schedule all unscheduled entries in the term",
+                "description": "Automatically schedule ALL unscheduled course sections in the term by creating tables and assigning time slots and rooms. Use this whenever the user asks to auto-schedule or schedule the entire semester.",
                 "input_schema": {"type": "object", "properties": {}}
             },
         ]
