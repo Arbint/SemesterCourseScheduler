@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
 import { DndContext, type DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core'
 import {
   termsApi, tablesApi, entriesApi, coursesApi, roomsApi, timeSlotsApi,
@@ -151,13 +151,13 @@ function ScheduledSectionCard({
 
 // --- Drop Cell ---
 function TableCell({
-  tableId, timeSlotId, roomId, timeSlots, entries, courses, allFaculty,
+  tableId, timeSlotId, roomId, rowSpan = 1, entries, courses, allFaculty,
   onFacultyChange, onDeleteEntry
 }: {
   tableId: number
   timeSlotId: number
   roomId: number
-  timeSlots: TimeSlot[]
+  rowSpan?: number
   entries: ScheduleEntry[]
   courses: Map<number, Course>
   allFaculty: Faculty[]
@@ -176,20 +176,10 @@ function TableCell({
     e.time_slot_ids.includes(timeSlotId)
   )
 
-  // An entry "starts" in this cell if this slot is the earliest of its slots.
-  const sortedSlotIds = timeSlots.map(ts => ts.id) // already sorted by display_order
-  const startingEntries = cellEntries.filter(e => {
-    const firstId = sortedSlotIds.find(sid => e.time_slot_ids.includes(sid))
-    return firstId === timeSlotId
-  })
-  const continuationEntries = cellEntries.filter(e => {
-    const firstId = sortedSlotIds.find(sid => e.time_slot_ids.includes(sid))
-    return firstId !== timeSlotId
-  })
-
   return (
     <td
       ref={setNodeRef}
+      rowSpan={rowSpan}
       style={{
         border: '1px solid var(--border-color)',
         padding: 4,
@@ -199,7 +189,7 @@ function TableCell({
         transition: 'background 0.1s',
       }}
     >
-      {startingEntries.map(e => {
+      {cellEntries.map(e => {
         const course = courses.get(e.course_id)
         if (!course) return null
         return (
@@ -211,25 +201,6 @@ function TableCell({
             onFacultyChange={fid => onFacultyChange(e.id, fid)}
             onDelete={() => onDeleteEntry(e.id)}
           />
-        )
-      })}
-      {continuationEntries.map(e => {
-        const course = courses.get(e.course_id)
-        return (
-          <div
-            key={`cont-${e.id}`}
-            style={{
-              background: facultyColor(e.faculty_id),
-              borderLeft: '3px solid rgba(255,255,255,0.2)',
-              borderRadius: '0 4px 4px 0',
-              padding: '5px 8px',
-              fontSize: 10,
-              color: 'rgba(220,220,220,0.7)',
-              userSelect: 'none',
-            }}
-          >
-            {course ? `${course.dept_code} ${course.course_number} §${e.section}` : '—'}
-          </div>
         )
       })}
     </td>
@@ -255,6 +226,23 @@ function ScheduleTableView({
 }) {
   const selectedWeekdays = new Set(table.weekday_ids)
   const dayNames: Record<string, string> = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri' }
+
+  // Precompute which cells are covered by a multi-slot entry's rowspan,
+  // and which starting cells need a rowspan > 1.
+  const sortedSlotIds = timeSlots.map(ts => ts.id) // already in display_order
+  const coveredCells = new Set<string>()   // `${roomId}:${slotId}`
+  const rowSpanMap  = new Map<string, number>()  // `${roomId}:${slotId}` → span count
+  for (const entry of entries) {
+    if (entry.schedule_table_id !== table.id) continue
+    if (!entry.room_id || entry.time_slot_ids.length <= 1) continue
+    let first = true
+    for (const sid of sortedSlotIds) {
+      if (!entry.time_slot_ids.includes(sid)) continue
+      const key = `${entry.room_id}:${sid}`
+      if (first) { rowSpanMap.set(key, entry.time_slot_ids.length); first = false }
+      else        { coveredCells.add(key) }
+    }
+  }
 
   return (
     <div className="card" style={{ marginBottom: 16 }}>
@@ -299,20 +287,24 @@ function ScheduleTableView({
                 <td style={{ padding: '6px 10px', fontSize: 11, color: 'var(--text-secondary)', border: '1px solid var(--border-color)', whiteSpace: 'nowrap', background: 'var(--bg-elevated)' }}>
                   {ts.label}
                 </td>
-                {rooms.map(r => (
-                  <TableCell
-                    key={r.id}
-                    tableId={table.id}
-                    timeSlotId={ts.id}
-                    roomId={r.id}
-                    timeSlots={timeSlots}
-                    entries={entries}
-                    courses={courses}
-                    allFaculty={allFaculty}
-                    onFacultyChange={onFacultyChange}
-                    onDeleteEntry={onDeleteEntry}
-                  />
-                ))}
+                {rooms.map(r => {
+                  const cellKey = `${r.id}:${ts.id}`
+                  if (coveredCells.has(cellKey)) return <Fragment key={r.id} />
+                  return (
+                    <TableCell
+                      key={r.id}
+                      tableId={table.id}
+                      timeSlotId={ts.id}
+                      roomId={r.id}
+                      rowSpan={rowSpanMap.get(cellKey) ?? 1}
+                      entries={entries}
+                      courses={courses}
+                      allFaculty={allFaculty}
+                      onFacultyChange={onFacultyChange}
+                      onDeleteEntry={onDeleteEntry}
+                    />
+                  )
+                })}
               </tr>
             ))}
           </tbody>

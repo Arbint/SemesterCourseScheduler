@@ -1,0 +1,1 @@
+Rethink about the structure of the scheudle table, I want to see 1 box per section, not 2 boxes, even a course is occupying 2 cells, visually it should be just one box, think of this as merging 2 cells in excel, these should not be any visual breaks for the course.
