@@ -24,6 +24,7 @@ You can:
 
 Before assigning instructors, always call get_faculty() to retrieve the full faculty list with IDs and teaching capabilities.
 Before proposing room or time-slot changes, call get_rooms() and get_time_slots() to retrieve their IDs.
+When the user expresses a preference about which time slots to use (e.g. avoid mornings, prefer midday), call get_time_slots() first to get IDs, then pass the preferred slot IDs to auto_schedule() via preferred_time_slot_ids.
 
 When auditing, always check for:
 1. Long days: faculty teaching 3+ classes on same weekday
@@ -116,13 +117,18 @@ CRITICAL RULES:
             },
             {
                 "name": self.auto_schedule.__name__,
-                "description": "Automatically schedule course sections by creating tables and assigning time slots, rooms, and faculty. Pass clear_existing=true when the user wants to redo or replace the existing schedule; omit it (or pass false) to schedule only the remaining unscheduled sections.",
+                "description": "Automatically schedule course sections by creating tables and assigning time slots, rooms, and faculty. Pass clear_existing=true when the user wants to redo or replace the existing schedule. Pass preferred_time_slot_ids to prioritize specific time slots (the scheduler will fill those first before using others).",
                 "input_schema": {
                     "type": "object",
                     "properties": {
                         "clear_existing": {
                             "type": "boolean",
                             "description": "If true, wipe all existing tables and assignments for this term before scheduling from scratch."
+                        },
+                        "preferred_time_slot_ids": {
+                            "type": "array",
+                            "items": {"type": "integer"},
+                            "description": "Time slot IDs to prioritize. The scheduler tries these slots first before falling back to others. Call get_time_slots() to look up IDs."
                         }
                     }
                 }
@@ -364,7 +370,7 @@ CRITICAL RULES:
         del self._proposals[proposal_id]
         return {"ok": True, "applied": len(changes)}
 
-    def auto_schedule(self, clear_existing: bool = False):
+    def auto_schedule(self, clear_existing: bool = False, preferred_time_slot_ids: list = None):
         from models import (
             Term, TimeSlot, Room, ScheduleEntry, CourseOffering, ScheduleTable,
             FacultyTeaching, schedule_entry_timeslots, schedule_table_weekdays,
@@ -431,6 +437,17 @@ CRITICAL RULES:
         rooms = self.db.query(Room).order_by(Room.capacity.asc()).all()
         time_slots = self.db.query(TimeSlot).order_by(TimeSlot.display_order).all()
 
+        # Build slot search order: preferred starts first, then others.
+        # For multi-slot courses (165 min = 2 consecutive slots), the run must
+        # fit within time_slots, so we filter out starts that would overflow.
+        if preferred_time_slot_ids:
+            preferred_set = set(preferred_time_slot_ids)
+            preferred_starts = [si for si in range(len(time_slots)) if time_slots[si].id in preferred_set]
+            other_starts = [si for si in range(len(time_slots)) if time_slots[si].id not in preferred_set]
+            slot_search_order = preferred_starts + other_starts
+        else:
+            slot_search_order = list(range(len(time_slots)))
+
         # Build faculty capability map: course_id -> list of Faculty
         fac_caps: dict[int, list] = {}
         for ft in self.db.query(FacultyTeaching).all():
@@ -478,7 +495,9 @@ CRITICAL RULES:
                     needed_slots = max(1, entry.course.duration_minutes // 75)
                     placed = False
 
-                    for si in range(len(time_slots) - needed_slots + 1):
+                    for si in slot_search_order:
+                        if si + needed_slots > len(time_slots):
+                            continue
                         slot_range = list(range(si, si + needed_slots))
                         for room in rooms:
                             if room.capacity < entry.course.capacity:
