@@ -11,6 +11,7 @@ PASTEL_COLORS = [
 
 LIGHT_GRAY = "D3D3D3"
 HEADER_GRAY = "A0A0A0"
+ROW_HEIGHT = 60  # tall enough for course + instructor + optional day labels
 
 
 def _faculty_color(faculty_id: int | None) -> str:
@@ -19,8 +20,13 @@ def _faculty_color(faculty_id: int | None) -> str:
     return PASTEL_COLORS[faculty_id % len(PASTEL_COLORS)]
 
 
+def _credit_hours(course_number: int) -> int:
+    """2nd digit of the 4-digit course number encodes credit hours."""
+    return (course_number // 100) % 10
+
+
 def generate_excel(db, term_id: int) -> bytes:
-    from models import Term, TimeSlot, Room
+    from models import Term, TimeSlot, Room, TaughtWithGroup
 
     term = db.query(Term).filter(Term.id == term_id).first()
     if not term:
@@ -31,7 +37,11 @@ def generate_excel(db, term_id: int) -> bytes:
     ws.title = "Schedule"
 
     time_slots = db.query(TimeSlot).order_by(TimeSlot.display_order).all()
-    rooms = db.query(Room).order_by(Room.label).all()
+    # Online rooms sorted last
+    rooms = sorted(
+        db.query(Room).all(),
+        key=lambda r: (r.is_online, r.label)
+    )
 
     if not time_slots or not rooms:
         ws["A1"] = "No data"
@@ -64,7 +74,8 @@ def generate_excel(db, term_id: int) -> bytes:
         # Column headers: Time Slot | Room1 | Room2 | ...
         ws.cell(row=row, column=1, value="Time Slot").font = Font(bold=True)
         for col_idx, room in enumerate(rooms, start=2):
-            ws.cell(row=row, column=col_idx, value=room.label).font = Font(bold=True)
+            hdr = room.label if room.is_online else f"{room.label} ({room.capacity})"
+            ws.cell(row=row, column=col_idx, value=hdr).font = Font(bold=True)
         row += 1
 
         table_start_row = row
@@ -72,12 +83,15 @@ def generate_excel(db, term_id: int) -> bytes:
         # Map time_slot_id -> row index within this table
         slot_row_map = {ts.id: table_start_row + i for i, ts in enumerate(time_slots)}
 
-        # Write time slot labels
+        # Set row heights and write time slot labels
         for i, ts in enumerate(time_slots):
-            ws.cell(row=table_start_row + i, column=1, value=ts.label)
+            r = table_start_row + i
+            ws.row_dimensions[r].height = ROW_HEIGHT
+            ws.cell(row=r, column=1, value=ts.label)
 
         # Write entries
         room_col_map = {r.id: col_idx for col_idx, r in enumerate(rooms, start=2)}
+        table_weekday_ids = {w.id for w in table.weekdays}
 
         for entry in table.entries:
             if not entry.room_id or not entry.time_slots:
@@ -100,7 +114,17 @@ def generate_excel(db, term_id: int) -> bytes:
             course = entry.course
             text = f"{course.dept_code} {course.course_number}\n{course.course_name}"
             if entry.faculty:
-                text += f"\n{entry.faculty.last_name}"
+                text += f"\n{entry.faculty.last_name}, {entry.faculty.first_name}"
+
+            # Add active weekdays if this entry runs on a subset of the table's days
+            if entry.active_weekdays:
+                active_ids = {w.id for w in entry.active_weekdays}
+                if active_ids < table_weekday_ids:
+                    day_str = " ".join(
+                        w.name.value.capitalize()[:2]
+                        for w in sorted(entry.active_weekdays, key=lambda w: w.display_order)
+                    )
+                    text += f"\n[{day_str}]"
 
             fill_color = _faculty_color(entry.faculty_id)
             fill = PatternFill(fill_type="solid", fgColor=fill_color)
@@ -120,7 +144,122 @@ def generate_excel(db, term_id: int) -> bytes:
     # Auto-size columns
     ws.column_dimensions["A"].width = 22
     for col_idx in range(2, len(rooms) + 2):
-        ws.column_dimensions[get_column_letter(col_idx)].width = 20
+        ws.column_dimensions[get_column_letter(col_idx)].width = 22
+
+    # ── Faculty Load sheet ────────────────────────────────────────────────────
+    ws_load = wb.create_sheet("Faculty Load")
+
+    # Build TaughtWith lookups
+    tw_groups = db.query(TaughtWithGroup).all()
+    course_to_tw: dict[int, int] = {}
+    tw_courses: dict[int, list[int]] = {}
+    for g in tw_groups:
+        ids = [m.course_id for m in g.members]
+        tw_courses[g.id] = ids
+        for cid in ids:
+            course_to_tw[cid] = g.id
+
+    # Collect scheduled entries with faculty
+    all_entries = [
+        e for e in term.schedule_entries
+        if e.schedule_table_id and e.faculty_id
+    ]
+
+    by_faculty: dict[int, list] = {}
+    for e in all_entries:
+        by_faculty.setdefault(e.faculty_id, []).append(e)
+
+    load_rows: list[dict] = []
+    for fid, fentries in by_faculty.items():
+        faculty = fentries[0].faculty
+        units: dict[str, list] = {}
+        for e in fentries:
+            gid = course_to_tw.get(e.course_id)
+            key = f"tw_{gid}" if gid else f"c_{e.course_id}"
+            units.setdefault(key, []).append(e)
+
+        courses_data = []
+        total_sections = 0
+        total_ch = 0
+
+        for key, uentries in units.items():
+            if key.startswith("tw_"):
+                gid = int(key[3:])
+                seen: dict[int, object] = {}
+                for e in uentries:
+                    seen.setdefault(e.course_id, e.course)
+                sorted_c = sorted(seen.values(), key=lambda c: c.course_number)
+                display = " / ".join(f"{c.dept_code} {c.course_number}" for c in sorted_c)
+                ch = sum(_credit_hours(c.course_number) for c in sorted_c)
+                rep_cid = next(iter(seen))
+                sections = sum(1 for e in uentries if e.course_id == rep_cid)
+            else:
+                course = uentries[0].course
+                display = f"{course.dept_code} {course.course_number}"
+                ch = _credit_hours(course.course_number)
+                sections = len(uentries)
+
+            total_sections += sections
+            total_ch += ch * sections
+            courses_data.append((display, sections, ch, ch * sections))
+
+        courses_data.sort(key=lambda x: x[0])
+        load_rows.append({
+            "name": f"{faculty.last_name}, {faculty.first_name}",
+            "rank": faculty.rank.value.replace("_", " ").title(),
+            "full_load": faculty.full_load,
+            "courses": courses_data,
+            "total_sections": total_sections,
+            "total_credit_hours": total_ch,
+        })
+
+    load_rows.sort(key=lambda x: x["name"])
+
+    # Write Faculty Load sheet
+    hdr_fill = PatternFill(fill_type="solid", fgColor=HEADER_GRAY)
+    hdr_font = Font(bold=True, color="FFFFFF")
+
+    load_row = 1
+    for faculty_data in load_rows:
+        # Faculty name header
+        ws_load.merge_cells(start_row=load_row, start_column=1, end_row=load_row, end_column=4)
+        name_cell = ws_load.cell(row=load_row, column=1,
+                                  value=f"{faculty_data['name']}  ({faculty_data['rank']} — load {faculty_data['full_load']})")
+        name_cell.font = Font(bold=True, size=12)
+        name_cell.fill = PatternFill(fill_type="solid", fgColor="C8D8E8")
+        load_row += 1
+
+        # Column headers
+        for col, hdr in enumerate(["Course(s)", "Sections", "Credit Hrs / unit", "Total Credit Hrs"], start=1):
+            c = ws_load.cell(row=load_row, column=col, value=hdr)
+            c.font = hdr_font
+            c.fill = hdr_fill
+            c.alignment = Alignment(horizontal="center")
+        load_row += 1
+
+        # Course rows
+        for display, sections, ch, total in faculty_data["courses"]:
+            ws_load.cell(row=load_row, column=1, value=display)
+            ws_load.cell(row=load_row, column=2, value=sections).alignment = Alignment(horizontal="center")
+            ws_load.cell(row=load_row, column=3, value=ch).alignment = Alignment(horizontal="center")
+            ws_load.cell(row=load_row, column=4, value=total).alignment = Alignment(horizontal="center")
+            load_row += 1
+
+        # Totals row
+        tot_fill = PatternFill(fill_type="solid", fgColor="E8E8E8")
+        for col in range(1, 5):
+            ws_load.cell(row=load_row, column=col).fill = tot_fill
+        ws_load.cell(row=load_row, column=1, value="TOTAL").font = Font(bold=True)
+        ws_load.cell(row=load_row, column=2, value=faculty_data["total_sections"]).font = Font(bold=True)
+        ws_load.cell(row=load_row, column=2).alignment = Alignment(horizontal="center")
+        ws_load.cell(row=load_row, column=4, value=faculty_data["total_credit_hours"]).font = Font(bold=True)
+        ws_load.cell(row=load_row, column=4).alignment = Alignment(horizontal="center")
+        load_row += 2  # blank row between faculty
+
+    ws_load.column_dimensions["A"].width = 40
+    ws_load.column_dimensions["B"].width = 12
+    ws_load.column_dimensions["C"].width = 20
+    ws_load.column_dimensions["D"].width = 20
 
     buf = io.BytesIO()
     wb.save(buf)

@@ -201,6 +201,27 @@ export const entriesApi = {
     api.patch(`/terms/${termId}/courses/${courseId}/section-count`, { count }),
 }
 
+export interface FacultyCourseLoad {
+  display: string
+  sections: number
+  credit_hours: number
+  total_credit_hours: number
+}
+
+export interface FacultyLoad {
+  faculty_id: number
+  name: string
+  rank: string
+  full_load: number
+  courses: FacultyCourseLoad[]
+  total_sections: number
+  total_credit_hours: number
+}
+
+export const loadApi = {
+  getTermLoad: (termId: number) => api.get<FacultyLoad[]>(`/terms/${termId}/load`).then(r => r.data),
+}
+
 export const chatApi = {
   send: (termId: number, message: string, session_id: string) =>
     api.post<ChatResponse>(`/terms/${termId}/chat`, { message, session_id }).then(r => r.data),

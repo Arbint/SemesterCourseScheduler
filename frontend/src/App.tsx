@@ -6,6 +6,7 @@ import { RoomsTab } from './tabs/RoomsTab'
 import { TimeSlotsTab } from './tabs/TimeSlotsTab'
 import { ConstraintsTab } from './tabs/ConstraintsTab'
 import { TermSchedulesTab } from './tabs/TermSchedulesTab'
+import { LoadTab } from './tabs/LoadTab'
 
 const TABS = [
   { id: 'faculty', label: 'Faculty' },
@@ -14,6 +15,7 @@ const TABS = [
   { id: 'timeslots', label: 'Time Slots' },
   { id: 'constraints', label: 'Constraints' },
   { id: 'schedules', label: 'Term Schedules' },
+  { id: 'load', label: 'Load' },
 ] as const
 
 type TabId = typeof TABS[number]['id']
@@ -47,6 +49,7 @@ export default function App() {
         {tab === 'timeslots' && <TimeSlotsTab />}
         {tab === 'constraints' && <ConstraintsTab />}
         {tab === 'schedules' && <TermSchedulesTab />}
+        {tab === 'load' && <LoadTab />}
       </div>
     </div>
   )
