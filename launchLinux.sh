@@ -160,6 +160,17 @@ FRONTEND_PID=$!
 
 sleep 3
 
+# ── Start Cloudflare tunnel ───────────────────────────────────────────────────
+CLOUDFLARED_PID=""
+if command -v cloudflared &>/dev/null; then
+    info "Starting Cloudflare tunnel..."
+    cloudflared tunnel --config ~/.cloudflared/schedule-config.yml run &
+    CLOUDFLARED_PID=$!
+    log "Cloudflare tunnel started (PID $CLOUDFLARED_PID)."
+else
+    warn "cloudflared not found — skipping tunnel. Install from https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/"
+fi
+
 # ── Print access info ─────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════════╗${NC}"
@@ -168,11 +179,14 @@ echo -e "${GREEN}╠════════════════════
 echo -e "${GREEN}║${NC}  Local:     ${CYAN}http://localhost:${FRONTEND_PORT}${NC}"
 echo -e "${GREEN}║${NC}  Network:   ${CYAN}http://${LOCAL_IP}:${FRONTEND_PORT}${NC}"
 echo -e "${GREEN}║${NC}  API Docs:  ${CYAN}http://localhost:${BACKEND_PORT}/docs${NC}"
+if [[ -n "$CLOUDFLARED_PID" ]]; then
+echo -e "${GREEN}║${NC}  Tunnel:    ${CYAN}cloudflared running (see config)${NC}"
+fi
 echo -e "${GREEN}╚══════════════════════════════════════════════╝${NC}"
 echo ""
 echo "  Any device on your LAN can open:  http://${LOCAL_IP}:${FRONTEND_PORT}"
 echo ""
-echo "  Press Ctrl+C to stop both servers."
+echo "  Press Ctrl+C to stop all servers."
 
 # ── Cleanup on exit ───────────────────────────────────────────────────────────
 cleanup() {
@@ -180,9 +194,11 @@ cleanup() {
     info "Shutting down..."
     kill "$BACKEND_PID"  2>/dev/null || true
     kill "$FRONTEND_PID" 2>/dev/null || true
+    [[ -n "$CLOUDFLARED_PID" ]] && kill "$CLOUDFLARED_PID" 2>/dev/null || true
     # Kill any child processes too
     pkill -P "$BACKEND_PID"  2>/dev/null || true
     pkill -P "$FRONTEND_PID" 2>/dev/null || true
+    [[ -n "$CLOUDFLARED_PID" ]] && pkill -P "$CLOUDFLARED_PID" 2>/dev/null || true
     log "Servers stopped."
 }
 trap cleanup EXIT INT TERM

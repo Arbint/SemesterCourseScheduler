@@ -21,5 +21,8 @@ export default defineConfig({
     proxy: {
       '/api': `http://localhost:${readBackendPort()}`,
     },
+    allowedHosts: [
+      'schedule.jtwoodson.com'
+    ]
   },
 })

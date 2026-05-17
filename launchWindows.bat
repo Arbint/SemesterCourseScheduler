@@ -214,6 +214,17 @@ start "SCS Frontend" /D "%SCRIPT_DIR%\frontend" cmd /k "title SCS Frontend && np
 
 timeout /t 4 /nobreak >nul
 
+:: ---------- Start Cloudflare tunnel in a new window --------------------------
+echo  [...] Starting Cloudflare tunnel...
+where cloudflared >nul 2>&1
+if !errorlevel! equ 0 (
+    start "SCS Tunnel" cmd /k "title SCS Cloudflare Tunnel && cloudflared tunnel --config %USERPROFILE%\.cloudflared\schedule-config.yml run"
+    echo  [OK] Cloudflare tunnel started.
+) else (
+    echo  [!]  cloudflared not found -- skipping tunnel.
+    echo       Install from: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/
+)
+
 :: ---------- Open browser -----------------------------------------------------
 start http://localhost:!FRONTEND_PORT!
 
@@ -226,15 +237,17 @@ echo.
 echo    Local:     http://localhost:!FRONTEND_PORT!
 echo    Network:   http://!LOCAL_IP!:!FRONTEND_PORT!
 echo    API Docs:  http://localhost:!BACKEND_PORT!/docs
+echo    Tunnel:    cloudflared running (see config)
 echo.
 echo    Other computers on your LAN can open:
 echo    http://!LOCAL_IP!:!FRONTEND_PORT!
 echo.
 echo  ====================================================
 echo.
-echo  Two server windows were opened:
-echo    "SCS Backend"   -- Python / FastAPI  (port !BACKEND_PORT!)
-echo    "SCS Frontend"  -- Vite / React      (port !FRONTEND_PORT!)
+echo  Three server windows were opened:
+echo    "SCS Backend"          -- Python / FastAPI  (port !BACKEND_PORT!)
+echo    "SCS Frontend"         -- Vite / React      (port !FRONTEND_PORT!)
+echo    "SCS Cloudflare Tunnel"-- cloudflared tunnel
 echo.
 echo  Close those windows to stop the servers.
 echo  You can close THIS window now.
