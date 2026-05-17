@@ -56,7 +56,7 @@ def generate_excel(db, term_id: int) -> bytes:
     ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=len(rooms) + 1)
     cell = ws.cell(row=row, column=1, value=term_label)
     cell.font = Font(bold=True, size=14)
-    cell.alignment = Alignment(horizontal="center")
+    cell.alignment = Alignment(horizontal="right")
     row += 1
 
     for table in term.schedule_tables:
@@ -68,7 +68,7 @@ def generate_excel(db, term_id: int) -> bytes:
         wd_cell = ws.cell(row=row, column=1, value=weekday_names)
         wd_cell.fill = PatternFill(fill_type="solid", fgColor=LIGHT_GRAY)
         wd_cell.font = Font(bold=True)
-        wd_cell.alignment = Alignment(horizontal="center")
+        wd_cell.alignment = Alignment(horizontal="right")
         row += 1
 
         # Column headers: Time Slot | Room1 | Room2 | ...
@@ -189,13 +189,13 @@ def generate_excel(db, term_id: int) -> bytes:
                 for e in uentries:
                     seen.setdefault(e.course_id, e.course)
                 sorted_c = sorted(seen.values(), key=lambda c: c.course_number)
-                display = " / ".join(f"{c.dept_code} {c.course_number}" for c in sorted_c)
+                display = " / ".join(f"{c.dept_code} {c.course_number} {c.course_name}" for c in sorted_c)
                 ch = sum(_credit_hours(c.course_number) for c in sorted_c)
                 rep_cid = next(iter(seen))
                 sections = sum(1 for e in uentries if e.course_id == rep_cid)
             else:
                 course = uentries[0].course
-                display = f"{course.dept_code} {course.course_number}"
+                display = f"{course.dept_code} {course.course_number} {course.course_name}"
                 ch = _credit_hours(course.course_number)
                 sections = len(uentries)
 
@@ -234,15 +234,15 @@ def generate_excel(db, term_id: int) -> bytes:
             c = ws_load.cell(row=load_row, column=col, value=hdr)
             c.font = hdr_font
             c.fill = hdr_fill
-            c.alignment = Alignment(horizontal="center")
+            c.alignment = Alignment(horizontal="right")
         load_row += 1
 
         # Course rows
         for display, sections, ch, total in faculty_data["courses"]:
             ws_load.cell(row=load_row, column=1, value=display)
-            ws_load.cell(row=load_row, column=2, value=sections).alignment = Alignment(horizontal="center")
-            ws_load.cell(row=load_row, column=3, value=ch).alignment = Alignment(horizontal="center")
-            ws_load.cell(row=load_row, column=4, value=total).alignment = Alignment(horizontal="center")
+            ws_load.cell(row=load_row, column=2, value=sections).alignment = Alignment(horizontal="right")
+            ws_load.cell(row=load_row, column=3, value=ch).alignment = Alignment(horizontal="right")
+            ws_load.cell(row=load_row, column=4, value=total).alignment = Alignment(horizontal="right")
             load_row += 1
 
         # Totals row
@@ -251,12 +251,12 @@ def generate_excel(db, term_id: int) -> bytes:
             ws_load.cell(row=load_row, column=col).fill = tot_fill
         ws_load.cell(row=load_row, column=1, value="TOTAL").font = Font(bold=True)
         ws_load.cell(row=load_row, column=2, value=faculty_data["total_sections"]).font = Font(bold=True)
-        ws_load.cell(row=load_row, column=2).alignment = Alignment(horizontal="center")
+        ws_load.cell(row=load_row, column=2).alignment = Alignment(horizontal="right")
         ws_load.cell(row=load_row, column=4, value=faculty_data["total_credit_hours"]).font = Font(bold=True)
-        ws_load.cell(row=load_row, column=4).alignment = Alignment(horizontal="center")
+        ws_load.cell(row=load_row, column=4).alignment = Alignment(horizontal="right")
         load_row += 2  # blank row between faculty
 
-    ws_load.column_dimensions["A"].width = 40
+    ws_load.column_dimensions["A"].width = 55
     ws_load.column_dimensions["B"].width = 12
     ws_load.column_dimensions["C"].width = 20
     ws_load.column_dimensions["D"].width = 20

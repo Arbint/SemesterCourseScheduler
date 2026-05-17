@@ -62,14 +62,14 @@ def get_term_load(term_id: int, db: Session = Depends(get_db)):
                 for e in uentries:
                     seen_courses.setdefault(e.course_id, e.course)
                 sorted_courses = sorted(seen_courses.values(), key=lambda c: c.course_number)
-                display = " / ".join(f"{c.dept_code} {c.course_number}" for c in sorted_courses)
+                display = " / ".join(f"{c.dept_code} {c.course_number} {c.course_name}" for c in sorted_courses)
                 credit_hrs = sum(_credit_hours(c.course_number) for c in sorted_courses)
                 # Section count: entries for any one representative course
                 rep_cid = next(iter(seen_courses))
                 section_count = sum(1 for e in uentries if e.course_id == rep_cid)
             else:
                 course = uentries[0].course
-                display = f"{course.dept_code} {course.course_number}"
+                display = f"{course.dept_code} {course.course_number} {course.course_name}"
                 credit_hrs = _credit_hours(course.course_number)
                 section_count = len(uentries)
 

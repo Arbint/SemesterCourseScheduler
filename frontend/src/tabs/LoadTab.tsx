@@ -63,75 +63,75 @@ export function LoadTab() {
               style={{ marginBottom: 20 }}
             >
               {/* Faculty header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
-                <div>
-                  <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-bright)' }}>
-                    {faculty.name}
-                  </span>
-                  <span style={{ marginLeft: 10, fontSize: 12, color: 'var(--text-secondary)' }}>
-                    {faculty.rank.replace('_', ' ')}
-                  </span>
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                  Load limit: <strong style={{ color: 'var(--text-primary)' }}>{faculty.full_load}</strong>
-                </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12 }}>
+                <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-bright)' }}>
+                  {faculty.name}
+                </span>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  {faculty.rank.replace('_', ' ')}
+                </span>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  · load limit: <strong style={{ color: 'var(--text-primary)' }}>{faculty.full_load}</strong>
+                </span>
               </div>
 
-              {/* Course table */}
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead>
-                  <tr>
-                    <th style={{ textAlign: 'left', padding: '6px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: 11 }}>
-                      Course(s)
-                    </th>
-                    <th style={{ textAlign: 'center', padding: '6px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: 11, width: 90 }}>
-                      Sections
-                    </th>
-                    <th style={{ textAlign: 'center', padding: '6px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: 11, width: 120 }}>
-                      Credit Hrs / unit
-                    </th>
-                    <th style={{ textAlign: 'center', padding: '6px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: 11, width: 120 }}>
-                      Total Credit Hrs
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {faculty.courses.map((c, i) => (
-                    <tr key={i}>
-                      <td style={{ padding: '6px 10px', border: '1px solid var(--border-color)', fontFamily: 'monospace', color: 'var(--accent)' }}>
-                        {c.display}
+              {/* Course table — snapped to the right */}
+              <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                <table style={{ borderCollapse: 'collapse', fontSize: 13, maxWidth: 700, width: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: 'left', padding: '6px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: 11 }}>
+                        Course(s)
+                      </th>
+                      <th style={{ textAlign: 'right', padding: '6px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: 11, width: 90 }}>
+                        Sections
+                      </th>
+                      <th style={{ textAlign: 'right', padding: '6px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: 11, width: 130 }}>
+                        Credit Hrs / unit
+                      </th>
+                      <th style={{ textAlign: 'right', padding: '6px 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: 11, width: 130 }}>
+                        Total Credit Hrs
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {faculty.courses.map((c, i) => (
+                      <tr key={i}>
+                        <td style={{ padding: '6px 10px', border: '1px solid var(--border-color)', fontFamily: 'monospace', color: 'var(--accent)', maxWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.display}>
+                          {c.display}
+                        </td>
+                        <td style={{ padding: '6px 10px', border: '1px solid var(--border-color)', textAlign: 'right' }}>
+                          {c.sections}
+                        </td>
+                        <td style={{ padding: '6px 10px', border: '1px solid var(--border-color)', textAlign: 'right', color: 'var(--text-secondary)' }}>
+                          {c.credit_hours}
+                        </td>
+                        <td style={{ padding: '6px 10px', border: '1px solid var(--border-color)', textAlign: 'right' }}>
+                          {c.total_credit_hours}
+                        </td>
+                      </tr>
+                    ))}
+                    {/* Totals row */}
+                    <tr style={{ background: 'var(--bg-elevated)' }}>
+                      <td style={{ padding: '6px 10px', border: '1px solid var(--border-color)', fontWeight: 700, maxWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                        TOTAL
                       </td>
-                      <td style={{ padding: '6px 10px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
-                        {c.sections}
+                      <td style={{
+                        padding: '6px 10px', border: '1px solid var(--border-color)',
+                        textAlign: 'right', fontWeight: 700,
+                        color: overloaded ? 'var(--error)' : 'var(--success)',
+                      }}>
+                        {faculty.total_sections}
+                        {overloaded && <span style={{ fontSize: 10, marginLeft: 4 }}>⚠ over</span>}
                       </td>
-                      <td style={{ padding: '6px 10px', border: '1px solid var(--border-color)', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                        {c.credit_hours}
-                      </td>
-                      <td style={{ padding: '6px 10px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
-                        {c.total_credit_hours}
+                      <td style={{ padding: '6px 10px', border: '1px solid var(--border-color)' }} />
+                      <td style={{ padding: '6px 10px', border: '1px solid var(--border-color)', textAlign: 'right', fontWeight: 700 }}>
+                        {faculty.total_credit_hours}
                       </td>
                     </tr>
-                  ))}
-                  {/* Totals row */}
-                  <tr style={{ background: 'var(--bg-elevated)' }}>
-                    <td style={{ padding: '6px 10px', border: '1px solid var(--border-color)', fontWeight: 700 }}>
-                      TOTAL
-                    </td>
-                    <td style={{
-                      padding: '6px 10px', border: '1px solid var(--border-color)',
-                      textAlign: 'center', fontWeight: 700,
-                      color: overloaded ? 'var(--error)' : 'var(--success)',
-                    }}>
-                      {faculty.total_sections}
-                      {overloaded && <span style={{ fontSize: 10, marginLeft: 4 }}>⚠ over</span>}
-                    </td>
-                    <td style={{ padding: '6px 10px', border: '1px solid var(--border-color)' }} />
-                    <td style={{ padding: '6px 10px', border: '1px solid var(--border-color)', textAlign: 'center', fontWeight: 700 }}>
-                      {faculty.total_credit_hours}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                  </tbody>
+                </table>
+              </div>
             </div>
           )
         })}
