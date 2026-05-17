@@ -155,16 +155,20 @@ function DraggableCourseCard({
   )
 }
 
+const DAY_ABBR: Record<string, string> = { mon: 'M', tue: 'T', wed: 'W', thu: 'Th', fri: 'F' }
+
 // --- Scheduled Section Card (inside table cell) ---
 function ScheduledSectionCard({
-  entry, course, allFaculty, onFacultyChange, onDelete
+  entry, course, allFaculty, tableWeekdays, onFacultyChange, onDelete, onActiveWeekdaysChange
 }: {
   entry: ScheduleEntry
   course: Course
   faculty?: Faculty | null
   allFaculty: Faculty[]
+  tableWeekdays: Weekday[]
   onFacultyChange: (fid: number | null) => void
   onDelete: () => void
+  onActiveWeekdaysChange: (ids: number[]) => void
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `entry-${entry.id}`,
@@ -172,6 +176,15 @@ function ScheduledSectionCard({
   })
 
   const bg = facultyColor(entry.faculty_id)
+  const showToggles = tableWeekdays.length > course.frequency
+
+  const toggleDay = (dayId: number) => {
+    const active = entry.active_weekday_ids.includes(dayId)
+    const newIds = active
+      ? entry.active_weekday_ids.filter(id => id !== dayId)
+      : [...entry.active_weekday_ids, dayId]
+    onActiveWeekdaysChange(newIds)
+  }
 
   return (
     <div
@@ -195,6 +208,36 @@ function ScheduledSectionCard({
     >
       <div style={{ fontWeight: 600, color: '#ddd' }}>{course.dept_code} {course.course_number} §{entry.section}</div>
       <div style={{ color: '#bbb', marginTop: 2, fontSize: 10 }}>{course.course_name}</div>
+      {showToggles && (
+        <div
+          onPointerDown={e => e.stopPropagation()}
+          onClick={e => e.stopPropagation()}
+          style={{ display: 'flex', gap: 2, marginTop: 4 }}
+        >
+          {tableWeekdays.map(w => {
+            const isActive = entry.active_weekday_ids.includes(w.id)
+            return (
+              <button
+                key={w.id}
+                onClick={() => toggleDay(w.id)}
+                style={{
+                  padding: '1px 4px',
+                  fontSize: 9,
+                  fontWeight: 600,
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  borderRadius: 3,
+                  background: isActive ? 'rgba(97,175,239,0.5)' : 'rgba(0,0,0,0.35)',
+                  color: isActive ? '#fff' : '#888',
+                  cursor: 'pointer',
+                  lineHeight: '14px',
+                }}
+              >
+                {DAY_ABBR[w.name] ?? w.name}
+              </button>
+            )
+          })}
+        </div>
+      )}
       <div onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} style={{ marginTop: 4 }}>
         <select
           value={entry.faculty_id ?? ''}
@@ -241,18 +284,21 @@ function ColumnResizer({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => 
 
 // --- Drop Cell ---
 function TableCell({
-  tableId, timeSlotId, roomId, rowSpan = 1, entries, courses, allFaculty,
-  onFacultyChange, onDeleteEntry
+  tableId, timeSlotId, roomId, rowSpan = 1, isOnline = false, tableWeekdays,
+  entries, courses, allFaculty, onFacultyChange, onDeleteEntry, onActiveWeekdaysChange
 }: {
   tableId: number
   timeSlotId: number
   roomId: number
   rowSpan?: number
+  isOnline?: boolean
+  tableWeekdays: Weekday[]
   entries: ScheduleEntry[]
   courses: Map<number, Course>
   allFaculty: Faculty[]
   onFacultyChange: (entryId: number, fid: number | null) => void
   onDeleteEntry: (entryId: number) => void
+  onActiveWeekdaysChange: (entryId: number, ids: number[]) => void
 }) {
   const dropId = `cell-${tableId}-${timeSlotId}-${roomId}`
   const { setNodeRef, isOver } = useDroppable({
@@ -274,26 +320,35 @@ function TableCell({
         border: '1px solid var(--border-color)',
         padding: 0,
         verticalAlign: 'top',
-        minWidth: 130,
-        height: 72,
+        minWidth: isOnline ? Math.max(130, cellEntries.length * 130) : 130,
+        height: 100,
         background: isOver ? 'rgba(97,175,239,0.1)' : undefined,
         transition: 'background 0.1s',
         position: 'relative',
       }}
     >
-      <div style={{ position: 'absolute', inset: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{
+        position: 'absolute', inset: 4,
+        display: 'flex',
+        flexDirection: isOnline ? 'row' : 'column',
+        gap: 4,
+        overflowX: isOnline ? 'auto' : undefined,
+      }}>
         {cellEntries.map(e => {
           const course = courses.get(e.course_id)
           if (!course) return null
           return (
-            <ScheduledSectionCard
-              key={e.id}
-              entry={e}
-              course={course}
-              allFaculty={allFaculty}
-              onFacultyChange={fid => onFacultyChange(e.id, fid)}
-              onDelete={() => onDeleteEntry(e.id)}
-            />
+            <div key={e.id} style={isOnline ? { minWidth: 122, flexShrink: 0, height: '100%' } : { flex: 1 }}>
+              <ScheduledSectionCard
+                entry={e}
+                course={course}
+                allFaculty={allFaculty}
+                tableWeekdays={tableWeekdays}
+                onFacultyChange={fid => onFacultyChange(e.id, fid)}
+                onDelete={() => onDeleteEntry(e.id)}
+                onActiveWeekdaysChange={ids => onActiveWeekdaysChange(e.id, ids)}
+              />
+            </div>
           )
         })}
       </div>
@@ -304,7 +359,7 @@ function TableCell({
 // --- Schedule Table Component ---
 function ScheduleTableView({
   table, weekdays, timeSlots, rooms, entries, courses, allFaculty,
-  onWeekdaysChange, onDeleteTable, onFacultyChange, onDeleteEntry
+  onWeekdaysChange, onDeleteTable, onFacultyChange, onDeleteEntry, onActiveWeekdaysChange
 }: {
   table: ScheduleTable
   weekdays: Weekday[]
@@ -317,9 +372,19 @@ function ScheduleTableView({
   onDeleteTable: () => void
   onFacultyChange: (entryId: number, fid: number | null) => void
   onDeleteEntry: (entryId: number) => void
+  onActiveWeekdaysChange: (entryId: number, ids: number[]) => void
 }) {
   const selectedWeekdays = new Set(table.weekday_ids)
   const dayNames: Record<string, string> = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri' }
+
+  // Sort rooms: physical rooms first (by label), online rooms last
+  const sortedRooms = [...rooms].sort((a, b) => {
+    if (a.is_online !== b.is_online) return a.is_online ? 1 : -1
+    return a.label.localeCompare(b.label)
+  })
+
+  const tableWeekdays = weekdays.filter(w => table.weekday_ids.includes(w.id))
+    .sort((a, b) => a.display_order - b.display_order)
 
   // Precompute which cells are covered by a multi-slot entry's rowspan,
   // and which starting cells need a rowspan > 1.
@@ -368,9 +433,12 @@ function ScheduleTableView({
           <thead>
             <tr>
               <th style={{ padding: '6px 10px', textAlign: 'left', background: 'var(--bg-elevated)', fontSize: 11, border: '1px solid var(--border-color)', minWidth: 130 }}>Time Slot</th>
-              {rooms.map(r => (
+              {sortedRooms.map(r => (
                 <th key={r.id} style={{ padding: '6px 10px', textAlign: 'left', background: 'var(--bg-elevated)', fontSize: 11, border: '1px solid var(--border-color)', minWidth: 130 }}>
-                  {r.label} <span style={{ color: 'var(--text-secondary)' }}>({r.capacity})</span>
+                  {r.label}{' '}
+                  <span style={{ color: 'var(--text-secondary)' }}>
+                    {r.is_online ? '(∞)' : `(${r.capacity})`}
+                  </span>
                 </th>
               ))}
             </tr>
@@ -381,7 +449,7 @@ function ScheduleTableView({
                 <td style={{ padding: '6px 10px', fontSize: 11, color: 'var(--text-secondary)', border: '1px solid var(--border-color)', whiteSpace: 'nowrap', background: 'var(--bg-elevated)' }}>
                   {ts.label}
                 </td>
-                {rooms.map(r => {
+                {sortedRooms.map(r => {
                   const cellKey = `${r.id}:${ts.id}`
                   if (coveredCells.has(cellKey)) return <Fragment key={r.id} />
                   return (
@@ -391,11 +459,14 @@ function ScheduleTableView({
                       timeSlotId={ts.id}
                       roomId={r.id}
                       rowSpan={rowSpanMap.get(cellKey) ?? 1}
+                      isOnline={r.is_online}
+                      tableWeekdays={tableWeekdays}
                       entries={entries}
                       courses={courses}
                       allFaculty={allFaculty}
                       onFacultyChange={onFacultyChange}
                       onDeleteEntry={onDeleteEntry}
+                      onActiveWeekdaysChange={onActiveWeekdaysChange}
                     />
                   )
                 })}
@@ -723,6 +794,17 @@ export function TermSchedulesTab() {
     setEntries(prev => prev.filter(e => e.id !== entryId))
   }
 
+  const handleActiveWeekdaysChange = async (entryId: number, activeWeekdayIds: number[]) => {
+    setEntries(prev => prev.map(e => e.id === entryId ? { ...e, active_weekday_ids: activeWeekdayIds } : e))
+    try {
+      const { entry: updated, warnings } = await entriesApi.update(entryId, { active_weekday_ids: activeWeekdayIds })
+      setEntries(prev => prev.map(e => e.id === entryId ? updated : e))
+      setWarnings(warnings)
+    } catch (e: any) {
+      showToast(e.response?.data?.detail || 'Failed to update day selection')
+    }
+  }
+
   const handleSectionChange = async (courseId: number, count: number) => {
     if (!selectedTermId) return
     setNeededSections(prev => new Map(prev).set(courseId, count))
@@ -774,10 +856,12 @@ export function TermSchedulesTab() {
         if (startIdx === -1) return
         const slotIds = sortedSlots.slice(startIdx, startIdx + slotsNeeded).map(ts => ts.id)
 
+        const tableChanged = existing.schedule_table_id !== table_id
         const result = await entriesApi.update(entryId, {
           schedule_table_id: table_id,
           room_id,
           time_slot_ids: slotIds,
+          ...(tableChanged ? { active_weekday_ids: [] } : {}),
         })
         setEntries(prev => prev.map(e => e.id === entryId ? result.entry : e))
         setWarnings(result.warnings)
@@ -860,6 +944,7 @@ export function TermSchedulesTab() {
                 onDeleteTable={() => deleteTable(table.id)}
                 onFacultyChange={handleFacultyChange}
                 onDeleteEntry={handleDeleteEntry}
+                onActiveWeekdaysChange={handleActiveWeekdaysChange}
               />
             ))}
             {selectedTermId && (

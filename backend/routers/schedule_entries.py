@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, selectinload
 from database import get_db
-from models import ScheduleEntry, ScheduleTable, TimeSlot, Term, Course
+from models import ScheduleEntry, ScheduleTable, TimeSlot, Term, Course, Weekday
 from schemas import (
     ScheduleEntryCreate, ScheduleEntryUpdate, ScheduleEntryFacultyPatch,
     ScheduleEntryOut, EntryWithWarnings
@@ -29,6 +29,8 @@ def _refresh_term(db: Session, term_id: int) -> Term:
             selectinload(Term.schedule_entries)
                 .selectinload(ScheduleEntry.course)
                 .selectinload(Course.taught_with_membership),
+            selectinload(Term.schedule_entries)
+                .selectinload(ScheduleEntry.active_weekdays),
         )
         .filter(Term.id == term_id)
         .first()
@@ -87,6 +89,10 @@ def create_entry(table_id: int, data: ScheduleEntryCreate, db: Session = Depends
         slots = db.query(TimeSlot).filter(TimeSlot.id.in_(data.time_slot_ids)).all()
         entry.time_slots = slots
 
+    if data.active_weekday_ids is not None:
+        active_days = db.query(Weekday).filter(Weekday.id.in_(data.active_weekday_ids)).all()
+        entry.active_weekdays = active_days
+
     db.flush()
 
     term = _refresh_term(db, table.term_id)
@@ -123,6 +129,10 @@ def update_entry(entry_id: int, data: ScheduleEntryUpdate, db: Session = Depends
     if data.time_slot_ids is not None:
         slots = db.query(TimeSlot).filter(TimeSlot.id.in_(data.time_slot_ids)).all()
         entry.time_slots = slots
+
+    if data.active_weekday_ids is not None:
+        active_days = db.query(Weekday).filter(Weekday.id.in_(data.active_weekday_ids)).all()
+        entry.active_weekdays = active_days
 
     db.flush()
 

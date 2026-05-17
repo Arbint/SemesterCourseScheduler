@@ -14,6 +14,13 @@ def _get_taught_with_group_id(entry) -> int | None:
     return None
 
 
+def _get_effective_weekdays(entry) -> set:
+    """Returns per-entry active weekday IDs if set, else all table weekday IDs."""
+    if entry.active_weekdays:
+        return {w.id for w in entry.active_weekdays}
+    return {w.id for w in entry.schedule_table.weekdays}
+
+
 class FacultyTimeConflict(ConflictAuditor):
     def __init__(self, db):
         super().__init__(db, isCritical=True)
@@ -28,9 +35,9 @@ class FacultyTimeConflict(ConflictAuditor):
                     continue
                 if not _slots_overlap(a.time_slots, b.time_slots):
                     continue
-                # Check if they share a weekday
-                weekdays_a = {w.id for w in a.schedule_table.weekdays}
-                weekdays_b = {w.id for w in b.schedule_table.weekdays}
+                # Check if they share an effective weekday
+                weekdays_a = _get_effective_weekdays(a)
+                weekdays_b = _get_effective_weekdays(b)
                 if not (weekdays_a & weekdays_b):
                     continue
                 # TaughtWith exception
@@ -83,8 +90,8 @@ class CoReqTimeConflict(ConflictAuditor):
                     has_non_overlap = False
                     for ea in secs_a:
                         for eb in secs_b:
-                            weekdays_a = {w.id for w in ea.schedule_table.weekdays}
-                            weekdays_b = {w.id for w in eb.schedule_table.weekdays}
+                            weekdays_a = _get_effective_weekdays(ea)
+                            weekdays_b = _get_effective_weekdays(eb)
                             if not (weekdays_a & weekdays_b):
                                 has_non_overlap = True
                                 break
@@ -120,10 +127,13 @@ class RoomConflict(ConflictAuditor):
             for b in entries[i + 1:]:
                 if a.id == b.id or a.room_id != b.room_id:
                     continue
+                # Online rooms allow unlimited concurrent courses
+                if a.room and a.room.is_online:
+                    continue
                 if not _slots_overlap(a.time_slots, b.time_slots):
                     continue
-                weekdays_a = {w.id for w in a.schedule_table.weekdays}
-                weekdays_b = {w.id for w in b.schedule_table.weekdays}
+                weekdays_a = _get_effective_weekdays(a)
+                weekdays_b = _get_effective_weekdays(b)
                 if not (weekdays_a & weekdays_b):
                     continue
                 reports.append(ConflictReport(
@@ -140,7 +150,7 @@ class RoomCapacity(ConflictAuditor):
     def Audit(self, term) -> list[ConflictReport]:
         reports = []
         for entry in term.schedule_entries:
-            if entry.room_id and entry.course.capacity > entry.room.capacity:
+            if entry.room_id and not entry.room.is_online and entry.course.capacity > entry.room.capacity:
                 reports.append(ConflictReport(
                     courses=[entry.course_id],
                     description=f"Room capacity: {entry.course.dept_code}{entry.course.course_number} (cap {entry.course.capacity}) exceeds {entry.room.label} capacity ({entry.room.capacity})"
@@ -149,6 +159,7 @@ class RoomCapacity(ConflictAuditor):
 
 
 class FrequencyConflict(ConflictAuditor):
+    """Critical: fires when a table has fewer days than the course requires."""
     def __init__(self, db):
         super().__init__(db, isCritical=True)
 
@@ -159,11 +170,33 @@ class FrequencyConflict(ConflictAuditor):
                 continue
             table_days = len(entry.schedule_table.weekdays)
             course_freq = entry.course.frequency
-            if table_days != course_freq:
+            if table_days < course_freq:
                 reports.append(ConflictReport(
                     courses=[entry.course_id],
-                    description=f"Frequency conflict: {entry.course.dept_code}{entry.course.course_number} requires {course_freq} day(s)/week but table has {table_days} day(s)"
+                    description=f"Frequency conflict: {entry.course.dept_code}{entry.course.course_number} requires {course_freq} day(s)/week but table only has {table_days} day(s)"
                 ))
+        return reports
+
+
+class FrequencyToggleWarning(ConflictAuditor):
+    """Warning: fires when a table has more days than needed and the day toggles aren't set correctly."""
+    def __init__(self, db):
+        super().__init__(db, isCritical=False)
+
+    def Audit(self, term) -> list[ConflictReport]:
+        reports = []
+        for entry in term.schedule_entries:
+            if not entry.schedule_table_id or not entry.schedule_table:
+                continue
+            table_days = len(entry.schedule_table.weekdays)
+            course_freq = entry.course.frequency
+            if table_days > course_freq:
+                active = len(entry.active_weekdays)
+                if active != course_freq:
+                    reports.append(ConflictReport(
+                        courses=[entry.course_id],
+                        description=f"Day selection: {entry.course.dept_code}{entry.course.course_number} §{entry.section} needs exactly {course_freq} day(s) toggled on ({active} currently selected)"
+                    ))
         return reports
 
 

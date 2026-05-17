@@ -1,6 +1,6 @@
 from sqlalchemy import (
     Column, Integer, String, Enum, JSON, ForeignKey, UniqueConstraint,
-    Table, Time, CheckConstraint
+    Table, Time, CheckConstraint, Boolean
 )
 from sqlalchemy.orm import relationship
 import enum
@@ -41,6 +41,13 @@ schedule_entry_timeslots = Table(
     Column("time_slot_id", Integer, ForeignKey("time_slots.id"), primary_key=True),
 )
 
+schedule_entry_active_weekdays = Table(
+    "schedule_entry_active_weekdays",
+    Base.metadata,
+    Column("schedule_entry_id", Integer, ForeignKey("schedule_entries.id"), primary_key=True),
+    Column("weekday_id", Integer, ForeignKey("weekdays.id"), primary_key=True),
+)
+
 
 class Faculty(Base):
     __tablename__ = "faculty"
@@ -74,6 +81,7 @@ class Weekday(Base):
     display_order = Column(Integer, nullable=False)
 
     schedule_tables = relationship("ScheduleTable", secondary=schedule_table_weekdays, back_populates="weekdays")
+    active_in_entries = relationship("ScheduleEntry", secondary=schedule_entry_active_weekdays, back_populates="active_weekdays")
 
 
 class TimeSlot(Base):
@@ -94,6 +102,7 @@ class Room(Base):
     id = Column(Integer, primary_key=True, index=True)
     label = Column(String, nullable=False, unique=True)
     capacity = Column(Integer, nullable=False)
+    is_online = Column(Boolean, nullable=False, default=False)
 
     schedule_entries = relationship("ScheduleEntry", back_populates="room")
 
@@ -212,3 +221,4 @@ class ScheduleEntry(Base):
     room = relationship("Room", back_populates="schedule_entries")
     faculty = relationship("Faculty", back_populates="schedule_entries")
     time_slots = relationship("TimeSlot", secondary=schedule_entry_timeslots, back_populates="schedule_entries")
+    active_weekdays = relationship("Weekday", secondary=schedule_entry_active_weekdays, back_populates="active_in_entries")

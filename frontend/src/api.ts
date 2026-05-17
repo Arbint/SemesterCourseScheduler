@@ -50,6 +50,7 @@ export interface Room {
   id: number
   label: string
   capacity: number
+  is_online: boolean
 }
 
 export interface Course {
@@ -96,6 +97,7 @@ export interface ScheduleEntry {
   room_id: number | null
   faculty_id: number | null
   time_slot_ids: number[]
+  active_weekday_ids: number[]
 }
 
 export interface EntryWithWarnings {
@@ -188,9 +190,9 @@ export const tablesApi = {
 export const entriesApi = {
   listByTerm: (termId: number) => api.get<ScheduleEntry[]>(`/terms/${termId}/entries`).then(r => r.data),
   listByTable: (tableId: number) => api.get<ScheduleEntry[]>(`/tables/${tableId}/entries`).then(r => r.data),
-  create: (tableId: number, d: { course_id: number; room_id?: number; time_slot_ids: number[]; faculty_id?: number }) =>
+  create: (tableId: number, d: { course_id: number; room_id?: number; time_slot_ids: number[]; faculty_id?: number; active_weekday_ids?: number[] }) =>
     api.post<EntryWithWarnings>(`/tables/${tableId}/entries`, d).then(r => r.data),
-  update: (id: number, d: { room_id?: number; time_slot_ids?: number[]; schedule_table_id?: number; faculty_id?: number }) =>
+  update: (id: number, d: { room_id?: number; time_slot_ids?: number[]; schedule_table_id?: number; faculty_id?: number; active_weekday_ids?: number[] }) =>
     api.put<EntryWithWarnings>(`/entries/${id}`, d).then(r => r.data),
   patchFaculty: (id: number, faculty_id: number | null) =>
     api.patch<EntryWithWarnings>(`/entries/${id}/faculty`, { faculty_id }).then(r => r.data),

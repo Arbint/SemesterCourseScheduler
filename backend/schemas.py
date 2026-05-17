@@ -64,6 +64,7 @@ class TimeSlotOut(TimeSlotBase):
 class RoomBase(BaseModel):
     label: str
     capacity: int
+    is_online: bool = False
 
 class RoomCreate(RoomBase):
     pass
@@ -135,12 +136,14 @@ class ScheduleEntryCreate(BaseModel):
     room_id: Optional[int] = None
     time_slot_ids: list[int] = []
     faculty_id: Optional[int] = None
+    active_weekday_ids: list[int] = []
 
 class ScheduleEntryUpdate(BaseModel):
     room_id: Optional[int] = None
-    time_slot_ids: list[int] = []
+    time_slot_ids: Optional[list[int]] = None
     schedule_table_id: Optional[int] = None
     faculty_id: Optional[int] = None
+    active_weekday_ids: Optional[list[int]] = None
 
 class ScheduleEntryFacultyPatch(BaseModel):
     faculty_id: Optional[int] = None
@@ -155,6 +158,7 @@ class ScheduleEntryOut(BaseModel):
     room_id: Optional[int]
     faculty_id: Optional[int]
     time_slot_ids: list[int] = []
+    active_weekday_ids: list[int] = []
 
     @classmethod
     def from_orm(cls, entry):
@@ -167,6 +171,7 @@ class ScheduleEntryOut(BaseModel):
             room_id=entry.room_id,
             faculty_id=entry.faculty_id,
             time_slot_ids=[ts.id for ts in entry.time_slots],
+            active_weekday_ids=[w.id for w in entry.active_weekdays],
         )
 
 

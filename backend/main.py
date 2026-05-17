@@ -28,7 +28,18 @@ async def global_exception_handler(request: Request, exc: Exception):
 @app.on_event("startup")
 async def startup():
     Base.metadata.create_all(bind=engine)
+    _migrate_db()
     _seed_static_data()
+
+
+def _migrate_db():
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE rooms ADD COLUMN is_online BOOLEAN NOT NULL DEFAULT 0"))
+            conn.commit()
+        except Exception:
+            pass  # Column already exists
 
 
 def _seed_static_data():
