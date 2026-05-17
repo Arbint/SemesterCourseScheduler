@@ -20,6 +20,15 @@ function facultyColor(facultyId: number | null): string {
   return PASTEL[facultyId % PASTEL.length]
 }
 
+// --- Filter types ---
+interface ActiveFilter {
+  id: string
+  type: 'faculty' | 'weekday' | 'course'
+  value: number | string
+  label: string
+  negated: boolean
+}
+
 // --- Term Selector with per-item delete buttons ---
 function TermSelector({
   terms, selectedTermId, onSelect, onDelete, onNew
@@ -91,13 +100,14 @@ function TermSelector({
 
 // --- Draggable Course Card (from Course List) ---
 function DraggableCourseCard({
-  course, entries, neededSections, onSectionChange, highlighted
+  course, entries, neededSections, onSectionChange, highlighted, dimmed
 }: {
   course: Course
   entries: ScheduleEntry[]
   neededSections: number
   onSectionChange: (count: number) => void
   highlighted: boolean
+  dimmed: boolean
 }) {
   const scheduled = entries.filter(e => e.schedule_table_id !== null)
   const border = scheduled.length === 0
@@ -125,8 +135,9 @@ function DraggableCourseCard({
         padding: '10px 12px',
         marginBottom: 8,
         cursor: 'grab',
-        opacity: isDragging ? 0.5 : 1,
+        opacity: isDragging ? 0.5 : dimmed ? 0.25 : 1,
         boxShadow: highlighted ? '0 0 8px var(--accent)' : undefined,
+        transition: 'opacity 0.15s',
         userSelect: 'none'
       }}
     >
@@ -159,13 +170,14 @@ const DAY_ABBR: Record<string, string> = { mon: 'M', tue: 'T', wed: 'W', thu: 'T
 
 // --- Scheduled Section Card (inside table cell) ---
 function ScheduledSectionCard({
-  entry, course, allFaculty, tableWeekdays, onFacultyChange, onDelete, onActiveWeekdaysChange
+  entry, course, allFaculty, tableWeekdays, dimmed, onFacultyChange, onDelete, onActiveWeekdaysChange
 }: {
   entry: ScheduleEntry
   course: Course
   faculty?: Faculty | null
   allFaculty: Faculty[]
   tableWeekdays: Weekday[]
+  dimmed: boolean
   onFacultyChange: (fid: number | null) => void
   onDelete: () => void
   onActiveWeekdaysChange: (ids: number[]) => void
@@ -198,9 +210,10 @@ function ScheduledSectionCard({
         padding: '6px 8px',
         fontSize: 11,
         cursor: 'grab',
-        opacity: isDragging ? 0.4 : 1,
+        opacity: isDragging ? 0.4 : dimmed ? 0.25 : 1,
         userSelect: 'none',
         position: 'relative',
+        transition: 'opacity 0.15s',
         overflow: 'hidden',
         height: '100%',
         boxSizing: 'border-box',
@@ -285,7 +298,7 @@ function ColumnResizer({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => 
 // --- Drop Cell ---
 function TableCell({
   tableId, timeSlotId, roomId, rowSpan = 1, isOnline = false, tableWeekdays,
-  entries, courses, allFaculty, onFacultyChange, onDeleteEntry, onActiveWeekdaysChange
+  entries, courses, allFaculty, isEntryDimmed, onFacultyChange, onDeleteEntry, onActiveWeekdaysChange
 }: {
   tableId: number
   timeSlotId: number
@@ -296,6 +309,7 @@ function TableCell({
   entries: ScheduleEntry[]
   courses: Map<number, Course>
   allFaculty: Faculty[]
+  isEntryDimmed: (e: ScheduleEntry) => boolean
   onFacultyChange: (entryId: number, fid: number | null) => void
   onDeleteEntry: (entryId: number) => void
   onActiveWeekdaysChange: (entryId: number, ids: number[]) => void
@@ -344,6 +358,7 @@ function TableCell({
                 course={course}
                 allFaculty={allFaculty}
                 tableWeekdays={tableWeekdays}
+                dimmed={isEntryDimmed(e)}
                 onFacultyChange={fid => onFacultyChange(e.id, fid)}
                 onDelete={() => onDeleteEntry(e.id)}
                 onActiveWeekdaysChange={ids => onActiveWeekdaysChange(e.id, ids)}
@@ -359,7 +374,7 @@ function TableCell({
 // --- Schedule Table Component ---
 function ScheduleTableView({
   table, weekdays, timeSlots, rooms, entries, courses, allFaculty,
-  onWeekdaysChange, onDeleteTable, onFacultyChange, onDeleteEntry, onActiveWeekdaysChange
+  isEntryDimmed, onWeekdaysChange, onDeleteTable, onFacultyChange, onDeleteEntry, onActiveWeekdaysChange
 }: {
   table: ScheduleTable
   weekdays: Weekday[]
@@ -368,6 +383,7 @@ function ScheduleTableView({
   entries: ScheduleEntry[]
   courses: Map<number, Course>
   allFaculty: Faculty[]
+  isEntryDimmed: (e: ScheduleEntry) => boolean
   onWeekdaysChange: (ids: number[]) => void
   onDeleteTable: () => void
   onFacultyChange: (entryId: number, fid: number | null) => void
@@ -464,6 +480,7 @@ function ScheduleTableView({
                       entries={entries}
                       courses={courses}
                       allFaculty={allFaculty}
+                      isEntryDimmed={isEntryDimmed}
                       onFacultyChange={onFacultyChange}
                       onDeleteEntry={onDeleteEntry}
                       onActiveWeekdaysChange={onActiveWeekdaysChange}
@@ -474,6 +491,152 @@ function ScheduleTableView({
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  )
+}
+
+// --- Filter Bar ---
+const DAY_NAMES: Record<string, string> = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri' }
+
+function FilterBar({ filters, onAdd, onRemove, onToggleNot, allFaculty, weekdays, courses }: {
+  filters: ActiveFilter[]
+  onAdd: (f: Omit<ActiveFilter, 'id'>) => void
+  onRemove: (id: string) => void
+  onToggleNot: (id: string) => void
+  allFaculty: Faculty[]
+  weekdays: Weekday[]
+  courses: Course[]
+}) {
+  const [step, setStep] = useState<null | 'type' | 'value'>(null)
+  const [pendingType, setPendingType] = useState<ActiveFilter['type'] | null>(null)
+  const [courseSearch, setCourseSearch] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setStep(null); setPendingType(null); setCourseSearch('')
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const selectType = (type: ActiveFilter['type']) => { setPendingType(type); setStep('value') }
+
+  const selectValue = (value: number | string, label: string) => {
+    if (!pendingType) return
+    onAdd({ type: pendingType, value, label, negated: false })
+    setStep(null); setPendingType(null); setCourseSearch('')
+  }
+
+  const filteredCourses = courseSearch.trim()
+    ? courses.filter(c =>
+        `${c.dept_code} ${c.course_number} ${c.course_name}`.toLowerCase().includes(courseSearch.toLowerCase())
+      ).slice(0, 10)
+    : []
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 16px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-surface)', flexWrap: 'wrap', minHeight: 36 }}>
+      <span style={{ fontSize: 11, color: 'var(--text-secondary)', flexShrink: 0 }}>Filter:</span>
+
+      {filters.map(f => (
+        <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 3, background: 'var(--bg-elevated)', border: '1px solid var(--border-color)', borderRadius: 12, padding: '2px 6px 2px 4px', fontSize: 12, flexShrink: 0 }}>
+          <button
+            onClick={() => onToggleNot(f.id)}
+            title="Toggle NOT"
+            style={{
+              padding: '0 5px', fontSize: 10, fontWeight: 700, lineHeight: '16px',
+              background: f.negated ? 'var(--error)' : 'var(--bg-surface)',
+              color: f.negated ? '#fff' : 'var(--text-secondary)',
+              border: '1px solid var(--border-color)', borderRadius: 3, cursor: 'pointer',
+            }}
+          >NOT</button>
+          <span style={{ color: 'var(--text-secondary)', fontSize: 10, marginLeft: 3 }}>{f.type}:</span>
+          <span style={{ color: 'var(--text-bright)', marginLeft: 2 }}>{f.label}</span>
+          <button onClick={() => onRemove(f.id)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '0 0 0 4px', marginLeft: 2 }}>×</button>
+        </div>
+      ))}
+
+      <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+        <button
+          onClick={() => setStep(s => s ? null : 'type')}
+          style={{ padding: '2px 10px', fontSize: 12, background: 'var(--bg-elevated)', border: '1px solid var(--border-color)', borderRadius: 12, cursor: 'pointer', color: 'var(--accent)' }}
+        >+ Add Filter</button>
+
+        {step && (
+          <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 6, boxShadow: '0 4px 14px rgba(0,0,0,0.4)', zIndex: 2000, minWidth: 190 }}>
+            {step === 'type' && (['faculty', 'weekday', 'course'] as const).map(type => (
+              <button
+                key={type}
+                onClick={() => selectType(type)}
+                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', background: 'transparent', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 13 }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-elevated)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              >
+                {type.charAt(0).toUpperCase() + type.slice(1)}
+              </button>
+            ))}
+
+            {step === 'value' && pendingType === 'faculty' && (
+              <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                {allFaculty.map(f => (
+                  <button
+                    key={f.id}
+                    onClick={() => selectValue(f.id, `${f.last_name}, ${f.first_name}`)}
+                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', background: 'transparent', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 13 }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-elevated)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    {f.last_name}, {f.first_name}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {step === 'value' && pendingType === 'weekday' && weekdays.map(w => (
+              <button
+                key={w.id}
+                onClick={() => selectValue(w.id, DAY_NAMES[w.name] ?? w.name)}
+                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', background: 'transparent', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 13 }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-elevated)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              >
+                {DAY_NAMES[w.name] ?? w.name}
+              </button>
+            ))}
+
+            {step === 'value' && pendingType === 'course' && (
+              <div style={{ padding: 8 }}>
+                <input
+                  autoFocus
+                  placeholder="Search course..."
+                  value={courseSearch}
+                  onChange={e => setCourseSearch(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && courseSearch.trim()) selectValue(courseSearch.trim(), courseSearch.trim()) }}
+                  style={{ width: '100%', padding: '4px 8px', fontSize: 12, boxSizing: 'border-box' }}
+                />
+                <div style={{ marginTop: 4, maxHeight: 160, overflowY: 'auto' }}>
+                  {filteredCourses.map(c => (
+                    <button
+                      key={c.id}
+                      onClick={() => selectValue(courseSearch.trim(), courseSearch.trim())}
+                      style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 8px', background: 'transparent', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 12 }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-elevated)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      {c.dept_code} {c.course_number} — {c.course_name}
+                    </button>
+                  ))}
+                  {courseSearch.trim() && filteredCourses.length === 0 && (
+                    <div style={{ padding: '4px 8px', fontSize: 12, color: 'var(--text-secondary)' }}>No matches — press Enter to use as text filter</div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -596,6 +759,7 @@ export function TermSchedulesTab() {
   const [showNewTermModal, setShowNewTermModal] = useState(false)
   const [newTermForm, setNewTermForm] = useState({ semester_id: 0, year: new Date().getFullYear() })
   const [savingTerm, setSavingTerm] = useState(false)
+  const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([])
   const courseMap = new Map(courses.map(c => [c.id, c]))
 
   // --- Resizable columns ---
@@ -794,6 +958,54 @@ export function TermSchedulesTab() {
     setEntries(prev => prev.filter(e => e.id !== entryId))
   }
 
+  const addFilter = (f: Omit<ActiveFilter, 'id'>) =>
+    setActiveFilters(prev => [...prev, { ...f, id: Math.random().toString(36).slice(2) }])
+  const removeFilter = (id: string) =>
+    setActiveFilters(prev => prev.filter(f => f.id !== id))
+  const toggleNot = (id: string) =>
+    setActiveFilters(prev => prev.map(f => f.id === id ? { ...f, negated: !f.negated } : f))
+
+  const isCourseDimmed = (courseId: number): boolean => {
+    if (activeFilters.length === 0) return false
+    const course = courseMap.get(courseId)
+    if (!course) return false
+    const courseEntries = entries.filter(e => e.course_id === courseId && e.schedule_table_id)
+    return activeFilters.some(f => {
+      let matches: boolean
+      if (f.type === 'faculty') {
+        matches = courseEntries.some(e => e.faculty_id === f.value)
+      } else if (f.type === 'weekday') {
+        matches = courseEntries.some(e => {
+          const t = tables.find(t => t.id === e.schedule_table_id)
+          return t?.weekday_ids.includes(f.value as number) ?? false
+        })
+      } else {
+        matches = `${course.dept_code} ${course.course_number} ${course.course_name}`
+          .toLowerCase().includes((f.value as string).toLowerCase())
+      }
+      return f.negated ? matches : !matches
+    })
+  }
+
+  const isEntryDimmed = (entry: ScheduleEntry): boolean => {
+    if (activeFilters.length === 0) return false
+    const course = courseMap.get(entry.course_id)
+    if (!course) return false
+    const table = tables.find(t => t.id === entry.schedule_table_id)
+    return activeFilters.some(f => {
+      let matches: boolean
+      if (f.type === 'faculty') {
+        matches = entry.faculty_id === f.value
+      } else if (f.type === 'weekday') {
+        matches = table?.weekday_ids.includes(f.value as number) ?? false
+      } else {
+        matches = `${course.dept_code} ${course.course_number} ${course.course_name}`
+          .toLowerCase().includes((f.value as string).toLowerCase())
+      }
+      return f.negated ? matches : !matches
+    })
+  }
+
   const handleActiveWeekdaysChange = async (entryId: number, activeWeekdayIds: number[]) => {
     setEntries(prev => prev.map(e => e.id === entryId ? { ...e, active_weekday_ids: activeWeekdayIds } : e))
     try {
@@ -905,6 +1117,17 @@ export function TermSchedulesTab() {
           )}
         </div>
 
+        {/* Filter bar */}
+        <FilterBar
+          filters={activeFilters}
+          onAdd={addFilter}
+          onRemove={removeFilter}
+          onToggleNot={toggleNot}
+          allFaculty={allFaculty}
+          weekdays={weekdays}
+          courses={termCourses}
+        />
+
         {/* Main area: 4 resizable columns */}
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           {/* Course List */}
@@ -921,6 +1144,7 @@ export function TermSchedulesTab() {
                 neededSections={neededSections.get(c.id) ?? 1}
                 onSectionChange={count => handleSectionChange(c.id, count)}
                 highlighted={highlightedIds.includes(c.id)}
+                dimmed={isCourseDimmed(c.id)}
               />
             ))}
           </div>
@@ -940,6 +1164,7 @@ export function TermSchedulesTab() {
                 entries={entries}
                 courses={courseMap}
                 allFaculty={allFaculty}
+                isEntryDimmed={isEntryDimmed}
                 onWeekdaysChange={ids => updateTableWeekdays(table.id, ids)}
                 onDeleteTable={() => deleteTable(table.id)}
                 onFacultyChange={handleFacultyChange}
