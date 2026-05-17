@@ -100,9 +100,15 @@ export interface ScheduleEntry {
   active_weekday_ids: number[]
 }
 
+export interface IssueItem {
+  description: string
+  courses: number[]
+}
+
 export interface EntryWithWarnings {
   entry: ScheduleEntry
-  warnings: string[]
+  errors: IssueItem[]
+  warnings: IssueItem[]
 }
 
 export interface ChatResponse {

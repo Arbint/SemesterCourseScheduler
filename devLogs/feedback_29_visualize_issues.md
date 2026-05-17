@@ -1,0 +1,1 @@
+make the erros in the issues list clickable, when clicked, the course that is relevant to the error or issue will be hightlighted with red or yellow outlines just like the unscheduled or not fully scheduled courses in the Course List

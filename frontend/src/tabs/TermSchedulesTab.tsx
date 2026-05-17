@@ -4,7 +4,7 @@ import {
   termsApi, tablesApi, entriesApi, coursesApi, roomsApi, timeSlotsApi,
   weekdaysApi, semestersApi, facultyApi, chatApi,
   type Term, type ScheduleTable, type ScheduleEntry, type Course,
-  type Room, type TimeSlot, type Weekday, type Semester, type Faculty
+  type Room, type TimeSlot, type Weekday, type Semester, type Faculty, type IssueItem
 } from '../api'
 import { showToast } from '../components/Toast'
 import { FormModal } from '../components/FormModal'
@@ -108,7 +108,7 @@ function TermSelector({
 
 // --- Draggable Course Card (from Course List) ---
 function DraggableCourseCard({
-  course, entries, neededSections, isLoggedIn, onSectionChange, highlighted, dimmed
+  course, entries, neededSections, isLoggedIn, onSectionChange, highlighted, dimmed, issueHighlightSeverity
 }: {
   course: Course
   entries: ScheduleEntry[]
@@ -117,9 +117,14 @@ function DraggableCourseCard({
   onSectionChange: (count: number) => void
   highlighted: boolean
   dimmed: boolean
+  issueHighlightSeverity: 'error' | 'warning' | null
 }) {
   const scheduled = entries.filter(e => e.schedule_table_id !== null)
-  const border = scheduled.length === 0
+  const border = issueHighlightSeverity === 'error'
+    ? '2px solid var(--error)'
+    : issueHighlightSeverity === 'warning'
+    ? '2px solid var(--warning)'
+    : scheduled.length === 0
     ? '2px solid var(--error)'
     : scheduled.length < neededSections
     ? '2px solid var(--warning)'
@@ -146,7 +151,7 @@ function DraggableCourseCard({
         marginBottom: 8,
         cursor: isLoggedIn ? 'grab' : 'default',
         opacity: isDragging ? 0.5 : dimmed ? 0.25 : 1,
-        boxShadow: highlighted ? '0 0 8px var(--accent)' : undefined,
+        boxShadow: issueHighlightSeverity === 'error' ? '0 0 8px var(--error)' : issueHighlightSeverity === 'warning' ? '0 0 8px var(--warning)' : highlighted ? '0 0 8px var(--accent)' : undefined,
         transition: 'opacity 0.15s',
         userSelect: 'none'
       }}
@@ -410,14 +415,21 @@ function ScheduleTableView({
   onDeleteEntry: (entryId: number) => void
   onActiveWeekdaysChange: (entryId: number, ids: number[]) => void
 }) {
+  const [hideUnused, setHideUnused] = useState(false)
+
   const selectedWeekdays = new Set(table.weekday_ids)
   const dayNames: Record<string, string> = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri' }
 
+  const tableEntries = entries.filter(e => e.schedule_table_id === table.id)
+  const usedRoomIds = new Set(tableEntries.map(e => e.room_id).filter(Boolean))
+
   // Sort rooms: physical rooms first (by label), online rooms last
-  const sortedRooms = [...rooms].sort((a, b) => {
-    if (a.is_online !== b.is_online) return a.is_online ? 1 : -1
-    return a.label.localeCompare(b.label)
-  })
+  const sortedRooms = [...rooms]
+    .sort((a, b) => {
+      if (a.is_online !== b.is_online) return a.is_online ? 1 : -1
+      return a.label.localeCompare(b.label)
+    })
+    .filter(r => !hideUnused || usedRoomIds.has(r.id))
 
   const tableWeekdays = weekdays.filter(w => table.weekday_ids.includes(w.id))
     .sort((a, b) => a.display_order - b.display_order)
@@ -464,7 +476,18 @@ function ScheduleTableView({
             </label>
           ))}
         </div>
-        {isLoggedIn && <button className="btn-danger btn-sm" onClick={onDeleteTable}>Delete Table</button>}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', userSelect: 'none', fontSize: 12, color: 'var(--text-secondary)' }}>
+            <input
+              type="checkbox"
+              checked={hideUnused}
+              onChange={e => setHideUnused(e.target.checked)}
+              style={{ accentColor: 'var(--accent)' }}
+            />
+            Hide unused rooms
+          </label>
+          {isLoggedIn && <button className="btn-danger btn-sm" onClick={onDeleteTable}>Delete Table</button>}
+        </div>
       </div>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
@@ -778,7 +801,9 @@ export function TermSchedulesTab() {
   const [rooms, setRooms] = useState<Room[]>([])
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([])
   const [allFaculty, setAllFaculty] = useState<Faculty[]>([])
-  const [warnings, setWarnings] = useState<string[]>([])
+  const [errors, setErrors] = useState<IssueItem[]>([])
+  const [warnings, setWarnings] = useState<IssueItem[]>([])
+  const [issueHighlight, setIssueHighlight] = useState<{ key: string, ids: number[], severity: 'error' | 'warning' } | null>(null)
   const [highlightedIds, setHighlightedIds] = useState<number[]>([])
   const [neededSections, setNeededSections] = useState<Map<number, number>>(new Map())
   const [showNewTermModal, setShowNewTermModal] = useState(false)
@@ -895,7 +920,9 @@ export function TermSchedulesTab() {
     const id = +val
     setSelectedTermId(id)
     const term = terms.find(t => t.id === id)
+    setErrors([])
     setWarnings([])
+    setIssueHighlight(null)
     setHighlightedIds([])
     await loadTerm(id, term)
   }
@@ -930,7 +957,9 @@ export function TermSchedulesTab() {
           setTables([])
           setEntries([])
           setCourses([])
+          setErrors([])
           setWarnings([])
+          setIssueHighlight(null)
         }
       }
     } catch (e: any) {
@@ -965,16 +994,12 @@ export function TermSchedulesTab() {
 
   const handleFacultyChange = async (entryId: number, facultyId: number | null) => {
     try {
-      const { entry: updated, warnings } = await entriesApi.patchFaculty(entryId, facultyId)
+      const { entry: updated, errors: errs, warnings: warns } = await entriesApi.patchFaculty(entryId, facultyId)
       setEntries(prev => prev.map(e => e.id === entryId ? { ...e, faculty_id: updated.faculty_id } : e))
-      setWarnings(warnings)
+      setErrors(errs)
+      setWarnings(warns)
     } catch (e: any) {
-      const detail = e.response?.data?.detail
-      if (Array.isArray(detail)) {
-        showToast(detail.map((d: any) => d.description).join('; '))
-      } else {
-        showToast(detail || 'Failed to assign instructor')
-      }
+      showToast(e.response?.data?.detail || 'Failed to assign instructor')
     }
   }
 
@@ -1034,9 +1059,10 @@ export function TermSchedulesTab() {
   const handleActiveWeekdaysChange = async (entryId: number, activeWeekdayIds: number[]) => {
     setEntries(prev => prev.map(e => e.id === entryId ? { ...e, active_weekday_ids: activeWeekdayIds } : e))
     try {
-      const { entry: updated, warnings } = await entriesApi.update(entryId, { active_weekday_ids: activeWeekdayIds })
+      const { entry: updated, errors: errs, warnings: warns } = await entriesApi.update(entryId, { active_weekday_ids: activeWeekdayIds })
       setEntries(prev => prev.map(e => e.id === entryId ? updated : e))
-      setWarnings(warnings)
+      setErrors(errs)
+      setWarnings(warns)
     } catch (e: any) {
       showToast(e.response?.data?.detail || 'Failed to update day selection')
     }
@@ -1081,6 +1107,7 @@ export function TermSchedulesTab() {
           time_slot_ids: slotIds,
         })
         setEntries(prev => [...prev.filter(e => e.id !== result.entry.id), result.entry])
+        setErrors(result.errors)
         setWarnings(result.warnings)
       } else if (activeData?.type === 'entry') {
         const entryId = activeData.entry_id
@@ -1101,15 +1128,11 @@ export function TermSchedulesTab() {
           ...(tableChanged ? { active_weekday_ids: [] } : {}),
         })
         setEntries(prev => prev.map(e => e.id === entryId ? result.entry : e))
+        setErrors(result.errors)
         setWarnings(result.warnings)
       }
     } catch (e: any) {
-      const detail = e.response?.data?.detail
-      if (Array.isArray(detail)) {
-        showToast(detail.map((d: any) => d.description).join('; '))
-      } else {
-        showToast(detail || 'Drop failed')
-      }
+      showToast(e.response?.data?.detail || 'Drop failed')
     }
   }
 
@@ -1172,6 +1195,7 @@ export function TermSchedulesTab() {
                 onSectionChange={count => handleSectionChange(c.id, count)}
                 highlighted={highlightedIds.includes(c.id)}
                 dimmed={isCourseDimmed(c.id)}
+                issueHighlightSeverity={issueHighlight?.ids.includes(c.id) ? issueHighlight.severity : null}
               />
             ))}
           </div>
@@ -1213,16 +1237,41 @@ export function TermSchedulesTab() {
 
           <ColumnResizer onMouseDown={startResize(1)} />
 
-          {/* Warning List */}
+          {/* Issues List */}
           <div style={{ width: warningWidth, flexShrink: 0, overflowY: 'auto', padding: 12 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Warnings</div>
-            {warnings.length === 0 ? (
-              <div style={{ color: 'var(--success)', fontSize: 12 }}>No warnings</div>
-            ) : warnings.map((w, i) => (
-              <div key={i} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--warning)', borderRadius: 'var(--border-radius)', padding: '8px 10px', marginBottom: 8, fontSize: 11, color: 'var(--warning)' }}>
-                {w}
-              </div>
-            ))}
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Issues</div>
+            {errors.length === 0 && warnings.length === 0 ? (
+              <div style={{ color: 'var(--success)', fontSize: 12 }}>No issues</div>
+            ) : (
+              <>
+                {errors.map((e, i) => {
+                  const key = `error-${i}`
+                  const active = issueHighlight?.key === key
+                  return (
+                    <div
+                      key={key}
+                      onClick={() => e.courses.length && setIssueHighlight(active ? null : { key, ids: e.courses, severity: 'error' })}
+                      style={{ background: active ? 'var(--bg-surface)' : 'var(--bg-elevated)', border: `1px solid var(--error)`, borderRadius: 'var(--border-radius)', padding: '8px 10px', marginBottom: 8, fontSize: 11, color: 'var(--error)', cursor: e.courses.length ? 'pointer' : 'default', userSelect: 'none' }}
+                    >
+                      {e.description}
+                    </div>
+                  )
+                })}
+                {warnings.map((w, i) => {
+                  const key = `warning-${i}`
+                  const active = issueHighlight?.key === key
+                  return (
+                    <div
+                      key={key}
+                      onClick={() => w.courses.length && setIssueHighlight(active ? null : { key, ids: w.courses, severity: 'warning' })}
+                      style={{ background: active ? 'var(--bg-surface)' : 'var(--bg-elevated)', border: `1px solid var(--warning)`, borderRadius: 'var(--border-radius)', padding: '8px 10px', marginBottom: 8, fontSize: 11, color: 'var(--warning)', cursor: w.courses.length ? 'pointer' : 'default', userSelect: 'none' }}
+                    >
+                      {w.description}
+                    </div>
+                  )
+                })}
+              </>
+            )}
           </div>
 
           {isLoggedIn && (
@@ -1238,7 +1287,7 @@ export function TermSchedulesTab() {
                     highlightedIds={highlightedIds}
                     isLoggedIn={isLoggedIn}
                     onHighlight={setHighlightedIds}
-                    onProposalApproved={() => { refresh(); setWarnings([]) }}
+                    onProposalApproved={() => { refresh(); setErrors([]); setWarnings([]); setIssueHighlight(null) }}
                   />
                 ) : (
                   <div style={{ padding: 12, color: 'var(--text-secondary)', fontSize: 12 }}>Select a term to use AI audit.</div>

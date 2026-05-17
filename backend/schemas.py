@@ -175,9 +175,14 @@ class ScheduleEntryOut(BaseModel):
         )
 
 
+class IssueItem(BaseModel):
+    description: str
+    courses: list[int] = []
+
 class EntryWithWarnings(BaseModel):
     entry: ScheduleEntryOut
-    warnings: list[str] = []
+    errors: list[IssueItem] = []
+    warnings: list[IssueItem] = []
 
 
 # --- ScheduleTable ---

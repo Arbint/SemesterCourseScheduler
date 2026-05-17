@@ -4,7 +4,7 @@ from database import get_db
 from models import ScheduleEntry, ScheduleTable, TimeSlot, Term, Course, Weekday
 from schemas import (
     ScheduleEntryCreate, ScheduleEntryUpdate, ScheduleEntryFacultyPatch,
-    ScheduleEntryOut, EntryWithWarnings
+    ScheduleEntryOut, EntryWithWarnings, IssueItem
 )
 from conflict.runner import run_audits
 
@@ -98,16 +98,13 @@ def create_entry(table_id: int, data: ScheduleEntryCreate, db: Session = Depends
     term = _refresh_term(db, table.term_id)
     critical, warnings = run_audits(db, term)
 
-    if critical:
-        db.rollback()
-        raise HTTPException(409, detail=[r.to_dict() for r in critical])
-
     db.commit()
     db.refresh(entry)
 
     return EntryWithWarnings(
         entry=ScheduleEntryOut.from_orm(entry),
-        warnings=[w.description for w in warnings]
+        errors=[IssueItem(description=c.description, courses=c.courses) for c in critical],
+        warnings=[IssueItem(description=w.description, courses=w.courses) for w in warnings]
     )
 
 
@@ -139,16 +136,13 @@ def update_entry(entry_id: int, data: ScheduleEntryUpdate, db: Session = Depends
     term = _refresh_term(db, term_id)
     critical, warnings = run_audits(db, term)
 
-    if critical:
-        db.rollback()
-        raise HTTPException(409, detail=[r.to_dict() for r in critical])
-
     db.commit()
     db.refresh(entry)
 
     return EntryWithWarnings(
         entry=ScheduleEntryOut.from_orm(entry),
-        warnings=[w.description for w in warnings]
+        errors=[IssueItem(description=c.description, courses=c.courses) for c in critical],
+        warnings=[IssueItem(description=w.description, courses=w.courses) for w in warnings]
     )
 
 
@@ -165,15 +159,12 @@ def patch_faculty(entry_id: int, data: ScheduleEntryFacultyPatch, db: Session = 
     term = _refresh_term(db, term_id)
     critical, warnings = run_audits(db, term)
 
-    if critical:
-        db.rollback()
-        raise HTTPException(409, detail=[r.to_dict() for r in critical])
-
     db.commit()
     db.refresh(entry)
     return EntryWithWarnings(
         entry=ScheduleEntryOut.from_orm(entry),
-        warnings=[w.description for w in warnings]
+        errors=[IssueItem(description=c.description, courses=c.courses) for c in critical],
+        warnings=[IssueItem(description=w.description, courses=w.courses) for w in warnings]
     )
 
 

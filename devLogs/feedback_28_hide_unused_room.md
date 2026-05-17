@@ -1,0 +1,1 @@
+Add a toggle in the schedule tables to toggle on or off the unused rooms.
