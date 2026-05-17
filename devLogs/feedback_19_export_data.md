@@ -2,7 +2,7 @@ for the exported excel. be sure to add:
 
 * for each course:
 
-    * add the insctructor.
+    * make the cells higher so we can see the instructors.
 
     * add the weekdays if a course in a schedule table is not offered in all the weekdays of the schedule table.
 
