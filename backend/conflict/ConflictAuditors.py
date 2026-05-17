@@ -47,6 +47,7 @@ class FacultyTimeConflict(ConflictAuditor):
                     continue
                 reports.append(ConflictReport(
                     courses=[a.course_id, b.course_id],
+                    entries=[a.id, b.id],
                     description=f"Faculty conflict: same instructor assigned to overlapping courses ({a.course.dept_code}{a.course.course_number} and {b.course.dept_code}{b.course.course_number})"
                 ))
         return reports
@@ -108,8 +109,10 @@ class CoReqTimeConflict(ConflictAuditor):
                     break
 
             if all_overlap:
+                entry_ids = [e.id for cid in course_ids for e in sections_by_course.get(cid, [])]
                 reports.append(ConflictReport(
                     courses=course_ids,
+                    entries=entry_ids,
                     description=f"Co-requisite conflict: all sections of co-requisite courses overlap in time"
                 ))
         return reports
@@ -138,6 +141,7 @@ class RoomConflict(ConflictAuditor):
                     continue
                 reports.append(ConflictReport(
                     courses=[a.course_id, b.course_id],
+                    entries=[a.id, b.id],
                     description=f"Room conflict: {a.room.label} is double-booked at overlapping times"
                 ))
         return reports
@@ -153,6 +157,7 @@ class RoomCapacity(ConflictAuditor):
             if entry.room_id and not entry.room.is_online and entry.course.capacity > entry.room.capacity:
                 reports.append(ConflictReport(
                     courses=[entry.course_id],
+                    entries=[entry.id],
                     description=f"Room capacity: {entry.course.dept_code}{entry.course.course_number} (cap {entry.course.capacity}) exceeds {entry.room.label} capacity ({entry.room.capacity})"
                 ))
         return reports
@@ -173,6 +178,7 @@ class FrequencyConflict(ConflictAuditor):
             if table_days < course_freq:
                 reports.append(ConflictReport(
                     courses=[entry.course_id],
+                    entries=[entry.id],
                     description=f"Frequency conflict: {entry.course.dept_code}{entry.course.course_number} requires {course_freq} day(s)/week but table only has {table_days} day(s)"
                 ))
         return reports
@@ -195,6 +201,7 @@ class FrequencyToggleWarning(ConflictAuditor):
                 if active != course_freq:
                     reports.append(ConflictReport(
                         courses=[entry.course_id],
+                        entries=[entry.id],
                         description=f"Day selection: {entry.course.dept_code}{entry.course.course_number} §{entry.section} needs exactly {course_freq} day(s) toggled on ({active} currently selected)"
                     ))
         return reports
@@ -220,9 +227,10 @@ class FacultyLoad(ConflictAuditor):
             f = faculty_map[fid]
             if count > f.full_load:
                 # Collect all course_ids for this faculty in the term
-                course_ids = [e.course_id for e in term.schedule_entries if e.faculty_id == fid]
+                overloaded = [e for e in term.schedule_entries if e.faculty_id == fid]
                 reports.append(ConflictReport(
-                    courses=course_ids,
+                    courses=[e.course_id for e in overloaded],
+                    entries=[e.id for e in overloaded],
                     description=f"Faculty load: {f.first_name} {f.last_name} has {count} sections (full load is {f.full_load})"
                 ))
         return reports

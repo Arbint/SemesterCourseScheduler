@@ -178,6 +178,7 @@ class ScheduleEntryOut(BaseModel):
 class IssueItem(BaseModel):
     description: str
     courses: list[int] = []
+    entries: list[int] = []
 
 class EntryWithWarnings(BaseModel):
     entry: ScheduleEntryOut

@@ -103,6 +103,7 @@ export interface ScheduleEntry {
 export interface IssueItem {
   description: string
   courses: number[]
+  entries: number[]
 }
 
 export interface EntryWithWarnings {

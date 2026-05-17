@@ -108,7 +108,7 @@ function TermSelector({
 
 // --- Draggable Course Card (from Course List) ---
 function DraggableCourseCard({
-  course, entries, neededSections, isLoggedIn, onSectionChange, highlighted, dimmed, issueHighlightSeverity
+  course, entries, neededSections, isLoggedIn, onSectionChange, highlighted, dimmed
 }: {
   course: Course
   entries: ScheduleEntry[]
@@ -117,14 +117,9 @@ function DraggableCourseCard({
   onSectionChange: (count: number) => void
   highlighted: boolean
   dimmed: boolean
-  issueHighlightSeverity: 'error' | 'warning' | null
 }) {
   const scheduled = entries.filter(e => e.schedule_table_id !== null)
-  const border = issueHighlightSeverity === 'error'
-    ? '2px solid var(--error)'
-    : issueHighlightSeverity === 'warning'
-    ? '2px solid var(--warning)'
-    : scheduled.length === 0
+  const border = scheduled.length === 0
     ? '2px solid var(--error)'
     : scheduled.length < neededSections
     ? '2px solid var(--warning)'
@@ -151,7 +146,7 @@ function DraggableCourseCard({
         marginBottom: 8,
         cursor: isLoggedIn ? 'grab' : 'default',
         opacity: isDragging ? 0.5 : dimmed ? 0.25 : 1,
-        boxShadow: issueHighlightSeverity === 'error' ? '0 0 8px var(--error)' : issueHighlightSeverity === 'warning' ? '0 0 8px var(--warning)' : highlighted ? '0 0 8px var(--accent)' : undefined,
+        boxShadow: highlighted ? '0 0 8px var(--accent)' : undefined,
         transition: 'opacity 0.15s',
         userSelect: 'none'
       }}
@@ -186,7 +181,7 @@ const DAY_ABBR: Record<string, string> = { mon: 'M', tue: 'T', wed: 'W', thu: 'T
 
 // --- Scheduled Section Card (inside table cell) ---
 function ScheduledSectionCard({
-  entry, course, allFaculty, tableWeekdays, dimmed, isLoggedIn, onFacultyChange, onDelete, onActiveWeekdaysChange
+  entry, course, allFaculty, tableWeekdays, dimmed, isLoggedIn, issueHighlightSeverity, onFacultyChange, onDelete, onActiveWeekdaysChange
 }: {
   entry: ScheduleEntry
   course: Course
@@ -195,6 +190,7 @@ function ScheduledSectionCard({
   tableWeekdays: Weekday[]
   dimmed: boolean
   isLoggedIn: boolean
+  issueHighlightSeverity?: 'error' | 'warning' | null
   onFacultyChange: (fid: number | null) => void
   onDelete: () => void
   onActiveWeekdaysChange: (ids: number[]) => void
@@ -223,7 +219,11 @@ function ScheduledSectionCard({
       {...attributes}
       style={{
         background: bg,
-        border: '1px solid rgba(255,255,255,0.1)',
+        border: issueHighlightSeverity === 'error'
+          ? '2px solid var(--error)'
+          : issueHighlightSeverity === 'warning'
+          ? '2px solid var(--warning)'
+          : '1px solid rgba(255,255,255,0.1)',
         borderRadius: 'var(--border-radius)',
         padding: '6px 8px',
         fontSize: 11,
@@ -235,6 +235,11 @@ function ScheduledSectionCard({
         overflow: 'hidden',
         height: '100%',
         boxSizing: 'border-box',
+        boxShadow: issueHighlightSeverity === 'error'
+          ? '0 0 8px var(--error)'
+          : issueHighlightSeverity === 'warning'
+          ? '0 0 8px var(--warning)'
+          : undefined,
       }}
     >
       <div style={{ fontWeight: 600, color: '#ddd' }}>{course.dept_code} {course.course_number} §{entry.section}</div>
@@ -320,7 +325,8 @@ function ColumnResizer({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => 
 // --- Drop Cell ---
 function TableCell({
   tableId, timeSlotId, roomId, rowSpan = 1, isOnline = false, tableWeekdays,
-  entries, courses, allFaculty, isEntryDimmed, isLoggedIn, onFacultyChange, onDeleteEntry, onActiveWeekdaysChange
+  entries, courses, allFaculty, isEntryDimmed, isLoggedIn, issueHighlightEntryIds, issueHighlightSeverity,
+  onFacultyChange, onDeleteEntry, onActiveWeekdaysChange
 }: {
   tableId: number
   timeSlotId: number
@@ -333,6 +339,8 @@ function TableCell({
   allFaculty: Faculty[]
   isEntryDimmed: (e: ScheduleEntry) => boolean
   isLoggedIn: boolean
+  issueHighlightEntryIds?: Set<number>
+  issueHighlightSeverity?: 'error' | 'warning' | null
   onFacultyChange: (entryId: number, fid: number | null) => void
   onDeleteEntry: (entryId: number) => void
   onActiveWeekdaysChange: (entryId: number, ids: number[]) => void
@@ -383,6 +391,7 @@ function TableCell({
                 tableWeekdays={tableWeekdays}
                 dimmed={isEntryDimmed(e)}
                 isLoggedIn={isLoggedIn}
+                issueHighlightSeverity={issueHighlightEntryIds?.has(e.id) ? issueHighlightSeverity : null}
                 onFacultyChange={fid => onFacultyChange(e.id, fid)}
                 onDelete={() => onDeleteEntry(e.id)}
                 onActiveWeekdaysChange={ids => onActiveWeekdaysChange(e.id, ids)}
@@ -398,7 +407,8 @@ function TableCell({
 // --- Schedule Table Component ---
 function ScheduleTableView({
   table, weekdays, timeSlots, rooms, entries, courses, allFaculty,
-  isEntryDimmed, isLoggedIn, onWeekdaysChange, onDeleteTable, onFacultyChange, onDeleteEntry, onActiveWeekdaysChange
+  isEntryDimmed, isLoggedIn, issueHighlightEntryIds, issueHighlightSeverity,
+  onWeekdaysChange, onDeleteTable, onFacultyChange, onDeleteEntry, onActiveWeekdaysChange
 }: {
   table: ScheduleTable
   weekdays: Weekday[]
@@ -409,6 +419,8 @@ function ScheduleTableView({
   allFaculty: Faculty[]
   isEntryDimmed: (e: ScheduleEntry) => boolean
   isLoggedIn: boolean
+  issueHighlightEntryIds?: Set<number>
+  issueHighlightSeverity?: 'error' | 'warning' | null
   onWeekdaysChange: (ids: number[]) => void
   onDeleteTable: () => void
   onFacultyChange: (entryId: number, fid: number | null) => void
@@ -527,6 +539,8 @@ function ScheduleTableView({
                       courses={courses}
                       allFaculty={allFaculty}
                       isEntryDimmed={isEntryDimmed}
+                      issueHighlightEntryIds={issueHighlightEntryIds}
+                      issueHighlightSeverity={issueHighlightSeverity}
                       onFacultyChange={onFacultyChange}
                       onDeleteEntry={onDeleteEntry}
                       onActiveWeekdaysChange={onActiveWeekdaysChange}
@@ -803,7 +817,7 @@ export function TermSchedulesTab() {
   const [allFaculty, setAllFaculty] = useState<Faculty[]>([])
   const [errors, setErrors] = useState<IssueItem[]>([])
   const [warnings, setWarnings] = useState<IssueItem[]>([])
-  const [issueHighlight, setIssueHighlight] = useState<{ key: string, ids: number[], severity: 'error' | 'warning' } | null>(null)
+  const [issueHighlight, setIssueHighlight] = useState<{ key: string, entryIds: number[], severity: 'error' | 'warning' } | null>(null)
   const [highlightedIds, setHighlightedIds] = useState<number[]>([])
   const [neededSections, setNeededSections] = useState<Map<number, number>>(new Map())
   const [showNewTermModal, setShowNewTermModal] = useState(false)
@@ -811,6 +825,18 @@ export function TermSchedulesTab() {
   const [savingTerm, setSavingTerm] = useState(false)
   const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([])
   const courseMap = new Map(courses.map(c => [c.id, c]))
+
+  // Clear issue highlight when the underlying issue is resolved
+  useEffect(() => {
+    if (!issueHighlight) return
+    const { key, entryIds } = issueHighlight
+    const list = key.startsWith('error-') ? errors : warnings
+    const idx = parseInt(key.split('-')[1])
+    const issue = list[idx]
+    if (!issue || issue.entries.length !== entryIds.length || !entryIds.every(id => issue.entries.includes(id))) {
+      setIssueHighlight(null)
+    }
+  }, [errors, warnings])
 
   // --- Resizable columns ---
   const [courseWidth, setCourseWidth] = useState(220)
@@ -1195,7 +1221,6 @@ export function TermSchedulesTab() {
                 onSectionChange={count => handleSectionChange(c.id, count)}
                 highlighted={highlightedIds.includes(c.id)}
                 dimmed={isCourseDimmed(c.id)}
-                issueHighlightSeverity={issueHighlight?.ids.includes(c.id) ? issueHighlight.severity : null}
               />
             ))}
           </div>
@@ -1217,6 +1242,8 @@ export function TermSchedulesTab() {
                 allFaculty={allFaculty}
                 isEntryDimmed={isEntryDimmed}
                 isLoggedIn={isLoggedIn}
+                issueHighlightEntryIds={issueHighlight ? new Set(issueHighlight.entryIds) : undefined}
+                issueHighlightSeverity={issueHighlight?.severity}
                 onWeekdaysChange={ids => updateTableWeekdays(table.id, ids)}
                 onDeleteTable={() => deleteTable(table.id)}
                 onFacultyChange={handleFacultyChange}
@@ -1250,8 +1277,8 @@ export function TermSchedulesTab() {
                   return (
                     <div
                       key={key}
-                      onClick={() => e.courses.length && setIssueHighlight(active ? null : { key, ids: e.courses, severity: 'error' })}
-                      style={{ background: active ? 'var(--bg-surface)' : 'var(--bg-elevated)', border: `1px solid var(--error)`, borderRadius: 'var(--border-radius)', padding: '8px 10px', marginBottom: 8, fontSize: 11, color: 'var(--error)', cursor: e.courses.length ? 'pointer' : 'default', userSelect: 'none' }}
+                      onClick={() => e.entries.length && setIssueHighlight(active ? null : { key, entryIds: e.entries, severity: 'error' })}
+                      style={{ background: active ? 'var(--bg-surface)' : 'var(--bg-elevated)', border: `1px solid var(--error)`, borderRadius: 'var(--border-radius)', padding: '8px 10px', marginBottom: 8, fontSize: 11, color: 'var(--error)', cursor: e.entries.length ? 'pointer' : 'default', userSelect: 'none' }}
                     >
                       {e.description}
                     </div>
@@ -1263,8 +1290,8 @@ export function TermSchedulesTab() {
                   return (
                     <div
                       key={key}
-                      onClick={() => w.courses.length && setIssueHighlight(active ? null : { key, ids: w.courses, severity: 'warning' })}
-                      style={{ background: active ? 'var(--bg-surface)' : 'var(--bg-elevated)', border: `1px solid var(--warning)`, borderRadius: 'var(--border-radius)', padding: '8px 10px', marginBottom: 8, fontSize: 11, color: 'var(--warning)', cursor: w.courses.length ? 'pointer' : 'default', userSelect: 'none' }}
+                      onClick={() => w.entries.length && setIssueHighlight(active ? null : { key, entryIds: w.entries, severity: 'warning' })}
+                      style={{ background: active ? 'var(--bg-surface)' : 'var(--bg-elevated)', border: `1px solid var(--warning)`, borderRadius: 'var(--border-radius)', padding: '8px 10px', marginBottom: 8, fontSize: 11, color: 'var(--warning)', cursor: w.entries.length ? 'pointer' : 'default', userSelect: 'none' }}
                     >
                       {w.description}
                     </div>

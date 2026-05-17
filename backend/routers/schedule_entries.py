@@ -103,8 +103,8 @@ def create_entry(table_id: int, data: ScheduleEntryCreate, db: Session = Depends
 
     return EntryWithWarnings(
         entry=ScheduleEntryOut.from_orm(entry),
-        errors=[IssueItem(description=c.description, courses=c.courses) for c in critical],
-        warnings=[IssueItem(description=w.description, courses=w.courses) for w in warnings]
+        errors=[IssueItem(description=c.description, courses=c.courses, entries=c.entries) for c in critical],
+        warnings=[IssueItem(description=w.description, courses=w.courses, entries=w.entries) for w in warnings]
     )
 
 
@@ -141,8 +141,8 @@ def update_entry(entry_id: int, data: ScheduleEntryUpdate, db: Session = Depends
 
     return EntryWithWarnings(
         entry=ScheduleEntryOut.from_orm(entry),
-        errors=[IssueItem(description=c.description, courses=c.courses) for c in critical],
-        warnings=[IssueItem(description=w.description, courses=w.courses) for w in warnings]
+        errors=[IssueItem(description=c.description, courses=c.courses, entries=c.entries) for c in critical],
+        warnings=[IssueItem(description=w.description, courses=w.courses, entries=w.entries) for w in warnings]
     )
 
 
@@ -163,8 +163,8 @@ def patch_faculty(entry_id: int, data: ScheduleEntryFacultyPatch, db: Session = 
     db.refresh(entry)
     return EntryWithWarnings(
         entry=ScheduleEntryOut.from_orm(entry),
-        errors=[IssueItem(description=c.description, courses=c.courses) for c in critical],
-        warnings=[IssueItem(description=w.description, courses=w.courses) for w in warnings]
+        errors=[IssueItem(description=c.description, courses=c.courses, entries=c.entries) for c in critical],
+        warnings=[IssueItem(description=w.description, courses=w.courses, entries=w.entries) for w in warnings]
     )
 
 
