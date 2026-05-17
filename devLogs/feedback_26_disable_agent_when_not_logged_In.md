@@ -1,0 +1,1 @@
+disable and hide the AI agent if not logged in.

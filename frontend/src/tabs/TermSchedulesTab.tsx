@@ -8,6 +8,7 @@ import {
 } from '../api'
 import { showToast } from '../components/Toast'
 import { FormModal } from '../components/FormModal'
+import { useAuth } from '../contexts/AuthContext'
 
 const PASTEL = [
   '#4a3060', '#2e4a35', '#2e3a4a', '#4a3a25', '#3a2e4a',
@@ -31,10 +32,11 @@ interface ActiveFilter {
 
 // --- Term Selector with per-item delete buttons ---
 function TermSelector({
-  terms, selectedTermId, onSelect, onDelete, onNew
+  terms, selectedTermId, isLoggedIn, onSelect, onDelete, onNew
 }: {
   terms: Term[]
   selectedTermId: number | null
+  isLoggedIn: boolean
   onSelect: (val: string) => void
   onDelete: (termId: number) => void
   onNew: () => void
@@ -75,23 +77,29 @@ function TermSelector({
                 >
                   {tLabel}
                 </button>
-                <button
-                  onClick={e => { e.stopPropagation(); onDelete(t.id); setOpen(false) }}
-                  title="Delete term"
-                  style={{ padding: '4px 8px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1 }}
-                >
-                  ✕
-                </button>
+                {isLoggedIn && (
+                  <button
+                    onClick={e => { e.stopPropagation(); onDelete(t.id); setOpen(false) }}
+                    title="Delete term"
+                    style={{ padding: '4px 8px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1 }}
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             )
           })}
-          <div style={{ borderTop: '1px solid var(--border-color)', margin: '2px 0' }} />
-          <button
-            onClick={() => { onNew(); setOpen(false) }}
-            style={{ width: '100%', textAlign: 'left', padding: '8px 12px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: 13 }}
-          >
-            + New Term
-          </button>
+          {isLoggedIn && (
+            <>
+              <div style={{ borderTop: '1px solid var(--border-color)', margin: '2px 0' }} />
+              <button
+                onClick={() => { onNew(); setOpen(false) }}
+                style={{ width: '100%', textAlign: 'left', padding: '8px 12px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: 13 }}
+              >
+                + New Term
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -100,11 +108,12 @@ function TermSelector({
 
 // --- Draggable Course Card (from Course List) ---
 function DraggableCourseCard({
-  course, entries, neededSections, onSectionChange, highlighted, dimmed
+  course, entries, neededSections, isLoggedIn, onSectionChange, highlighted, dimmed
 }: {
   course: Course
   entries: ScheduleEntry[]
   neededSections: number
+  isLoggedIn: boolean
   onSectionChange: (count: number) => void
   highlighted: boolean
   dimmed: boolean
@@ -120,13 +129,14 @@ function DraggableCourseCard({
 
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `course-${course.id}`,
-    data: { type: 'course', course_id: course.id }
+    data: { type: 'course', course_id: course.id },
+    disabled: !isLoggedIn,
   })
 
   return (
     <div
       ref={setNodeRef}
-      {...listeners}
+      {...(isLoggedIn ? listeners : {})}
       {...attributes}
       style={{
         background: 'var(--bg-surface)',
@@ -134,7 +144,7 @@ function DraggableCourseCard({
         borderRadius: 'var(--border-radius)',
         padding: '10px 12px',
         marginBottom: 8,
-        cursor: 'grab',
+        cursor: isLoggedIn ? 'grab' : 'default',
         opacity: isDragging ? 0.5 : dimmed ? 0.25 : 1,
         boxShadow: highlighted ? '0 0 8px var(--accent)' : undefined,
         transition: 'opacity 0.15s',
@@ -155,7 +165,8 @@ function DraggableCourseCard({
           value={neededSections}
           onClick={e => e.stopPropagation()}
           onPointerDown={e => e.stopPropagation()}
-          onChange={e => onSectionChange(+e.target.value)}
+          onChange={e => isLoggedIn && onSectionChange(+e.target.value)}
+          disabled={!isLoggedIn}
           style={{ width: 50, padding: '2px 6px', fontSize: 12 }}
         />
         <span style={{ fontSize: 11, color: scheduled.length === 0 ? 'var(--error)' : scheduled.length < neededSections ? 'var(--warning)' : 'var(--success)' }}>
@@ -170,7 +181,7 @@ const DAY_ABBR: Record<string, string> = { mon: 'M', tue: 'T', wed: 'W', thu: 'T
 
 // --- Scheduled Section Card (inside table cell) ---
 function ScheduledSectionCard({
-  entry, course, allFaculty, tableWeekdays, dimmed, onFacultyChange, onDelete, onActiveWeekdaysChange
+  entry, course, allFaculty, tableWeekdays, dimmed, isLoggedIn, onFacultyChange, onDelete, onActiveWeekdaysChange
 }: {
   entry: ScheduleEntry
   course: Course
@@ -178,13 +189,15 @@ function ScheduledSectionCard({
   allFaculty: Faculty[]
   tableWeekdays: Weekday[]
   dimmed: boolean
+  isLoggedIn: boolean
   onFacultyChange: (fid: number | null) => void
   onDelete: () => void
   onActiveWeekdaysChange: (ids: number[]) => void
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `entry-${entry.id}`,
-    data: { type: 'entry', entry_id: entry.id }
+    data: { type: 'entry', entry_id: entry.id },
+    disabled: !isLoggedIn,
   })
 
   const bg = facultyColor(entry.faculty_id)
@@ -201,7 +214,7 @@ function ScheduledSectionCard({
   return (
     <div
       ref={setNodeRef}
-      {...listeners}
+      {...(isLoggedIn ? listeners : {})}
       {...attributes}
       style={{
         background: bg,
@@ -209,7 +222,7 @@ function ScheduledSectionCard({
         borderRadius: 'var(--border-radius)',
         padding: '6px 8px',
         fontSize: 11,
-        cursor: 'grab',
+        cursor: isLoggedIn ? 'grab' : 'default',
         opacity: isDragging ? 0.4 : dimmed ? 0.25 : 1,
         userSelect: 'none',
         position: 'relative',
@@ -232,7 +245,8 @@ function ScheduledSectionCard({
             return (
               <button
                 key={w.id}
-                onClick={() => toggleDay(w.id)}
+                onClick={() => isLoggedIn && toggleDay(w.id)}
+                disabled={!isLoggedIn}
                 style={{
                   padding: '1px 4px',
                   fontSize: 9,
@@ -241,7 +255,7 @@ function ScheduledSectionCard({
                   borderRadius: 3,
                   background: isActive ? 'rgba(97,175,239,0.5)' : 'rgba(0,0,0,0.35)',
                   color: isActive ? '#fff' : '#888',
-                  cursor: 'pointer',
+                  cursor: isLoggedIn ? 'pointer' : 'default',
                   lineHeight: '14px',
                 }}
               >
@@ -254,7 +268,8 @@ function ScheduledSectionCard({
       <div onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} style={{ marginTop: 4 }}>
         <select
           value={entry.faculty_id ?? ''}
-          onChange={e => onFacultyChange(e.target.value ? +e.target.value : null)}
+          onChange={e => isLoggedIn && onFacultyChange(e.target.value ? +e.target.value : null)}
+          disabled={!isLoggedIn}
           style={{ width: '100%', fontSize: 10, padding: '2px 4px', background: 'rgba(0,0,0,0.3)', color: '#ddd', border: '1px solid rgba(255,255,255,0.15)' }}
         >
           <option value="">No instructor</option>
@@ -263,15 +278,17 @@ function ScheduledSectionCard({
           ))}
         </select>
       </div>
-      <button
-        onPointerDown={e => e.stopPropagation()}
-        onClick={e => { e.stopPropagation(); onDelete() }}
-        style={{
-          position: 'absolute', top: 3, right: 3, background: 'rgba(0,0,0,0.4)',
-          color: '#ff8080', border: 'none', borderRadius: 3, padding: '0 4px',
-          fontSize: 11, cursor: 'pointer', lineHeight: '16px'
-        }}
-      >×</button>
+      {isLoggedIn && (
+        <button
+          onPointerDown={e => e.stopPropagation()}
+          onClick={e => { e.stopPropagation(); onDelete() }}
+          style={{
+            position: 'absolute', top: 3, right: 3, background: 'rgba(0,0,0,0.4)',
+            color: '#ff8080', border: 'none', borderRadius: 3, padding: '0 4px',
+            fontSize: 11, cursor: 'pointer', lineHeight: '16px'
+          }}
+        >×</button>
+      )}
     </div>
   )
 }
@@ -298,7 +315,7 @@ function ColumnResizer({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => 
 // --- Drop Cell ---
 function TableCell({
   tableId, timeSlotId, roomId, rowSpan = 1, isOnline = false, tableWeekdays,
-  entries, courses, allFaculty, isEntryDimmed, onFacultyChange, onDeleteEntry, onActiveWeekdaysChange
+  entries, courses, allFaculty, isEntryDimmed, isLoggedIn, onFacultyChange, onDeleteEntry, onActiveWeekdaysChange
 }: {
   tableId: number
   timeSlotId: number
@@ -310,6 +327,7 @@ function TableCell({
   courses: Map<number, Course>
   allFaculty: Faculty[]
   isEntryDimmed: (e: ScheduleEntry) => boolean
+  isLoggedIn: boolean
   onFacultyChange: (entryId: number, fid: number | null) => void
   onDeleteEntry: (entryId: number) => void
   onActiveWeekdaysChange: (entryId: number, ids: number[]) => void
@@ -359,6 +377,7 @@ function TableCell({
                 allFaculty={allFaculty}
                 tableWeekdays={tableWeekdays}
                 dimmed={isEntryDimmed(e)}
+                isLoggedIn={isLoggedIn}
                 onFacultyChange={fid => onFacultyChange(e.id, fid)}
                 onDelete={() => onDeleteEntry(e.id)}
                 onActiveWeekdaysChange={ids => onActiveWeekdaysChange(e.id, ids)}
@@ -374,7 +393,7 @@ function TableCell({
 // --- Schedule Table Component ---
 function ScheduleTableView({
   table, weekdays, timeSlots, rooms, entries, courses, allFaculty,
-  isEntryDimmed, onWeekdaysChange, onDeleteTable, onFacultyChange, onDeleteEntry, onActiveWeekdaysChange
+  isEntryDimmed, isLoggedIn, onWeekdaysChange, onDeleteTable, onFacultyChange, onDeleteEntry, onActiveWeekdaysChange
 }: {
   table: ScheduleTable
   weekdays: Weekday[]
@@ -384,6 +403,7 @@ function ScheduleTableView({
   courses: Map<number, Course>
   allFaculty: Faculty[]
   isEntryDimmed: (e: ScheduleEntry) => boolean
+  isLoggedIn: boolean
   onWeekdaysChange: (ids: number[]) => void
   onDeleteTable: () => void
   onFacultyChange: (entryId: number, fid: number | null) => void
@@ -424,11 +444,13 @@ function ScheduleTableView({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           {weekdays.map(w => (
-            <label key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', userSelect: 'none' }}>
+            <label key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: isLoggedIn ? 'pointer' : 'default', userSelect: 'none' }}>
               <input
                 type="checkbox"
                 checked={selectedWeekdays.has(w.id)}
+                disabled={!isLoggedIn}
                 onChange={e => {
+                  if (!isLoggedIn) return
                   const ids = e.target.checked
                     ? [...table.weekday_ids, w.id]
                     : table.weekday_ids.filter(id => id !== w.id)
@@ -442,7 +464,7 @@ function ScheduleTableView({
             </label>
           ))}
         </div>
-        <button className="btn-danger btn-sm" onClick={onDeleteTable}>Delete Table</button>
+        {isLoggedIn && <button className="btn-danger btn-sm" onClick={onDeleteTable}>Delete Table</button>}
       </div>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ borderCollapse: 'collapse', minWidth: '100%' }}>
@@ -477,6 +499,7 @@ function ScheduleTableView({
                       rowSpan={rowSpanMap.get(cellKey) ?? 1}
                       isOnline={r.is_online}
                       tableWeekdays={tableWeekdays}
+                      isLoggedIn={isLoggedIn}
                       entries={entries}
                       courses={courses}
                       allFaculty={allFaculty}
@@ -644,10 +667,11 @@ function FilterBar({ filters, onAdd, onRemove, onToggleNot, allFaculty, weekdays
 
 // --- AI Chat Panel ---
 function AIChatPanel({
-  termId, onHighlight, onProposalApproved
+  termId, isLoggedIn, onHighlight, onProposalApproved
 }: {
   termId: number
   highlightedIds?: number[]
+  isLoggedIn: boolean
   onHighlight: (ids: number[]) => void
   onProposalApproved: () => void
 }) {
@@ -729,11 +753,11 @@ function AIChatPanel({
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()}
-          placeholder="Ask the AI..."
+          placeholder={isLoggedIn ? 'Ask the AI...' : 'Log in to use AI audit'}
           style={{ flex: 1 }}
-          disabled={sending}
+          disabled={sending || !isLoggedIn}
         />
-        <button className="btn-primary" onClick={send} disabled={sending || !input.trim()}>
+        <button className="btn-primary" onClick={send} disabled={sending || !input.trim() || !isLoggedIn}>
           {sending ? '...' : 'Send'}
         </button>
       </div>
@@ -743,6 +767,7 @@ function AIChatPanel({
 
 // --- Main Term Schedules Tab ---
 export function TermSchedulesTab() {
+  const { isLoggedIn } = useAuth()
   const [terms, setTerms] = useState<Term[]>([])
   const [semesters, setSemesters] = useState<Semester[]>([])
   const [weekdays, setWeekdays] = useState<Weekday[]>([])
@@ -1103,6 +1128,7 @@ export function TermSchedulesTab() {
           <TermSelector
             terms={terms}
             selectedTermId={selectedTermId}
+            isLoggedIn={isLoggedIn}
             onSelect={handleTermChange}
             onDelete={handleTermDelete}
             onNew={() => setShowNewTermModal(true)}
@@ -1142,6 +1168,7 @@ export function TermSchedulesTab() {
                 course={c}
                 entries={entries.filter(e => e.course_id === c.id)}
                 neededSections={neededSections.get(c.id) ?? 1}
+                isLoggedIn={isLoggedIn}
                 onSectionChange={count => handleSectionChange(c.id, count)}
                 highlighted={highlightedIds.includes(c.id)}
                 dimmed={isCourseDimmed(c.id)}
@@ -1165,6 +1192,7 @@ export function TermSchedulesTab() {
                 courses={courseMap}
                 allFaculty={allFaculty}
                 isEntryDimmed={isEntryDimmed}
+                isLoggedIn={isLoggedIn}
                 onWeekdaysChange={ids => updateTableWeekdays(table.id, ids)}
                 onDeleteTable={() => deleteTable(table.id)}
                 onFacultyChange={handleFacultyChange}
@@ -1172,7 +1200,7 @@ export function TermSchedulesTab() {
                 onActiveWeekdaysChange={handleActiveWeekdaysChange}
               />
             ))}
-            {selectedTermId && (
+            {selectedTermId && isLoggedIn && (
               <button
                 className="btn-secondary"
                 style={{ width: '100%', padding: '12px', fontSize: 20, borderStyle: 'dashed' }}
@@ -1197,22 +1225,27 @@ export function TermSchedulesTab() {
             ))}
           </div>
 
-          <ColumnResizer onMouseDown={startResize(2)} />
+          {isLoggedIn && (
+            <>
+              <ColumnResizer onMouseDown={startResize(2)} />
 
-          {/* AI Audit */}
-          <div style={{ width: aiWidth, flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '12px 12px 8px', borderBottom: '1px solid var(--border-color)' }}>AI Audit</div>
-            {selectedTermId ? (
-              <AIChatPanel
-                termId={selectedTermId}
-                highlightedIds={highlightedIds}
-                onHighlight={setHighlightedIds}
-                onProposalApproved={() => { refresh(); setWarnings([]) }}
-              />
-            ) : (
-              <div style={{ padding: 12, color: 'var(--text-secondary)', fontSize: 12 }}>Select a term to use AI audit.</div>
-            )}
-          </div>
+              {/* AI Audit */}
+              <div style={{ width: aiWidth, flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '12px 12px 8px', borderBottom: '1px solid var(--border-color)' }}>AI Audit</div>
+                {selectedTermId ? (
+                  <AIChatPanel
+                    termId={selectedTermId}
+                    highlightedIds={highlightedIds}
+                    isLoggedIn={isLoggedIn}
+                    onHighlight={setHighlightedIds}
+                    onProposalApproved={() => { refresh(); setWarnings([]) }}
+                  />
+                ) : (
+                  <div style={{ padding: 12, color: 'var(--text-secondary)', fontSize: 12 }}>Select a term to use AI audit.</div>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </div>
 

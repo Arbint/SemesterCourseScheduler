@@ -179,6 +179,14 @@ class CoReqMember(Base):
     course = relationship("Course", back_populates="coreq_memberships")
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, nullable=False, unique=True)
+    hashed_password = Column(String, nullable=False)
+
+
 class Term(Base):
     __tablename__ = "terms"
 

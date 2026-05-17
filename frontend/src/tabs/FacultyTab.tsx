@@ -4,10 +4,12 @@ import { FormModal } from '../components/FormModal'
 import { TagInput } from '../components/TagInput'
 import { MultiSelect } from '../components/MultiSelect'
 import { showToast } from '../components/Toast'
+import { useAuth } from '../contexts/AuthContext'
 
 const EMPTY: Omit<Faculty, 'id'> = { first_name: '', last_name: '', rank: 'full_time', tags: [], full_load: 4 }
 
 export function FacultyTab() {
+  const { isLoggedIn } = useAuth()
   const [faculty, setFaculty] = useState<Faculty[]>([])
   const [courses, setCourses] = useState<Course[]>([])
   const [editing, setEditing] = useState<Faculty | null>(null)
@@ -81,7 +83,7 @@ export function FacultyTab() {
     <div>
       <div className="page-header">
         <h1>Faculty</h1>
-        <button className="btn-primary" onClick={openNew}>+ Add Faculty</button>
+        {isLoggedIn && <button className="btn-primary" onClick={openNew}>+ Add Faculty</button>}
       </div>
       <div className="page-content">
         {faculty.length === 0 ? (
@@ -109,8 +111,8 @@ export function FacultyTab() {
                   <td>{f.full_load}</td>
                   <td>{f.tags.map(t => <span key={t} className="tag">{t}</span>)}</td>
                   <td style={{ display: 'flex', gap: 6 }}>
-                    <button className="btn-secondary btn-sm" onClick={() => openEdit(f)}>Edit</button>
-                    <button className="btn-danger btn-sm" onClick={() => del(f)}>Delete</button>
+                    {isLoggedIn && <button className="btn-secondary btn-sm" onClick={() => openEdit(f)}>Edit</button>}
+                    {isLoggedIn && <button className="btn-danger btn-sm" onClick={() => del(f)}>Delete</button>}
                   </td>
                 </tr>
               ))}

@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
 import { constraintsApi, coursesApi, type TaughtWithGroup, type CoReqGroup, type Course } from '../api'
 import { showToast } from '../components/Toast'
+import { useAuth } from '../contexts/AuthContext'
 
 function GroupPanel({
-  title, groups, courses, onCreateGroup, onDeleteGroup, onAddCourse, onRemoveCourse
+  title, groups, courses, isLoggedIn, onCreateGroup, onDeleteGroup, onAddCourse, onRemoveCourse
 }: {
   title: string
   groups: { id: number; course_ids: number[] }[]
   courses: Course[]
+  isLoggedIn: boolean
   onCreateGroup: () => void
   onDeleteGroup: (id: number) => void
   onAddCourse: (gid: number, cid: number) => void
@@ -30,7 +32,7 @@ function GroupPanel({
     <div className="card" style={{ flex: 1 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h3 style={{ margin: 0, color: 'var(--text-bright)', fontSize: 14 }}>{title}</h3>
-        <button className="btn-secondary btn-sm" onClick={onCreateGroup}>+ New Group</button>
+        {isLoggedIn && <button className="btn-secondary btn-sm" onClick={onCreateGroup}>+ New Group</button>}
       </div>
 
       {groups.length === 0 && (
@@ -44,7 +46,7 @@ function GroupPanel({
           <div key={g.id} style={{ marginBottom: 16, background: 'var(--bg-elevated)', borderRadius: 'var(--border-radius)', padding: 12, border: '1px solid var(--border-color)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Group #{g.id}</span>
-              <button className="btn-danger btn-sm" onClick={() => onDeleteGroup(g.id)}>Delete Group</button>
+              {isLoggedIn && <button className="btn-danger btn-sm" onClick={() => onDeleteGroup(g.id)}>Delete Group</button>}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
               {g.course_ids.map(cid => {
@@ -57,12 +59,12 @@ function GroupPanel({
                   }}>
                     <span style={{ color: 'var(--accent)' }}>{c.dept_code} {c.course_number}</span>
                     <span style={{ color: 'var(--text-secondary)' }}>{c.course_name}</span>
-                    <button onClick={() => onRemoveCourse(g.id, cid)} style={{ background: 'none', padding: '0 0 0 4px', color: 'var(--error)', minWidth: 'unset' }}>×</button>
+                    {isLoggedIn && <button onClick={() => onRemoveCourse(g.id, cid)} style={{ background: 'none', padding: '0 0 0 4px', color: 'var(--error)', minWidth: 'unset' }}>×</button>}
                   </span>
                 ) : null
               })}
             </div>
-            {addingFor === g.id ? (
+            {isLoggedIn && (addingFor === g.id ? (
               <div style={{ display: 'flex', gap: 6 }}>
                 <select value={selectedCourse} onChange={e => setSelectedCourse(e.target.value)} style={{ flex: 1 }}>
                   <option value="">Select course...</option>
@@ -73,7 +75,7 @@ function GroupPanel({
               </div>
             ) : (
               <button className="btn-secondary btn-sm" onClick={() => { setAddingFor(g.id); setSelectedCourse('') }}>+ Add Course</button>
-            )}
+            ))}
           </div>
         )
       })}
@@ -82,6 +84,7 @@ function GroupPanel({
 }
 
 export function ConstraintsTab() {
+  const { isLoggedIn } = useAuth()
   const [taughtWith, setTaughtWith] = useState<TaughtWithGroup[]>([])
   const [coreq, setCoReq] = useState<CoReqGroup[]>([])
   const [courses, setCourses] = useState<Course[]>([])
@@ -111,6 +114,7 @@ export function ConstraintsTab() {
           title="Taught With (same time, same room, same instructor)"
           groups={taughtWith}
           courses={courses}
+          isLoggedIn={isLoggedIn}
           onCreateGroup={() => withToast(() => constraintsApi.createTaughtWith().then(() => {}))}
           onDeleteGroup={id => withToast(() => constraintsApi.deleteTaughtWith(id).then(() => {}))}
           onAddCourse={(gid, cid) => withToast(() => constraintsApi.addTaughtWithCourse(gid, cid).then(() => {}))}
@@ -120,6 +124,7 @@ export function ConstraintsTab() {
           title="Co-Requisites (must not overlap)"
           groups={coreq}
           courses={courses}
+          isLoggedIn={isLoggedIn}
           onCreateGroup={() => withToast(() => constraintsApi.createCoReq().then(() => {}))}
           onDeleteGroup={id => withToast(() => constraintsApi.deleteCoReq(id).then(() => {}))}
           onAddCourse={(gid, cid) => withToast(() => constraintsApi.addCoReqCourse(gid, cid).then(() => {}))}

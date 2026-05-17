@@ -3,6 +3,7 @@ import { coursesApi, semestersApi, type Course, type Semester } from '../api'
 import { FormModal } from '../components/FormModal'
 import { MultiSelect } from '../components/MultiSelect'
 import { showToast } from '../components/Toast'
+import { useAuth } from '../contexts/AuthContext'
 
 const EMPTY: Omit<Course, 'id' | 'semester_ids'> = {
   dept_code: '', course_number: 0, course_name: '', duration_minutes: 75, capacity: 30, frequency: 2
@@ -15,6 +16,7 @@ function decodeNumber(n: number) {
 }
 
 export function CourseTab() {
+  const { isLoggedIn } = useAuth()
   const [courses, setCourses] = useState<Course[]>([])
   const [semesters, setSemesters] = useState<Semester[]>([])
   const [editing, setEditing] = useState<Course | null>(null)
@@ -90,7 +92,7 @@ export function CourseTab() {
     <div>
       <div className="page-header">
         <h1>Course Catalog</h1>
-        <button className="btn-primary" onClick={openNew}>+ Add Course</button>
+        {isLoggedIn && <button className="btn-primary" onClick={openNew}>+ Add Course</button>}
       </div>
       <div className="page-content">
         {courses.length === 0 ? (
@@ -120,8 +122,8 @@ export function CourseTab() {
                   <td>{c.frequency}×</td>
                   <td>{c.semester_ids.map(id => semBadge(id))}</td>
                   <td style={{ display: 'flex', gap: 6 }}>
-                    <button className="btn-secondary btn-sm" onClick={() => openEdit(c)}>Edit</button>
-                    <button className="btn-danger btn-sm" onClick={() => del(c)}>Delete</button>
+                    {isLoggedIn && <button className="btn-secondary btn-sm" onClick={() => openEdit(c)}>Edit</button>}
+                    {isLoggedIn && <button className="btn-danger btn-sm" onClick={() => del(c)}>Delete</button>}
                   </td>
                 </tr>
               ))}

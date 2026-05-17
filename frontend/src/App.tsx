@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { ToastContainer } from './components/Toast'
+import { LoginModal } from './components/LoginModal'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { FacultyTab } from './tabs/FacultyTab'
 import { CourseTab } from './tabs/CourseTab'
 import { RoomsTab } from './tabs/RoomsTab'
@@ -20,8 +22,12 @@ const TABS = [
 
 type TabId = typeof TABS[number]['id']
 
-export default function App() {
+function AppShell() {
   const [tab, setTab] = useState<TabId>('schedules')
+  const [showLoginModal, setShowLoginModal] = useState(false)
+  const { isLoggedIn, hasUser, username, logout } = useAuth()
+
+  const loginMode = hasUser ? 'login' : 'create'
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -40,6 +46,26 @@ export default function App() {
             </div>
           ))}
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 8 }}>
+          {isLoggedIn ? (
+            <>
+              <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{username}</span>
+              <button
+                className="btn-secondary btn-sm"
+                onClick={logout}
+              >
+                Log Out
+              </button>
+            </>
+          ) : (
+            <button
+              className="btn-primary btn-sm"
+              onClick={() => setShowLoginModal(true)}
+            >
+              {hasUser ? 'Log In' : 'Set Up Account'}
+            </button>
+          )}
+        </div>
       </div>
 
       <div style={{ flex: 1, overflow: tab === 'schedules' ? 'hidden' : 'auto' }}>
@@ -51,6 +77,18 @@ export default function App() {
         {tab === 'schedules' && <TermSchedulesTab />}
         {tab === 'load' && <LoadTab />}
       </div>
+
+      {showLoginModal && (
+        <LoginModal mode={loginMode} onClose={() => setShowLoginModal(false)} />
+      )}
     </div>
+  )
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppShell />
+    </AuthProvider>
   )
 }

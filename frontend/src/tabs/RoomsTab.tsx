@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react'
 import { roomsApi, type Room } from '../api'
 import { FormModal } from '../components/FormModal'
 import { showToast } from '../components/Toast'
+import { useAuth } from '../contexts/AuthContext'
 
 const EMPTY: Omit<Room, 'id'> = { label: '', capacity: 30, is_online: false }
 
 export function RoomsTab() {
+  const { isLoggedIn } = useAuth()
   const [rooms, setRooms] = useState<Room[]>([])
   const [editing, setEditing] = useState<Room | null>(null)
   const [form, setForm] = useState<Omit<Room, 'id'>>(EMPTY)
@@ -40,7 +42,7 @@ export function RoomsTab() {
     <div>
       <div className="page-header">
         <h1>Rooms</h1>
-        <button className="btn-primary" onClick={openNew}>+ Add Room</button>
+        {isLoggedIn && <button className="btn-primary" onClick={openNew}>+ Add Room</button>}
       </div>
       <div className="page-content">
         {rooms.length === 0 ? (
@@ -55,8 +57,8 @@ export function RoomsTab() {
                   <td>{r.is_online ? '—' : `${r.capacity} students`}</td>
                   <td>{r.is_online ? <span style={{ color: 'var(--accent)', fontSize: 12 }}>Online</span> : 'Physical'}</td>
                   <td style={{ display: 'flex', gap: 6 }}>
-                    <button className="btn-secondary btn-sm" onClick={() => openEdit(r)}>Edit</button>
-                    <button className="btn-danger btn-sm" onClick={() => del(r)}>Delete</button>
+                    {isLoggedIn && <button className="btn-secondary btn-sm" onClick={() => openEdit(r)}>Edit</button>}
+                    {isLoggedIn && <button className="btn-danger btn-sm" onClick={() => del(r)}>Delete</button>}
                   </td>
                 </tr>
               ))}

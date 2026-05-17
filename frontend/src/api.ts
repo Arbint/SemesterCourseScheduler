@@ -228,3 +228,17 @@ export const chatApi = {
   approveProposal: (proposalId: string) => api.post(`/chat/proposals/${proposalId}/approve`).then(r => r.data),
   rejectProposal: (proposalId: string) => api.post(`/chat/proposals/${proposalId}/reject`),
 }
+
+export interface AuthStatus {
+  has_user: boolean
+  logged_in: boolean
+  username: string | null
+}
+
+export const authApi = {
+  status: () => api.get<AuthStatus>('/auth/status').then(r => r.data),
+  register: (username: string, password: string) => api.post('/auth/register', { username, password }),
+  login: (username: string, password: string) =>
+    api.post<{ token: string; username: string }>('/auth/login', { username, password }).then(r => r.data),
+  logout: () => api.post('/auth/logout'),
+}
