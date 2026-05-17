@@ -1,18 +1,21 @@
 import { useState, useEffect } from 'react'
 import { termsApi, semestersApi, loadApi, type Term, type FacultyLoad } from '../api'
 
+type SortKey = 'name' | 'sections' | 'credit_hours'
+
 export function LoadTab() {
   const [terms, setTerms] = useState<Term[]>([])
   const [selectedTermId, setSelectedTermId] = useState<number | null>(null)
   const [loadData, setLoadData] = useState<FacultyLoad[]>([])
   const [loading, setLoading] = useState(false)
+  const [filter, setFilter] = useState('')
+  const [sortKey, setSortKey] = useState<SortKey>('name')
+  const [sortAsc, setSortAsc] = useState(true)
 
   useEffect(() => {
     Promise.all([termsApi.list(), semestersApi.list()]).then(([t]) => {
       setTerms(t)
-      if (t.length) {
-        setSelectedTermId(t[0].id)
-      }
+      if (t.length) setSelectedTermId(t[0].id)
     })
   }, [])
 
@@ -26,6 +29,35 @@ export function LoadTab() {
 
   const termLabel = (t: Term) =>
     `${t.semester_name.charAt(0).toUpperCase() + t.semester_name.slice(1)} ${t.year}`
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) setSortAsc(a => !a)
+    else { setSortKey(key); setSortAsc(true) }
+  }
+
+  const displayed = loadData
+    .filter(f => f.name.toLowerCase().includes(filter.toLowerCase()))
+    .sort((a, b) => {
+      let diff = 0
+      if (sortKey === 'name') diff = a.name.localeCompare(b.name)
+      else if (sortKey === 'sections') diff = a.total_sections - b.total_sections
+      else diff = a.total_credit_hours - b.total_credit_hours
+      return sortAsc ? diff : -diff
+    })
+
+  const SortBtn = ({ k, label }: { k: SortKey; label: string }) => (
+    <button
+      onClick={() => toggleSort(k)}
+      style={{
+        padding: '4px 10px', fontSize: 12, cursor: 'pointer',
+        background: sortKey === k ? 'var(--accent)' : 'var(--bg-elevated)',
+        color: sortKey === k ? '#fff' : 'var(--text-secondary)',
+        border: '1px solid var(--border-color)', borderRadius: 4,
+      }}
+    >
+      {label} {sortKey === k ? (sortAsc ? '↑' : '↓') : ''}
+    </button>
+  )
 
   return (
     <div>
@@ -42,19 +74,33 @@ export function LoadTab() {
         </select>
       </div>
 
+      {/* Filter + sort toolbar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 20px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-surface)' }}>
+        <input
+          placeholder="Filter by faculty name..."
+          value={filter}
+          onChange={e => setFilter(e.target.value)}
+          style={{ width: 220, padding: '4px 8px', fontSize: 13 }}
+        />
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 8 }}>Sort:</span>
+        <SortBtn k="name" label="Name" />
+        <SortBtn k="sections" label="Sections" />
+        <SortBtn k="credit_hours" label="Credit Hrs" />
+      </div>
+
       <div className="page-content">
         {loading && (
           <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Loading...</div>
         )}
 
-        {!loading && loadData.length === 0 && (
+        {!loading && displayed.length === 0 && (
           <div className="empty-state">
             <div className="icon">📋</div>
-            No faculty assigned to any courses for this term.
+            {filter ? 'No faculty match the filter.' : 'No faculty assigned to any courses for this term.'}
           </div>
         )}
 
-        {!loading && loadData.map(faculty => {
+        {!loading && displayed.map(faculty => {
           const overloaded = faculty.total_sections > faculty.full_load
           return (
             <div
