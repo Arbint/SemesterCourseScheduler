@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 from database import get_db
-from models import Course, CourseOffering, Semester, SemesterEnum
+from models import Course, CourseOffering, Semester, SemesterEnum, ScheduleEntry
 from schemas import CourseCreate, CourseUpdate, CourseOut
 
 router = APIRouter(prefix="/api/courses", tags=["courses"])
@@ -54,6 +54,7 @@ def delete_course(course_id: int, db: Session = Depends(get_db)):
     c = db.query(Course).filter(Course.id == course_id).first()
     if not c:
         raise HTTPException(404, "Course not found")
+    db.query(ScheduleEntry).filter(ScheduleEntry.course_id == course_id).delete()
     db.delete(c)
     db.commit()
 

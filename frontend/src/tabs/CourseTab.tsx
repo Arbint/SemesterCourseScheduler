@@ -79,7 +79,11 @@ export function CourseTab() {
   }
 
   const del = async (c: Course) => {
-    if (!confirm(`Delete ${c.dept_code} ${c.course_number}?`)) return
+    const base = `Delete ${c.dept_code} ${c.course_number} — ${c.course_name}?`
+    const warning = c.scheduled_entry_count > 0
+      ? `\n\nWarning: this course has ${c.scheduled_entry_count} scheduled section(s) that will also be removed.`
+      : ''
+    if (!confirm(base + warning)) return
     try {
       await coursesApi.delete(c.id)
       await load()

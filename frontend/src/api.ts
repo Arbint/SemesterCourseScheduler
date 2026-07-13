@@ -62,6 +62,7 @@ export interface Course {
   capacity: number
   frequency: number
   semester_ids: number[]
+  scheduled_entry_count: number
 }
 
 export interface TaughtWithGroup {

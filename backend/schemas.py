@@ -97,11 +97,13 @@ class CourseOut(CourseBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     semester_ids: list[int] = []
+    scheduled_entry_count: int = 0
 
     @classmethod
     def from_orm_with_semesters(cls, course):
         obj = cls.model_validate(course)
         obj.semester_ids = [o.semester_id for o in course.offerings]
+        obj.scheduled_entry_count = len(course.schedule_entries)
         return obj
 
 

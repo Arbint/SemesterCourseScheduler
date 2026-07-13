@@ -1,0 +1,2 @@
+Some term may introduce temporay taught with pairs (the taught with that only applies to that term), the user should be able to add per term taught with pairs
+Promote some possible solutions, and ask the user to pick one, and you will implement it after the user picked on.
