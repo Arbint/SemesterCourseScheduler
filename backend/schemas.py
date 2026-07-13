@@ -125,6 +125,19 @@ class TaughtWithGroupOut(BaseModel):
         return cls(id=group.id, course_ids=[m.course_id for m in group.members])
 
 
+# --- TermTaughtWith ---
+
+class TermTaughtWithGroupOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    term_id: int
+    course_ids: list[int] = []
+
+    @classmethod
+    def from_orm(cls, group):
+        return cls(id=group.id, term_id=group.term_id, course_ids=[m.course_id for m in group.members])
+
+
 # --- CoReq ---
 
 class CoReqGroupOut(BaseModel):

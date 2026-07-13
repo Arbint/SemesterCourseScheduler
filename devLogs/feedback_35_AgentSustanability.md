@@ -1,0 +1,1 @@
+When I am talking with the Agent, and switched tab, the previous chat history with the agent disapeared, can you make sure that the agent part is only cleared/reset when the user refreshed the page?

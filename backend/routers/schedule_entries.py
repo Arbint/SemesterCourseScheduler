@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, selectinload
 from database import get_db
-from models import ScheduleEntry, ScheduleTable, TimeSlot, Term, Course, Weekday, TaughtWithMember
+from models import ScheduleEntry, ScheduleTable, TimeSlot, Term, Course, Weekday, TaughtWithMember, TermTaughtWithMember, TermTaughtWithGroup
 from schemas import (
     ScheduleEntryCreate, ScheduleEntryUpdate, ScheduleEntryFacultyPatch,
     ScheduleEntryOut, EntryWithWarnings, IssueItem
@@ -51,19 +51,38 @@ def _place_taught_with_partners(
     - If it has no entry at all (not offered this term), skip it.
     Returns the list of partner entries that were affected.
     """
+    partner_ids: set[int] = set()
+
+    # Global TaughtWith
     membership = db.query(TaughtWithMember).filter(
         TaughtWithMember.course_id == source_entry.course_id
     ).first()
-    if not membership:
-        return []
-
-    partner_ids = [
-        m.course_id
+    if membership:
         for m in db.query(TaughtWithMember).filter(
             TaughtWithMember.group_id == membership.group_id,
             TaughtWithMember.course_id != source_entry.course_id,
-        ).all()
-    ]
+        ).all():
+            partner_ids.add(m.course_id)
+
+    # Per-term TaughtWith
+    term_membership = (
+        db.query(TermTaughtWithMember)
+        .join(TermTaughtWithGroup, TermTaughtWithMember.group_id == TermTaughtWithGroup.id)
+        .filter(
+            TermTaughtWithMember.course_id == source_entry.course_id,
+            TermTaughtWithGroup.term_id == source_entry.term_id,
+        )
+        .first()
+    )
+    if term_membership:
+        for m in db.query(TermTaughtWithMember).filter(
+            TermTaughtWithMember.group_id == term_membership.group_id,
+            TermTaughtWithMember.course_id != source_entry.course_id,
+        ).all():
+            partner_ids.add(m.course_id)
+
+    if not partner_ids:
+        return []
 
     slots = db.query(TimeSlot).filter(TimeSlot.id.in_(time_slot_ids)).all()
     affected: list[ScheduleEntry] = []

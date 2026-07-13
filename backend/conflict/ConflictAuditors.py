@@ -7,11 +7,16 @@ def _slots_overlap(slots_a: list, slots_b: list) -> bool:
     return bool(ids_a & ids_b)
 
 
-def _get_taught_with_group_id(entry) -> int | None:
-    membership = entry.course.taught_with_membership
-    if membership:
-        return membership.group_id
-    return None
+def _build_combined_tw_map(db, term_id: int) -> dict[int, str]:
+    """Return course_id -> group_key for both global ('g_N') and per-term ('t_N') TaughtWith groups."""
+    from models import TaughtWithMember, TermTaughtWithGroup
+    result: dict[int, str] = {}
+    for m in db.query(TaughtWithMember).all():
+        result[m.course_id] = f"g_{m.group_id}"
+    for g in db.query(TermTaughtWithGroup).filter(TermTaughtWithGroup.term_id == term_id).all():
+        for m in g.members:
+            result[m.course_id] = f"t_{g.id}"
+    return result
 
 
 def _get_effective_weekdays(entry) -> set:
@@ -27,6 +32,7 @@ class FacultyTimeConflict(ConflictAuditor):
 
     def Audit(self, term) -> list[ConflictReport]:
         reports = []
+        tw_map = _build_combined_tw_map(self.db, term.id)
         entries = [e for e in term.schedule_entries if e.faculty_id and e.time_slots and e.schedule_table_id and e.schedule_table]
 
         for i, a in enumerate(entries):
@@ -35,15 +41,14 @@ class FacultyTimeConflict(ConflictAuditor):
                     continue
                 if not _slots_overlap(a.time_slots, b.time_slots):
                     continue
-                # Check if they share an effective weekday
                 weekdays_a = _get_effective_weekdays(a)
                 weekdays_b = _get_effective_weekdays(b)
                 if not (weekdays_a & weekdays_b):
                     continue
-                # TaughtWith exception
-                gid_a = _get_taught_with_group_id(a)
-                gid_b = _get_taught_with_group_id(b)
-                if gid_a is not None and gid_a == gid_b:
+                # TaughtWith exception (global or per-term)
+                gk_a = tw_map.get(a.course_id)
+                gk_b = tw_map.get(b.course_id)
+                if gk_a and gk_a == gk_b:
                     continue
                 reports.append(ConflictReport(
                     courses=[a.course_id, b.course_id],
@@ -124,6 +129,7 @@ class RoomConflict(ConflictAuditor):
 
     def Audit(self, term) -> list[ConflictReport]:
         reports = []
+        tw_map = _build_combined_tw_map(self.db, term.id)
         entries = [e for e in term.schedule_entries if e.room_id and e.time_slots and e.schedule_table_id and e.schedule_table]
 
         for i, a in enumerate(entries):
@@ -140,9 +146,9 @@ class RoomConflict(ConflictAuditor):
                 if not (weekdays_a & weekdays_b):
                     continue
                 # TaughtWith exception: same group shares the same room intentionally
-                gid_a = _get_taught_with_group_id(a)
-                gid_b = _get_taught_with_group_id(b)
-                if gid_a is not None and gid_a == gid_b:
+                gk_a = tw_map.get(a.course_id)
+                gk_b = tw_map.get(b.course_id)
+                if gk_a and gk_a == gk_b:
                     continue
                 reports.append(ConflictReport(
                     courses=[a.course_id, b.course_id],
@@ -219,17 +225,18 @@ class FacultyLoad(ConflictAuditor):
     def Audit(self, term) -> list[ConflictReport]:
         from models import Faculty
         reports = []
+        tw_map = _build_combined_tw_map(self.db, term.id)
         load_map: dict[int, int] = {}
         faculty_map: dict[int, object] = {}
-        counted_tw: set[tuple[int, int]] = set()  # (faculty_id, tw_group_id) already counted
+        counted_tw: set[tuple] = set()  # (faculty_id, tw_group_key) already counted
 
         for entry in term.schedule_entries:
             if not entry.faculty_id:
                 continue
             faculty_map.setdefault(entry.faculty_id, entry.faculty)
-            tw_gid = _get_taught_with_group_id(entry)
-            if tw_gid is not None:
-                key = (entry.faculty_id, tw_gid)
+            gk = tw_map.get(entry.course_id)
+            if gk is not None:
+                key = (entry.faculty_id, gk)
                 if key in counted_tw:
                     continue  # partner already counted; don't double-count
                 counted_tw.add(key)

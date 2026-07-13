@@ -76,6 +76,12 @@ export interface CoReqGroup {
   course_ids: number[]
 }
 
+export interface TermTaughtWithGroup {
+  id: number
+  term_id: number
+  course_ids: number[]
+}
+
 export interface Term {
   id: number
   semester_id: number
@@ -186,6 +192,13 @@ export const termsApi = {
   list: () => api.get<Term[]>('/terms').then(r => r.data),
   create: (d: { semester_id: number; year: number }) => api.post<Term>('/terms', d).then(r => r.data),
   delete: (id: number) => api.delete(`/terms/${id}`),
+}
+
+export const termTaughtWithApi = {
+  list: (termId: number) => api.get<TermTaughtWithGroup[]>(`/terms/${termId}/taughtwith`).then(r => r.data),
+  create: (termId: number, course_ids: number[]) =>
+    api.post<TermTaughtWithGroup>(`/terms/${termId}/taughtwith`, { course_ids }).then(r => r.data),
+  delete: (termId: number, groupId: number) => api.delete(`/terms/${termId}/taughtwith/${groupId}`),
 }
 
 export const tablesApi = {

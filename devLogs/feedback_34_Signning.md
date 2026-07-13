@@ -1,0 +1,1 @@
+Looks like if I am signed in on one computer, other people visiting the website aslo are signed in, that is not acceptable, make sure when I am signed in on my computer, others people are not signed in.

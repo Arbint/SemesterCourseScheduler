@@ -2,9 +2,10 @@ import { useState, useEffect, useRef, Fragment } from 'react'
 import { DndContext, type DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core'
 import {
   termsApi, tablesApi, entriesApi, coursesApi, roomsApi, timeSlotsApi,
-  weekdaysApi, semestersApi, facultyApi, chatApi,
+  weekdaysApi, semestersApi, facultyApi, chatApi, termTaughtWithApi,
   type Term, type ScheduleTable, type ScheduleEntry, type Course,
-  type Room, type TimeSlot, type Weekday, type Semester, type Faculty, type IssueItem
+  type Room, type TimeSlot, type Weekday, type Semester, type Faculty,
+  type IssueItem, type TermTaughtWithGroup
 } from '../api'
 import { showToast } from '../components/Toast'
 import { FormModal } from '../components/FormModal'
@@ -464,7 +465,8 @@ function ColumnResizer({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => 
 // --- Drop Cell ---
 function TableCell({
   tableId, timeSlotId, roomId, rowSpan = 1, isOnline = false, tableWeekdays,
-  entries, courses, allFaculty, isEntryDimmed, isLoggedIn, issueHighlightEntryIds, issueHighlightSeverity,
+  entries, courses, effectivePartnerIds, allFaculty, isEntryDimmed, isLoggedIn,
+  issueHighlightEntryIds, issueHighlightSeverity,
   onFacultyChange, onDeleteEntry, onActiveWeekdaysChange
 }: {
   tableId: number
@@ -475,6 +477,7 @@ function TableCell({
   tableWeekdays: Weekday[]
   entries: ScheduleEntry[]
   courses: Map<number, Course>
+  effectivePartnerIds: Map<number, number[]>
   allFaculty: Faculty[]
   isEntryDimmed: (e: ScheduleEntry) => boolean
   isLoggedIn: boolean
@@ -502,8 +505,8 @@ function TableCell({
   const usedIds = new Set<number>()
   for (const e of cellEntries) {
     if (usedIds.has(e.id)) continue
-    const course = courses.get(e.course_id)
-    const partnerEntry = course?.taught_with_partner_ids
+    const partnerIds = effectivePartnerIds.get(e.course_id) ?? []
+    const partnerEntry = partnerIds
       .map(pid => cellEntries.find(ce => ce.course_id === pid && !usedIds.has(ce.id)))
       .find(Boolean)
     if (partnerEntry) {
@@ -590,7 +593,7 @@ function TableCell({
 
 // --- Schedule Table Component ---
 function ScheduleTableView({
-  table, weekdays, timeSlots, rooms, entries, courses, allFaculty,
+  table, weekdays, timeSlots, rooms, entries, courses, effectivePartnerIds, allFaculty,
   isEntryDimmed, isLoggedIn, issueHighlightEntryIds, issueHighlightSeverity,
   onWeekdaysChange, onDeleteTable, onFacultyChange, onDeleteEntry, onActiveWeekdaysChange
 }: {
@@ -600,6 +603,7 @@ function ScheduleTableView({
   rooms: Room[]
   entries: ScheduleEntry[]
   courses: Map<number, Course>
+  effectivePartnerIds: Map<number, number[]>
   allFaculty: Faculty[]
   isEntryDimmed: (e: ScheduleEntry) => boolean
   isLoggedIn: boolean
@@ -613,7 +617,7 @@ function ScheduleTableView({
 }) {
   const [hideUnused, setHideUnused] = useState(false)
 
-  const selectedWeekdays = new Set(table.weekday_ids)
+  const selectedWeekdays = new Set<number>(table.weekday_ids)
   const dayNames: Record<string, string> = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri' }
 
   const tableEntries = entries.filter(e => e.schedule_table_id === table.id)
@@ -721,6 +725,7 @@ function ScheduleTableView({
                       isLoggedIn={isLoggedIn}
                       entries={entries}
                       courses={courses}
+                      effectivePartnerIds={effectivePartnerIds}
                       allFaculty={allFaculty}
                       isEntryDimmed={isEntryDimmed}
                       issueHighlightEntryIds={issueHighlightEntryIds}
@@ -1008,7 +1013,24 @@ export function TermSchedulesTab() {
   const [newTermForm, setNewTermForm] = useState({ semester_id: 0, year: new Date().getFullYear() })
   const [savingTerm, setSavingTerm] = useState(false)
   const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([])
+  const [termTaughtWith, setTermTaughtWith] = useState<TermTaughtWithGroup[]>([])
+  const [showTermTWModal, setShowTermTWModal] = useState(false)
+  const [termTWForm, setTermTWForm] = useState<number[]>([0, 0])
   const courseMap = new Map(courses.map(c => [c.id, c]))
+
+  // Combined partner map: global (from course.taught_with_partner_ids) + per-term
+  const effectivePartnerIds = new Map<number, number[]>()
+  for (const c of courses) {
+    const partners = [...c.taught_with_partner_ids]
+    for (const g of termTaughtWith) {
+      if (g.course_ids.includes(c.id)) {
+        for (const pid of g.course_ids) {
+          if (pid !== c.id && !partners.includes(pid)) partners.push(pid)
+        }
+      }
+    }
+    if (partners.length) effectivePartnerIds.set(c.id, partners)
+  }
 
   // Clear issue highlight when the underlying issue is resolved
   useEffect(() => {
@@ -1091,14 +1113,16 @@ export function TermSchedulesTab() {
     const termData = term ?? terms.find(t => t.id === termId)
     if (!termData) return
 
-    const [tbs, ents, cs] = await Promise.all([
+    const [tbs, ents, cs, ttw] = await Promise.all([
       tablesApi.list(termId),
       entriesApi.listByTerm(termId),
-      coursesApi.list(termData.semester_name)
+      coursesApi.list(termData.semester_name),
+      termTaughtWithApi.list(termId),
     ])
     setTables(tbs)
     setEntries(ents)
     setCourses(cs)
+    setTermTaughtWith(ttw)
 
     // Init needed sections map
     const map = new Map<number, number>()
@@ -1134,6 +1158,7 @@ export function TermSchedulesTab() {
     setWarnings([])
     setIssueHighlight(null)
     setHighlightedIds([])
+    setTermTaughtWith([])
     await loadTerm(id, term)
   }
 
@@ -1375,12 +1400,22 @@ export function TermSchedulesTab() {
             onNew={() => setShowNewTermModal(true)}
           />
           {selectedTermId && (
-            <button
-              className="btn-secondary"
-              onClick={() => window.open(`/api/terms/${selectedTermId}/export`, '_blank')}
-            >
-              Export
-            </button>
+            <>
+              <button
+                className="btn-secondary"
+                onClick={() => window.open(`/api/terms/${selectedTermId}/export`, '_blank')}
+              >
+                Export
+              </button>
+              {isLoggedIn && (
+                <button
+                  className="btn-secondary"
+                  onClick={() => { setTermTWForm([0, 0]); setShowTermTWModal(true) }}
+                >
+                  Term TW
+                </button>
+              )}
+            </>
           )}
         </div>
 
@@ -1413,7 +1448,7 @@ export function TermSchedulesTab() {
                 onSectionChange={count => handleSectionChange(c.id, count)}
                 highlighted={highlightedIds.includes(c.id)}
                 dimmed={isCourseDimmed(c.id)}
-                taughtWithPartners={c.taught_with_partner_ids.map(pid => courseMap.get(pid)).filter(Boolean) as Course[]}
+                taughtWithPartners={(effectivePartnerIds.get(c.id) ?? []).map(pid => courseMap.get(pid)).filter(Boolean) as Course[]}
               />
             ))}
           </div>
@@ -1432,6 +1467,7 @@ export function TermSchedulesTab() {
                 rooms={rooms}
                 entries={entries}
                 courses={courseMap}
+                effectivePartnerIds={effectivePartnerIds}
                 allFaculty={allFaculty}
                 isEntryDimmed={isEntryDimmed}
                 isLoggedIn={isLoggedIn}
@@ -1517,6 +1553,63 @@ export function TermSchedulesTab() {
           )}
         </div>
       </div>
+
+      {showTermTWModal && selectedTermId && (
+        <FormModal
+          title="Term TaughtWith Groups"
+          onClose={() => setShowTermTWModal(false)}
+          onSave={async () => {
+            const [a, b] = termTWForm
+            if (!a || !b || a === b) { showToast('Select two different courses'); return }
+            try {
+              await termTaughtWithApi.create(selectedTermId, [a, b])
+              const updated = await termTaughtWithApi.list(selectedTermId)
+              setTermTaughtWith(updated)
+              setTermTWForm([0, 0])
+            } catch (e: any) {
+              showToast(e.response?.data?.detail || 'Failed to create group')
+            }
+          }}
+          saving={false}
+        >
+          {termTaughtWith.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              {termTaughtWith.map(g => {
+                const names = g.course_ids.map(id => {
+                  const c = courseMap.get(id)
+                  return c ? `${c.dept_code} ${c.course_number}` : `#${id}`
+                }).join(' + ')
+                return (
+                  <div key={g.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', marginBottom: 4, background: 'var(--bg-elevated)', borderRadius: 4 }}>
+                    <span style={{ fontSize: 13 }}>{names}</span>
+                    <button
+                      className="btn-danger btn-sm"
+                      onClick={async () => {
+                        await termTaughtWithApi.delete(selectedTermId, g.id)
+                        setTermTaughtWith(prev => prev.filter(x => x.id !== g.id))
+                      }}
+                    >Remove</button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          <div className="form-group">
+            <label>Course A</label>
+            <select value={termTWForm[0] || ''} onChange={e => setTermTWForm(f => [+e.target.value, f[1]])}>
+              <option value="">Select course...</option>
+              {termCourses.map(c => <option key={c.id} value={c.id}>{c.dept_code} {c.course_number} — {c.course_name}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Course B</label>
+            <select value={termTWForm[1] || ''} onChange={e => setTermTWForm(f => [f[0], +e.target.value])}>
+              <option value="">Select course...</option>
+              {termCourses.map(c => <option key={c.id} value={c.id}>{c.dept_code} {c.course_number} — {c.course_name}</option>)}
+            </select>
+          </div>
+        </FormModal>
+      )}
 
       {showNewTermModal && (
         <FormModal title="Create New Term" onClose={() => setShowNewTermModal(false)} onSave={createTerm} saving={savingTerm}>

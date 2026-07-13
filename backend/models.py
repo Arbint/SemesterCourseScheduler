@@ -179,6 +179,26 @@ class CoReqMember(Base):
     course = relationship("Course", back_populates="coreq_memberships")
 
 
+class TermTaughtWithGroup(Base):
+    __tablename__ = "term_taught_with_groups"
+
+    id = Column(Integer, primary_key=True, index=True)
+    term_id = Column(Integer, ForeignKey("terms.id"), nullable=False)
+
+    term = relationship("Term", back_populates="term_taught_with_groups")
+    members = relationship("TermTaughtWithMember", back_populates="group", cascade="all, delete-orphan")
+
+
+class TermTaughtWithMember(Base):
+    __tablename__ = "term_taught_with_members"
+
+    group_id = Column(Integer, ForeignKey("term_taught_with_groups.id"), primary_key=True)
+    course_id = Column(Integer, ForeignKey("courses.id"), primary_key=True)
+
+    group = relationship("TermTaughtWithGroup", back_populates="members")
+    course = relationship("Course")
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -199,6 +219,7 @@ class Term(Base):
     semester = relationship("Semester", back_populates="terms")
     schedule_tables = relationship("ScheduleTable", back_populates="term", cascade="all, delete-orphan")
     schedule_entries = relationship("ScheduleEntry", back_populates="term", cascade="all, delete-orphan")
+    term_taught_with_groups = relationship("TermTaughtWithGroup", back_populates="term", cascade="all, delete-orphan")
 
 
 class ScheduleTable(Base):

@@ -12,7 +12,7 @@ def _credit_hours(course_number: int) -> int:
 
 @router.get("/api/terms/{term_id}/load")
 def get_term_load(term_id: int, db: Session = Depends(get_db)):
-    from models import Term, TaughtWithGroup
+    from models import Term, TaughtWithGroup, TermTaughtWithGroup
 
     term = db.query(Term).filter(Term.id == term_id).first()
     if not term:
@@ -24,15 +24,21 @@ def get_term_load(term_id: int, db: Session = Depends(get_db)):
         if e.schedule_table_id and e.faculty_id
     ]
 
-    # Build TaughtWith lookups
-    tw_groups = db.query(TaughtWithGroup).all()
-    course_to_tw_group: dict[int, int] = {}  # course_id -> group_id
-    tw_group_course_ids: dict[int, list[int]] = {}  # group_id -> [course_id, ...]
-    for g in tw_groups:
-        ids = [m.course_id for m in g.members]
-        tw_group_course_ids[g.id] = ids
-        for cid in ids:
-            course_to_tw_group[cid] = g.id
+    # Build combined TaughtWith lookups (global "g_N" + per-term "t_N")
+    course_to_tw_key: dict[int, str] = {}
+    tw_key_courses: dict[str, list] = {}
+    for g in db.query(TaughtWithGroup).all():
+        key = f"g_{g.id}"
+        courses_in_group = [m.course for m in g.members]
+        tw_key_courses[key] = courses_in_group
+        for m in g.members:
+            course_to_tw_key[m.course_id] = key
+    for g in db.query(TermTaughtWithGroup).filter(TermTaughtWithGroup.term_id == term_id).all():
+        key = f"t_{g.id}"
+        courses_in_group = [m.course for m in g.members]
+        tw_key_courses[key] = courses_in_group
+        for m in g.members:
+            course_to_tw_key[m.course_id] = key
 
     # Group entries by faculty
     by_faculty: dict[int, list] = {}
@@ -46,8 +52,8 @@ def get_term_load(term_id: int, db: Session = Depends(get_db)):
         # Group entries by "teaching unit": TaughtWith group or standalone course
         units: dict[str, list] = {}
         for e in fentries:
-            gid = course_to_tw_group.get(e.course_id)
-            key = f"tw_{gid}" if gid else f"c_{e.course_id}"
+            gk = course_to_tw_key.get(e.course_id)
+            key = gk if gk else f"c_{e.course_id}"
             units.setdefault(key, []).append(e)
 
         courses_data = []
@@ -55,8 +61,7 @@ def get_term_load(term_id: int, db: Session = Depends(get_db)):
         total_credit_hours = 0
 
         for key, uentries in units.items():
-            if key.startswith("tw_"):
-                gid = int(key[3:])
+            if key.startswith("g_") or key.startswith("t_"):
                 # Collect distinct courses in the group that appear in this faculty's entries
                 seen_courses: dict[int, object] = {}
                 for e in uentries:
