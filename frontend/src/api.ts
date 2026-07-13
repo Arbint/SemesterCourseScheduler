@@ -41,7 +41,11 @@ export interface Faculty {
   last_name: string
   rank: Rank
   tags: string[]
-  full_load: number
+}
+
+export interface LoadSettings {
+  fulltime_load: number
+  parttime_load: number
 }
 
 export interface Semester {
@@ -260,6 +264,11 @@ export interface FacultyLoad {
 
 export const loadApi = {
   getTermLoad: (termId: number) => api.get<FacultyLoad[]>(`/terms/${termId}/load`).then(r => r.data),
+}
+
+export const loadSettingsApi = {
+  get: () => api.get<LoadSettings>('/load-settings').then(r => r.data),
+  update: (d: LoadSettings) => api.put<LoadSettings>('/load-settings', d).then(r => r.data),
 }
 
 export const chatApi = {

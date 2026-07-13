@@ -57,10 +57,17 @@ class Faculty(Base):
     last_name = Column(String, nullable=False)
     rank = Column(Enum(RankEnum), nullable=False)
     tags = Column(JSON, default=list)
-    full_load = Column(Integer, default=4)
 
     teaching_capabilities = relationship("FacultyTeaching", back_populates="faculty", cascade="all, delete-orphan")
     schedule_entries = relationship("ScheduleEntry", back_populates="faculty")
+
+
+class LoadSettings(Base):
+    __tablename__ = "load_settings"
+
+    id = Column(Integer, primary_key=True, default=1)
+    fulltime_load = Column(Integer, nullable=False, default=3)
+    parttime_load = Column(Integer, nullable=False, default=2)
 
 
 class Semester(Base):

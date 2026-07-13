@@ -96,32 +96,32 @@ for label, cap in ROOMS:
 db.commit()
 
 # ── Faculty ───────────────────────────────────────────────────────────────────
-# (first_name, last_name, rank, tags, full_load)
+# (first_name, last_name, rank, tags)
 FACULTY_DATA = [
-    ("Kassandra", "Arevalo",   RankEnum.full_time,  ["Animation"],              4),
-    ("Adam",      "Blair",     RankEnum.full_time,  ["Modeling", "Environment"],4),
-    ("Brendan",   "Casey",     RankEnum.part_time,  ["Production"],             3),
-    ("Michael",   "Choi",      RankEnum.part_time,  ["Art"],                    2),
-    ("Alessandro","Dady",      RankEnum.part_time,  ["Modeling"],               3),
-    ("Anna",      "Faryniarz", RankEnum.part_time,  ["Animation"],              2),
-    ("Justin",    "Gallardo",  RankEnum.full_time,  ["Programming", "Animation"],5),
-    ("Carlos",    "Garcia",    RankEnum.full_time,  ["Animation", "Modeling"],  5),
-    ("Devin",     "Gee",       RankEnum.part_time,  ["Modeling"],               2),
-    ("Isaac",     "Herrera",   RankEnum.part_time,  ["Modeling"],               3),
-    ("Jingtian",  "Li",        RankEnum.full_time,  ["Programming"],            4),
-    ("David",     "Riddle",    RankEnum.part_time,  ["Modeling"],               3),
-    ("Randall",   "Rudd",      RankEnum.full_time,  ["Production"],             4),
-    ("Giovanni",  "Sabella",   RankEnum.part_time,  ["Programming"],            3),
-    ("Jacob",     "Salazar",   RankEnum.full_time,  ["Modeling", "Environment"],4),
-    ("Emily",     "Sidler",    RankEnum.full_time,  ["Animation"],              4),
-    ("Joshua",    "Starrett",  RankEnum.part_time,  ["Programming"],            2),
-    ("Nathan",    "Sumsion",   RankEnum.part_time,  ["Programming"],            2),
-    ("Adam",      "Watkins",   RankEnum.part_time,  ["Animation", "History"],   2),
-    ("William",   "Watkins",   RankEnum.part_time,  ["Math", "Core"],           2),
+    ("Kassandra", "Arevalo",   RankEnum.full_time,  ["Animation"]),
+    ("Adam",      "Blair",     RankEnum.full_time,  ["Modeling", "Environment"]),
+    ("Brendan",   "Casey",     RankEnum.part_time,  ["Production"]),
+    ("Michael",   "Choi",      RankEnum.part_time,  ["Art"]),
+    ("Alessandro","Dady",      RankEnum.part_time,  ["Modeling"]),
+    ("Anna",      "Faryniarz", RankEnum.part_time,  ["Animation"]),
+    ("Justin",    "Gallardo",  RankEnum.full_time,  ["Programming", "Animation"]),
+    ("Carlos",    "Garcia",    RankEnum.full_time,  ["Animation", "Modeling"]),
+    ("Devin",     "Gee",       RankEnum.part_time,  ["Modeling"]),
+    ("Isaac",     "Herrera",   RankEnum.part_time,  ["Modeling"]),
+    ("Jingtian",  "Li",        RankEnum.full_time,  ["Programming"]),
+    ("David",     "Riddle",    RankEnum.part_time,  ["Modeling"]),
+    ("Randall",   "Rudd",      RankEnum.full_time,  ["Production"]),
+    ("Giovanni",  "Sabella",   RankEnum.part_time,  ["Programming"]),
+    ("Jacob",     "Salazar",   RankEnum.full_time,  ["Modeling", "Environment"]),
+    ("Emily",     "Sidler",    RankEnum.full_time,  ["Animation"]),
+    ("Joshua",    "Starrett",  RankEnum.part_time,  ["Programming"]),
+    ("Nathan",    "Sumsion",   RankEnum.part_time,  ["Programming"]),
+    ("Adam",      "Watkins",   RankEnum.part_time,  ["Animation", "History"]),
+    ("William",   "Watkins",   RankEnum.part_time,  ["Math", "Core"]),
 ]
 faculty_map = {}  # last_name → Faculty (works because last names are unique)
-for fn, ln, rank, tags, fl in FACULTY_DATA:
-    f = Faculty(first_name=fn, last_name=ln, rank=rank, tags=tags, full_load=fl)
+for fn, ln, rank, tags in FACULTY_DATA:
+    f = Faculty(first_name=fn, last_name=ln, rank=rank, tags=tags)
     db.add(f)
     db.flush()
     faculty_map[ln] = f

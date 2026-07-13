@@ -169,6 +169,14 @@ def generate_excel(db, term_id: int) -> bytes:
     for e in all_entries:
         by_faculty.setdefault(e.faculty_id, []).append(e)
 
+    from models import LoadSettings
+    settings = db.query(LoadSettings).first()
+    fulltime_load = settings.fulltime_load if settings else 3
+    parttime_load = settings.parttime_load if settings else 2
+
+    def _full_load(f) -> int:
+        return fulltime_load if f.rank.value == "full_time" else parttime_load
+
     load_rows: list[dict] = []
     for fid, fentries in by_faculty.items():
         faculty = fentries[0].faculty
@@ -207,7 +215,7 @@ def generate_excel(db, term_id: int) -> bytes:
         load_rows.append({
             "name": f"{faculty.last_name}, {faculty.first_name}",
             "rank": faculty.rank.value.replace("_", " ").title(),
-            "full_load": faculty.full_load,
+            "full_load": _full_load(faculty),
             "courses": courses_data,
             "total_sections": total_sections,
             "total_credit_hours": total_ch,

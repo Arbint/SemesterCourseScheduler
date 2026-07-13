@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { DndContext, type DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core'
 import {
   termsApi, tablesApi, entriesApi, coursesApi, roomsApi, timeSlotsApi,
@@ -955,9 +957,30 @@ function AIChatPanel({
               background: m.role === 'user' ? 'var(--accent)' : 'var(--bg-elevated)',
               color: m.role === 'user' ? '#fff' : 'var(--text-primary)',
               borderRadius: 'var(--border-radius)', padding: '8px 12px',
-              maxWidth: '85%', fontSize: 13, whiteSpace: 'pre-wrap', lineHeight: 1.5
+              maxWidth: '85%', fontSize: 13, lineHeight: 1.5,
             }}>
-              {m.text}
+              {m.role === 'user' ? (
+                <span style={{ whiteSpace: 'pre-wrap' }}>{m.text}</span>
+              ) : (
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    table: ({ children }) => (
+                      <table style={{ borderCollapse: 'collapse', fontSize: 12, margin: '6px 0', width: '100%' }}>{children}</table>
+                    ),
+                    th: ({ children }) => (
+                      <th style={{ border: '1px solid var(--border-color)', padding: '4px 8px', background: 'var(--bg-surface)', textAlign: 'left' }}>{children}</th>
+                    ),
+                    td: ({ children }) => (
+                      <td style={{ border: '1px solid var(--border-color)', padding: '4px 8px' }}>{children}</td>
+                    ),
+                    p: ({ children }) => <p style={{ margin: '4px 0' }}>{children}</p>,
+                    code: ({ children }) => <code style={{ background: 'rgba(0,0,0,0.3)', padding: '1px 4px', borderRadius: 3, fontSize: 11 }}>{children}</code>,
+                  }}
+                >
+                  {m.text}
+                </ReactMarkdown>
+              )}
             </div>
             {m.proposal && (
               <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--warning)', borderRadius: 'var(--border-radius)', padding: 12, marginTop: 8, maxWidth: '85%' }}>

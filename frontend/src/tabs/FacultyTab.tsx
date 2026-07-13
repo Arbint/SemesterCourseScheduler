@@ -6,7 +6,7 @@ import { MultiSelect } from '../components/MultiSelect'
 import { showToast } from '../components/Toast'
 import { useAuth } from '../contexts/AuthContext'
 
-const EMPTY: Omit<Faculty, 'id'> = { first_name: '', last_name: '', rank: 'full_time', tags: [], full_load: 4 }
+const EMPTY: Omit<Faculty, 'id'> = { first_name: '', last_name: '', rank: 'full_time', tags: [] }
 
 export function FacultyTab() {
   const { isLoggedIn } = useAuth()
@@ -35,7 +35,7 @@ export function FacultyTab() {
 
   const openEdit = async (f: Faculty) => {
     setEditing(f)
-    setForm({ first_name: f.first_name, last_name: f.last_name, rank: f.rank, tags: f.tags, full_load: f.full_load })
+    setForm({ first_name: f.first_name, last_name: f.last_name, rank: f.rank, tags: f.tags })
     const taught = await facultyApi.getCourses(f.id)
     setTeachingIds(taught.map(c => c.id))
     setShowModal(true)
@@ -94,7 +94,6 @@ export function FacultyTab() {
               <tr>
                 <th>Name</th>
                 <th>Rank</th>
-                <th>Full Load</th>
                 <th>Tags</th>
                 <th></th>
               </tr>
@@ -108,7 +107,6 @@ export function FacultyTab() {
                       {f.rank === 'full_time' ? 'Full Time' : 'Part Time'}
                     </span>
                   </td>
-                  <td>{f.full_load}</td>
                   <td>{f.tags.map(t => <span key={t} className="tag">{t}</span>)}</td>
                   <td style={{ display: 'flex', gap: 6 }}>
                     {isLoggedIn && <button className="btn-secondary btn-sm" onClick={() => openEdit(f)}>Edit</button>}
@@ -137,10 +135,6 @@ export function FacultyTab() {
               <option value="full_time">Full Time</option>
               <option value="part_time">Part Time</option>
             </select>
-          </div>
-          <div className="form-group">
-            <label>Full Load (sections)</label>
-            <input type="number" min={1} value={form.full_load} onChange={e => setForm(f => ({ ...f, full_load: +e.target.value }))} />
           </div>
           <div className="form-group">
             <label>Tags</label>

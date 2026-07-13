@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { constraintsApi, coursesApi, type TaughtWithGroup, type CoReqGroup, type Course } from '../api'
+import { constraintsApi, coursesApi, loadSettingsApi, type TaughtWithGroup, type CoReqGroup, type Course, type LoadSettings } from '../api'
 import { showToast } from '../components/Toast'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -88,16 +88,22 @@ export function ConstraintsTab() {
   const [taughtWith, setTaughtWith] = useState<TaughtWithGroup[]>([])
   const [coreq, setCoReq] = useState<CoReqGroup[]>([])
   const [courses, setCourses] = useState<Course[]>([])
+  const [loadSettings, setLoadSettings] = useState<LoadSettings>({ fulltime_load: 3, parttime_load: 2 })
+  const [loadForm, setLoadForm] = useState<LoadSettings>({ fulltime_load: 3, parttime_load: 2 })
+  const [savingLoad, setSavingLoad] = useState(false)
 
   const load = async () => {
-    const [tw, cr, c] = await Promise.all([
+    const [tw, cr, c, ls] = await Promise.all([
       constraintsApi.listTaughtWith(),
       constraintsApi.listCoReq(),
-      coursesApi.list()
+      coursesApi.list(),
+      loadSettingsApi.get(),
     ])
     setTaughtWith(tw)
     setCoReq(cr)
     setCourses(c)
+    setLoadSettings(ls)
+    setLoadForm(ls)
   }
   useEffect(() => { load() }, [])
 
@@ -106,10 +112,64 @@ export function ConstraintsTab() {
     catch (e: any) { showToast(e.response?.data?.detail || 'Operation failed') }
   }
 
+  const saveLoadSettings = async () => {
+    setSavingLoad(true)
+    try {
+      const updated = await loadSettingsApi.update(loadForm)
+      setLoadSettings(updated)
+      setLoadForm(updated)
+      showToast('Load settings saved', 'success')
+    } catch (e: any) {
+      showToast(e.response?.data?.detail || 'Save failed')
+    } finally {
+      setSavingLoad(false) }
+  }
+
+  const loadDirty = loadForm.fulltime_load !== loadSettings.fulltime_load ||
+    loadForm.parttime_load !== loadSettings.parttime_load
+
   return (
     <div>
       <div className="page-header"><h1>Constraints</h1></div>
-      <div className="page-content" style={{ display: 'flex', gap: 20 }}>
+      <div className="page-content">
+
+      {/* Load Settings */}
+      <div className="card" style={{ marginBottom: 20, maxWidth: 400 }}>
+        <h3 style={{ margin: '0 0 14px', color: 'var(--text-bright)', fontSize: 14 }}>Faculty Load Tiers</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label style={{ fontSize: 12 }}>Full-Time Load</label>
+            <input
+              type="number" min={1} max={10}
+              value={loadForm.fulltime_load}
+              onChange={e => isLoggedIn && setLoadForm(f => ({ ...f, fulltime_load: +e.target.value }))}
+              disabled={!isLoggedIn}
+              style={{ padding: '5px 8px', fontSize: 13 }}
+            />
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label style={{ fontSize: 12 }}>Part-Time Load</label>
+            <input
+              type="number" min={1} max={10}
+              value={loadForm.parttime_load}
+              onChange={e => isLoggedIn && setLoadForm(f => ({ ...f, parttime_load: +e.target.value }))}
+              disabled={!isLoggedIn}
+              style={{ padding: '5px 8px', fontSize: 13 }}
+            />
+          </div>
+        </div>
+        {isLoggedIn && (
+          <button
+            className="btn-primary btn-sm"
+            onClick={saveLoadSettings}
+            disabled={savingLoad || !loadDirty}
+          >
+            {savingLoad ? 'Saving...' : 'Save'}
+          </button>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', gap: 20 }}>
         <GroupPanel
           title="Taught With (same time, same room, same instructor)"
           groups={taughtWith}
@@ -130,6 +190,8 @@ export function ConstraintsTab() {
           onAddCourse={(gid, cid) => withToast(() => constraintsApi.addCoReqCourse(gid, cid).then(() => {}))}
           onRemoveCourse={(gid, cid) => withToast(() => constraintsApi.removeCoReqCourse(gid, cid).then(() => {}))}
         />
+      </div>
+
       </div>
     </div>
   )

@@ -6,7 +6,7 @@ import models  # ensure all models are registered
 
 from routers import (
     faculty, courses, rooms, timeslots, constraints,
-    terms, schedule_tables, schedule_entries, sections, chat, static_data, load, auth
+    terms, schedule_tables, schedule_entries, sections, chat, static_data, load, auth, load_settings
 )
 
 app = FastAPI(title="Semester Course Scheduler")
@@ -44,7 +44,7 @@ def _migrate_db():
 
 def _seed_static_data():
     from database import SessionLocal
-    from models import Semester, Weekday, SemesterEnum, WeekdayEnum
+    from models import Semester, Weekday, LoadSettings, SemesterEnum, WeekdayEnum
 
     db = SessionLocal()
     try:
@@ -63,6 +63,10 @@ def _seed_static_data():
             ]
             for name, order in weekdays:
                 db.add(Weekday(name=name, display_order=order))
+            db.commit()
+
+        if db.query(LoadSettings).count() == 0:
+            db.add(LoadSettings(id=1, fulltime_load=3, parttime_load=2))
             db.commit()
     finally:
         db.close()
@@ -85,6 +89,7 @@ app.include_router(sections.router)
 app.include_router(chat.router)
 app.include_router(static_data.router)
 app.include_router(load.router)
+app.include_router(load_settings.router)
 app.include_router(auth.router)
 
 

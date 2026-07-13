@@ -10,7 +10,6 @@ class FacultyBase(BaseModel):
     last_name: str
     rank: RankEnum
     tags: list[str] = []
-    full_load: int = 4
 
 class FacultyCreate(FacultyBase):
     pass
@@ -21,6 +20,18 @@ class FacultyUpdate(FacultyBase):
 class FacultyOut(FacultyBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
+
+
+# --- LoadSettings ---
+
+class LoadSettingsOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    fulltime_load: int
+    parttime_load: int
+
+class LoadSettingsUpdate(BaseModel):
+    fulltime_load: int
+    parttime_load: int
 
 
 # --- Semester ---

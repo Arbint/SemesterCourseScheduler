@@ -1,18 +1,33 @@
 import json
 import uuid
 import statistics
+import os
 from agents.agent import Agent
+
+_CONTEXT_FILE = os.path.join(os.path.dirname(__file__), "context", "context.md")
+
+def _load_context() -> str:
+    try:
+        with open(_CONTEXT_FILE, "r", encoding="utf-8") as f:
+            return f.read()
+    except OSError:
+        return ""
 
 
 class ScheduleAuditAgent(Agent):
     def __init__(self, db, term_id: int):
+        domain_context = _load_context()
         super().__init__(
             name="ScheduleAuditAgent",
             description="Audit and auto-schedule a semester term",
             properties={
                 "message": {"type": "string", "description": "User message"}
             },
-            system="""You are an expert academic schedule auditor and planner.
+            system=f"""{domain_context}
+
+---
+
+You are an expert academic schedule auditor and planner.
 You help department chairs build and optimize semester schedules.
 
 You can:
@@ -151,14 +166,23 @@ CRITICAL RULES:
         ]
 
     def get_schedule_summary(self):
-        from models import Term, TimeSlot, Room
+        from models import Term, TaughtWithMember, TermTaughtWithGroup
         self.db.expire_all()
         term = self.db.query(Term).filter_by(id=self.term_id).first()
         if not term:
             return {"error": "Term not found"}
 
+        # Build combined TaughtWith map: course_id -> group_key
+        tw_map: dict[int, str] = {}
+        for m in self.db.query(TaughtWithMember).all():
+            tw_map[m.course_id] = f"g_{m.group_id}"
+        for g in self.db.query(TermTaughtWithGroup).filter_by(term_id=self.term_id).all():
+            for m in g.members:
+                tw_map[m.course_id] = f"t_{g.id}"
+
         result = {
             "term": f"{term.semester.name.value} {term.year}",
+            "note": "All entries listed are offered in this semester. TaughtWith pairs share the same group_key and count as 1 load unit.",
             "tables": [],
             "unscheduled_entries": []
         }
@@ -175,7 +199,9 @@ CRITICAL RULES:
                     "room": entry.room.label if entry.room else None,
                     "faculty": f"{entry.faculty.first_name} {entry.faculty.last_name}" if entry.faculty else None,
                     "faculty_id": entry.faculty_id,
-                    "time_slots": [ts.label for ts in sorted(entry.time_slots, key=lambda ts: ts.display_order)]
+                    "faculty_rank": entry.faculty.rank.value if entry.faculty else None,
+                    "time_slots": [ts.label for ts in sorted(entry.time_slots, key=lambda ts: ts.display_order)],
+                    "taught_with_group": tw_map.get(entry.course_id),
                 })
             result["tables"].append({"weekdays": weekdays, "entries": entries_data})
 
@@ -185,16 +211,24 @@ CRITICAL RULES:
                     "entry_id": entry.id,
                     "course": f"{entry.course.dept_code}{entry.course.course_number} {entry.course.course_name}",
                     "course_id": entry.course_id,
-                    "section": entry.section
+                    "section": entry.section,
+                    "taught_with_group": tw_map.get(entry.course_id),
                 })
 
         return result
 
     def get_faculty_load(self):
-        from models import Term, Faculty
+        from models import Term, LoadSettings
         term = self.db.query(Term).filter_by(id=self.term_id).first()
         if not term:
             return {"error": "Term not found"}
+
+        settings = self.db.query(LoadSettings).first()
+        fulltime_load = settings.fulltime_load if settings else 3
+        parttime_load = settings.parttime_load if settings else 2
+
+        def _full_load(f) -> int:
+            return fulltime_load if f.rank.value == "full_time" else parttime_load
 
         load_map: dict[int, int] = {}
         faculty_map: dict[int, object] = {}
@@ -207,13 +241,15 @@ CRITICAL RULES:
         result = []
         for fid, count in load_map.items():
             f = faculty_map[fid]
+            limit = _full_load(f)
             result.append({
                 "faculty_id": fid,
                 "name": f"{f.first_name} {f.last_name}",
+                "rank": f.rank.value,
                 "sections": count,
-                "full_load": f.full_load,
-                "overloaded": count > f.full_load,
-                "underloaded": count < f.full_load,
+                "full_load": limit,
+                "overloaded": count > limit,
+                "underloaded": f.rank.value == "full_time" and count < limit,
             })
         return result
 
@@ -235,10 +271,17 @@ CRITICAL RULES:
         return result
 
     def get_faculty(self):
-        from models import Faculty, Term
+        from models import Faculty, Term, LoadSettings
         term = self.db.query(Term).filter_by(id=self.term_id).first()
         if not term:
             return {"error": "Term not found"}
+
+        settings = self.db.query(LoadSettings).first()
+        fulltime_load = settings.fulltime_load if settings else 3
+        parttime_load = settings.parttime_load if settings else 2
+
+        def _full_load(f) -> int:
+            return fulltime_load if f.rank.value == "full_time" else parttime_load
 
         # Build current load map from this term's entries
         load_map: dict[int, int] = {}
@@ -249,12 +292,15 @@ CRITICAL RULES:
         result = []
         for f in self.db.query(Faculty).order_by(Faculty.last_name).all():
             current_load = load_map.get(f.id, 0)
+            limit = _full_load(f)
             result.append({
                 "faculty_id": f.id,
                 "name": f"{f.first_name} {f.last_name}",
-                "full_load": f.full_load,
+                "rank": f.rank.value,
+                "full_load": limit,
                 "current_sections": current_load,
-                "overloaded": current_load > f.full_load,
+                "overloaded": current_load > limit,
+                "underloaded": f.rank.value == "full_time" and current_load < limit,
                 "can_teach": [
                     f"{cap.course.dept_code}{cap.course.course_number} {cap.course.course_name}"
                     for cap in f.teaching_capabilities
@@ -448,6 +494,15 @@ CRITICAL RULES:
         else:
             slot_search_order = list(range(len(time_slots)))
 
+        # Load tier settings
+        from models import LoadSettings
+        _settings = self.db.query(LoadSettings).first()
+        _fulltime_load = _settings.fulltime_load if _settings else 3
+        _parttime_load = _settings.parttime_load if _settings else 2
+
+        def _full_load(f) -> int:
+            return _fulltime_load if f.rank.value == "full_time" else _parttime_load
+
         # Build faculty capability map: course_id -> list of Faculty
         fac_caps: dict[int, list] = {}
         for ft in self.db.query(FacultyTeaching).all():
@@ -511,7 +566,7 @@ CRITICAL RULES:
                                 capable = fac_caps.get(entry.course_id, [])
                                 available = [
                                     f for f in capable
-                                    if fac_load.get(f.id, 0) < f.full_load
+                                    if fac_load.get(f.id, 0) < _full_load(f)
                                     and all(
                                         (wk_key, si2) not in fac_slots.get(f.id, set())
                                         for si2 in slot_range

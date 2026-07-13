@@ -12,11 +12,19 @@ def _credit_hours(course_number: int) -> int:
 
 @router.get("/api/terms/{term_id}/load")
 def get_term_load(term_id: int, db: Session = Depends(get_db)):
-    from models import Term, TaughtWithGroup, TermTaughtWithGroup
+    from models import Term, TaughtWithGroup, TermTaughtWithGroup, LoadSettings
 
     term = db.query(Term).filter(Term.id == term_id).first()
     if not term:
         raise HTTPException(404, "Term not found")
+
+    # Load tier settings
+    settings = db.query(LoadSettings).first()
+    fulltime_load = settings.fulltime_load if settings else 3
+    parttime_load = settings.parttime_load if settings else 2
+
+    def _full_load(faculty) -> int:
+        return fulltime_load if faculty.rank.value == "full_time" else parttime_load
 
     # Only scheduled entries with a faculty assigned
     entries = [
@@ -96,7 +104,7 @@ def get_term_load(term_id: int, db: Session = Depends(get_db)):
             "faculty_id": fid,
             "name": f"{faculty.last_name}, {faculty.first_name}",
             "rank": faculty.rank.value,
-            "full_load": faculty.full_load,
+            "full_load": _full_load(faculty),
             "courses": courses_data,
             "total_sections": total_sections,
             "total_credit_hours": total_credit_hours,

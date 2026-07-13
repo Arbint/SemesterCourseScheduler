@@ -68,13 +68,16 @@ function AppShell() {
         </div>
       </div>
 
-      <div style={{ flex: 1, overflow: tab === 'schedules' ? 'hidden' : 'auto' }}>
+      <div style={{ flex: 1, overflow: tab === 'schedules' ? 'hidden' : 'auto', position: 'relative' }}>
         {tab === 'faculty' && <FacultyTab />}
         {tab === 'courses' && <CourseTab />}
         {tab === 'rooms' && <RoomsTab />}
         {tab === 'timeslots' && <TimeSlotsTab />}
         {tab === 'constraints' && <ConstraintsTab />}
-        {tab === 'schedules' && <TermSchedulesTab />}
+        {/* Always mounted so chat history is preserved across tab switches */}
+        <div style={{ display: tab === 'schedules' ? 'flex' : 'none', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+          <TermSchedulesTab />
+        </div>
         {tab === 'load' && <LoadTab />}
       </div>
 

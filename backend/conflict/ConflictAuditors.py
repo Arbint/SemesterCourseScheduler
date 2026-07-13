@@ -223,8 +223,15 @@ class FacultyLoad(ConflictAuditor):
         super().__init__(db, isCritical=False)
 
     def Audit(self, term) -> list[ConflictReport]:
-        from models import Faculty
+        from models import Faculty, LoadSettings
         reports = []
+        settings = self.db.query(LoadSettings).first()
+        fulltime_load = settings.fulltime_load if settings else 3
+        parttime_load = settings.parttime_load if settings else 2
+
+        def _full_load(f) -> int:
+            return fulltime_load if f.rank.value == "full_time" else parttime_load
+
         tw_map = _build_combined_tw_map(self.db, term.id)
         load_map: dict[int, int] = {}
         faculty_map: dict[int, object] = {}
@@ -244,12 +251,12 @@ class FacultyLoad(ConflictAuditor):
 
         for fid, count in load_map.items():
             f = faculty_map[fid]
-            if count > f.full_load:
-                # Collect all course_ids for this faculty in the term
+            limit = _full_load(f)
+            if count > limit:
                 overloaded = [e for e in term.schedule_entries if e.faculty_id == fid]
                 reports.append(ConflictReport(
                     courses=[e.course_id for e in overloaded],
                     entries=[e.id for e in overloaded],
-                    description=f"Faculty load: {f.first_name} {f.last_name} has {count} sections (full load is {f.full_load})"
+                    description=f"Faculty load: {f.first_name} {f.last_name} has {count} sections (full load is {limit})"
                 ))
         return reports
