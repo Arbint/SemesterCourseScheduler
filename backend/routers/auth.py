@@ -2,7 +2,7 @@ import hashlib
 import os
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -11,6 +11,7 @@ from models import User
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
+# The one valid session token; clients must present it in Authorization: Bearer <token>
 _session_token: str | None = None
 
 
@@ -20,6 +21,17 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def _extract_token(request: Request) -> str:
+    header = request.headers.get("Authorization", "")
+    if header.startswith("Bearer "):
+        return header[len("Bearer "):]
+    return ""
+
+
+def _token_valid(token: str) -> bool:
+    return bool(_session_token and token and secrets.compare_digest(_session_token, token))
 
 
 def _hash_password(password: str) -> str:
@@ -46,12 +58,13 @@ class LoginRequest(BaseModel):
 
 
 @router.get("/status")
-def get_status(db: Session = Depends(get_db)):
+def get_status(request: Request, db: Session = Depends(get_db)):
     user = db.query(User).first()
+    logged_in = _token_valid(_extract_token(request))
     return {
         "has_user": user is not None,
-        "logged_in": _session_token is not None,
-        "username": user.username if (user and _session_token) else None,
+        "logged_in": logged_in,
+        "username": user.username if (user and logged_in) else None,
     }
 
 
@@ -80,7 +93,8 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/logout")
-def logout():
+def logout(request: Request):
     global _session_token
-    _session_token = None
+    if _token_valid(_extract_token(request)):
+        _session_token = None
     return {"ok": True}

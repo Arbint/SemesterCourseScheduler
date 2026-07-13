@@ -1,6 +1,23 @@
 import axios from 'axios'
 
+const TOKEN_KEY = 'scs_auth_token'
+
+export function getStoredToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY)
+}
+
+export function setStoredToken(token: string | null) {
+  if (token) localStorage.setItem(TOKEN_KEY, token)
+  else localStorage.removeItem(TOKEN_KEY)
+}
+
 const api = axios.create({ baseURL: '/api' })
+
+api.interceptors.request.use(config => {
+  const token = getStoredToken()
+  if (token) config.headers['Authorization'] = `Bearer ${token}`
+  return config
+})
 
 api.interceptors.response.use(
   r => r,
@@ -262,6 +279,9 @@ export const authApi = {
   status: () => api.get<AuthStatus>('/auth/status').then(r => r.data),
   register: (username: string, password: string) => api.post('/auth/register', { username, password }),
   login: (username: string, password: string) =>
-    api.post<{ token: string; username: string }>('/auth/login', { username, password }).then(r => r.data),
-  logout: () => api.post('/auth/logout'),
+    api.post<{ token: string; username: string }>('/auth/login', { username, password }).then(r => {
+      setStoredToken(r.data.token)
+      return r.data
+    }),
+  logout: () => api.post('/auth/logout').then(r => { setStoredToken(null); return r }),
 }
