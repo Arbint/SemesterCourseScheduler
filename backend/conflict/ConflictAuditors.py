@@ -139,6 +139,11 @@ class RoomConflict(ConflictAuditor):
                 weekdays_b = _get_effective_weekdays(b)
                 if not (weekdays_a & weekdays_b):
                     continue
+                # TaughtWith exception: same group shares the same room intentionally
+                gid_a = _get_taught_with_group_id(a)
+                gid_b = _get_taught_with_group_id(b)
+                if gid_a is not None and gid_a == gid_b:
+                    continue
                 reports.append(ConflictReport(
                     courses=[a.course_id, b.course_id],
                     entries=[a.id, b.id],
@@ -216,12 +221,19 @@ class FacultyLoad(ConflictAuditor):
         reports = []
         load_map: dict[int, int] = {}
         faculty_map: dict[int, object] = {}
+        counted_tw: set[tuple[int, int]] = set()  # (faculty_id, tw_group_id) already counted
 
         for entry in term.schedule_entries:
-            if entry.faculty_id:
-                load_map[entry.faculty_id] = load_map.get(entry.faculty_id, 0) + 1
-                if entry.faculty_id not in faculty_map:
-                    faculty_map[entry.faculty_id] = entry.faculty
+            if not entry.faculty_id:
+                continue
+            faculty_map.setdefault(entry.faculty_id, entry.faculty)
+            tw_gid = _get_taught_with_group_id(entry)
+            if tw_gid is not None:
+                key = (entry.faculty_id, tw_gid)
+                if key in counted_tw:
+                    continue  # partner already counted; don't double-count
+                counted_tw.add(key)
+            load_map[entry.faculty_id] = load_map.get(entry.faculty_id, 0) + 1
 
         for fid, count in load_map.items():
             f = faculty_map[fid]

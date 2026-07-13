@@ -108,7 +108,7 @@ function TermSelector({
 
 // --- Draggable Course Card (from Course List) ---
 function DraggableCourseCard({
-  course, entries, neededSections, isLoggedIn, onSectionChange, highlighted, dimmed
+  course, entries, neededSections, isLoggedIn, onSectionChange, highlighted, dimmed, taughtWithPartners
 }: {
   course: Course
   entries: ScheduleEntry[]
@@ -117,6 +117,7 @@ function DraggableCourseCard({
   onSectionChange: (count: number) => void
   highlighted: boolean
   dimmed: boolean
+  taughtWithPartners: Course[]
 }) {
   const scheduled = entries.filter(e => e.schedule_table_id !== null)
   const border = scheduled.length === 0
@@ -156,6 +157,15 @@ function DraggableCourseCard({
       </div>
       <div style={{ color: 'var(--text-bright)', fontSize: 13, marginTop: 2 }}>{course.course_name}</div>
       <div style={{ color: 'var(--text-secondary)', fontSize: 11, marginTop: 4 }}>Capacity: {course.capacity}</div>
+      {taughtWithPartners.length > 0 && (
+        <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+          {taughtWithPartners.map(p => (
+            <span key={p.id} style={{ fontSize: 10, background: 'rgba(97,175,239,0.15)', color: 'var(--accent)', border: '1px solid rgba(97,175,239,0.35)', borderRadius: 3, padding: '1px 5px' }}>
+              TW: {p.dept_code} {p.course_number}
+            </span>
+          ))}
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
         <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Sections needed:</span>
         <input
@@ -303,6 +313,135 @@ function ScheduledSectionCard({
   )
 }
 
+// --- Combined card for a TaughtWith pair in the same cell ---
+function TaughtWithSectionCard({
+  primaryEntry, partnerEntry, primaryCourse, partnerCourse,
+  allFaculty, tableWeekdays, dimmed, isLoggedIn, issueHighlightSeverity,
+  onFacultyChange, onDelete, onActiveWeekdaysChange
+}: {
+  primaryEntry: ScheduleEntry
+  partnerEntry: ScheduleEntry
+  primaryCourse: Course
+  partnerCourse: Course
+  allFaculty: Faculty[]
+  tableWeekdays: Weekday[]
+  dimmed: boolean
+  isLoggedIn: boolean
+  issueHighlightSeverity?: 'error' | 'warning' | null
+  onFacultyChange: (fid: number | null) => void
+  onDelete: () => void
+  onActiveWeekdaysChange: (ids: number[]) => void
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `entry-${primaryEntry.id}`,
+    data: { type: 'entry', entry_id: primaryEntry.id },
+    disabled: !isLoggedIn,
+  })
+
+  const bg = facultyColor(primaryEntry.faculty_id)
+  const showToggles = tableWeekdays.length > primaryCourse.frequency
+
+  const toggleDay = (dayId: number) => {
+    const active = primaryEntry.active_weekday_ids.includes(dayId)
+    const newIds = active
+      ? primaryEntry.active_weekday_ids.filter(id => id !== dayId)
+      : [...primaryEntry.active_weekday_ids, dayId]
+    onActiveWeekdaysChange(newIds)
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...(isLoggedIn ? listeners : {})}
+      {...attributes}
+      style={{
+        background: bg,
+        border: issueHighlightSeverity === 'error'
+          ? '2px solid var(--error)'
+          : issueHighlightSeverity === 'warning'
+          ? '2px solid var(--warning)'
+          : '1px solid rgba(255,255,255,0.1)',
+        borderRadius: 'var(--border-radius)',
+        padding: '6px 8px',
+        fontSize: 11,
+        cursor: isLoggedIn ? 'grab' : 'default',
+        opacity: isDragging ? 0.4 : dimmed ? 0.25 : 1,
+        userSelect: 'none',
+        position: 'relative',
+        transition: 'opacity 0.15s',
+        overflow: 'hidden',
+        height: '100%',
+        boxSizing: 'border-box',
+        boxShadow: issueHighlightSeverity === 'error'
+          ? '0 0 8px var(--error)'
+          : issueHighlightSeverity === 'warning'
+          ? '0 0 8px var(--warning)'
+          : undefined,
+      }}
+    >
+      <div style={{ fontWeight: 600, color: '#ddd', lineHeight: 1.3 }}>
+        {primaryCourse.dept_code} {primaryCourse.course_number} §{primaryEntry.section}
+      </div>
+      <div style={{ color: '#bbb', fontSize: 10, marginTop: 1 }}>{primaryCourse.course_name}</div>
+      <div style={{ color: 'rgba(180,200,220,0.8)', fontSize: 10, marginTop: 3, fontWeight: 600 }}>
+        & {partnerCourse.dept_code} {partnerCourse.course_number}
+      </div>
+      <div style={{ color: 'rgba(150,160,170,0.7)', fontSize: 9 }}>{partnerCourse.course_name}</div>
+      {showToggles && (
+        <div
+          onPointerDown={e => e.stopPropagation()}
+          onClick={e => e.stopPropagation()}
+          style={{ display: 'flex', gap: 2, marginTop: 4 }}
+        >
+          {tableWeekdays.map(w => {
+            const isActive = primaryEntry.active_weekday_ids.includes(w.id)
+            return (
+              <button
+                key={w.id}
+                onClick={() => isLoggedIn && toggleDay(w.id)}
+                disabled={!isLoggedIn}
+                style={{
+                  padding: '1px 4px', fontSize: 9, fontWeight: 600,
+                  border: '1px solid rgba(255,255,255,0.3)', borderRadius: 3,
+                  background: isActive ? 'rgba(97,175,239,0.5)' : 'rgba(0,0,0,0.35)',
+                  color: isActive ? '#fff' : '#888',
+                  cursor: isLoggedIn ? 'pointer' : 'default', lineHeight: '14px',
+                }}
+              >
+                {DAY_ABBR[w.name] ?? w.name}
+              </button>
+            )
+          })}
+        </div>
+      )}
+      <div onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} style={{ marginTop: 4 }}>
+        <select
+          value={primaryEntry.faculty_id ?? ''}
+          onChange={e => isLoggedIn && onFacultyChange(e.target.value ? +e.target.value : null)}
+          disabled={!isLoggedIn}
+          style={{ width: '100%', fontSize: 10, padding: '2px 4px', background: 'rgba(0,0,0,0.3)', color: '#ddd', border: '1px solid rgba(255,255,255,0.15)' }}
+        >
+          <option value="">No instructor</option>
+          {allFaculty.map(f => (
+            <option key={f.id} value={f.id}>{f.last_name}, {f.first_name}</option>
+          ))}
+        </select>
+      </div>
+      {isLoggedIn && (
+        <button
+          onPointerDown={e => e.stopPropagation()}
+          onClick={e => { e.stopPropagation(); onDelete() }}
+          style={{
+            position: 'absolute', top: 3, right: 3, background: 'rgba(0,0,0,0.4)',
+            color: '#ff8080', border: 'none', borderRadius: 3, padding: '0 4px',
+            fontSize: 11, cursor: 'pointer', lineHeight: '16px'
+          }}
+        >×</button>
+      )}
+    </div>
+  )
+}
+
 // --- Column Resizer Handle ---
 function ColumnResizer({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => void }) {
   return (
@@ -357,6 +496,26 @@ function TableCell({
     e.time_slot_ids.includes(timeSlotId)
   )
 
+  // Group TaughtWith partners into one display unit
+  type EntryGroup = { primary: ScheduleEntry; partner?: ScheduleEntry }
+  const entryGroups: EntryGroup[] = []
+  const usedIds = new Set<number>()
+  for (const e of cellEntries) {
+    if (usedIds.has(e.id)) continue
+    const course = courses.get(e.course_id)
+    const partnerEntry = course?.taught_with_partner_ids
+      .map(pid => cellEntries.find(ce => ce.course_id === pid && !usedIds.has(ce.id)))
+      .find(Boolean)
+    if (partnerEntry) {
+      entryGroups.push({ primary: e, partner: partnerEntry })
+      usedIds.add(e.id)
+      usedIds.add(partnerEntry.id)
+    } else {
+      entryGroups.push({ primary: e })
+      usedIds.add(e.id)
+    }
+  }
+
   return (
     <td
       ref={setNodeRef}
@@ -365,7 +524,7 @@ function TableCell({
         border: '1px solid var(--border-color)',
         padding: 0,
         verticalAlign: 'top',
-        minWidth: isOnline ? Math.max(130, cellEntries.length * 130) : 130,
+        minWidth: isOnline ? Math.max(130, entryGroups.length * 130) : 130,
         height: 100,
         background: isOver ? 'rgba(97,175,239,0.1)' : undefined,
         transition: 'background 0.1s',
@@ -379,22 +538,47 @@ function TableCell({
         gap: 4,
         overflowX: isOnline ? 'auto' : undefined,
       }}>
-        {cellEntries.map(e => {
-          const course = courses.get(e.course_id)
+        {entryGroups.map(group => {
+          const course = courses.get(group.primary.course_id)
           if (!course) return null
+          if (group.partner) {
+            const partnerCourse = courses.get(group.partner.course_id)
+            if (!partnerCourse) return null
+            return (
+              <div key={group.primary.id} style={isOnline ? { minWidth: 122, flexShrink: 0, height: '100%' } : { flex: 1 }}>
+                <TaughtWithSectionCard
+                  primaryEntry={group.primary}
+                  partnerEntry={group.partner}
+                  primaryCourse={course}
+                  partnerCourse={partnerCourse}
+                  allFaculty={allFaculty}
+                  tableWeekdays={tableWeekdays}
+                  dimmed={isEntryDimmed(group.primary) || isEntryDimmed(group.partner)}
+                  isLoggedIn={isLoggedIn}
+                  issueHighlightSeverity={
+                    issueHighlightEntryIds?.has(group.primary.id) || issueHighlightEntryIds?.has(group.partner.id)
+                      ? issueHighlightSeverity : null
+                  }
+                  onFacultyChange={fid => { onFacultyChange(group.primary.id, fid); onFacultyChange(group.partner!.id, fid) }}
+                  onDelete={() => { onDeleteEntry(group.primary.id); onDeleteEntry(group.partner!.id) }}
+                  onActiveWeekdaysChange={ids => onActiveWeekdaysChange(group.primary.id, ids)}
+                />
+              </div>
+            )
+          }
           return (
-            <div key={e.id} style={isOnline ? { minWidth: 122, flexShrink: 0, height: '100%' } : { flex: 1 }}>
+            <div key={group.primary.id} style={isOnline ? { minWidth: 122, flexShrink: 0, height: '100%' } : { flex: 1 }}>
               <ScheduledSectionCard
-                entry={e}
+                entry={group.primary}
                 course={course}
                 allFaculty={allFaculty}
                 tableWeekdays={tableWeekdays}
-                dimmed={isEntryDimmed(e)}
+                dimmed={isEntryDimmed(group.primary)}
                 isLoggedIn={isLoggedIn}
-                issueHighlightSeverity={issueHighlightEntryIds?.has(e.id) ? issueHighlightSeverity : null}
-                onFacultyChange={fid => onFacultyChange(e.id, fid)}
-                onDelete={() => onDeleteEntry(e.id)}
-                onActiveWeekdaysChange={ids => onActiveWeekdaysChange(e.id, ids)}
+                issueHighlightSeverity={issueHighlightEntryIds?.has(group.primary.id) ? issueHighlightSeverity : null}
+                onFacultyChange={fid => onFacultyChange(group.primary.id, fid)}
+                onDelete={() => onDeleteEntry(group.primary.id)}
+                onActiveWeekdaysChange={ids => onActiveWeekdaysChange(group.primary.id, ids)}
               />
             </div>
           )
@@ -1132,7 +1316,11 @@ export function TermSchedulesTab() {
           room_id,
           time_slot_ids: slotIds,
         })
-        setEntries(prev => [...prev.filter(e => e.id !== result.entry.id), result.entry])
+        const allChanged = [result.entry, ...result.additional_entries]
+        setEntries(prev => [
+          ...prev.filter(e => !allChanged.some(c => c.id === e.id)),
+          ...allChanged,
+        ])
         setErrors(result.errors)
         setWarnings(result.warnings)
       } else if (activeData?.type === 'entry') {
@@ -1153,7 +1341,11 @@ export function TermSchedulesTab() {
           time_slot_ids: slotIds,
           ...(tableChanged ? { active_weekday_ids: [] } : {}),
         })
-        setEntries(prev => prev.map(e => e.id === entryId ? result.entry : e))
+        const allChanged = [result.entry, ...result.additional_entries]
+        setEntries(prev => prev.map(e => {
+          const updated = allChanged.find(c => c.id === e.id)
+          return updated ?? e
+        }))
         setErrors(result.errors)
         setWarnings(result.warnings)
       }
@@ -1221,6 +1413,7 @@ export function TermSchedulesTab() {
                 onSectionChange={count => handleSectionChange(c.id, count)}
                 highlighted={highlightedIds.includes(c.id)}
                 dimmed={isCourseDimmed(c.id)}
+                taughtWithPartners={c.taught_with_partner_ids.map(pid => courseMap.get(pid)).filter(Boolean) as Course[]}
               />
             ))}
           </div>

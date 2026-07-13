@@ -98,12 +98,18 @@ class CourseOut(CourseBase):
     id: int
     semester_ids: list[int] = []
     scheduled_entry_count: int = 0
+    taught_with_partner_ids: list[int] = []
 
     @classmethod
     def from_orm_with_semesters(cls, course):
         obj = cls.model_validate(course)
         obj.semester_ids = [o.semester_id for o in course.offerings]
         obj.scheduled_entry_count = len(course.schedule_entries)
+        if course.taught_with_membership:
+            obj.taught_with_partner_ids = [
+                m.course_id for m in course.taught_with_membership.group.members
+                if m.course_id != course.id
+            ]
         return obj
 
 
@@ -184,6 +190,7 @@ class IssueItem(BaseModel):
 
 class EntryWithWarnings(BaseModel):
     entry: ScheduleEntryOut
+    additional_entries: list[ScheduleEntryOut] = []
     errors: list[IssueItem] = []
     warnings: list[IssueItem] = []
 

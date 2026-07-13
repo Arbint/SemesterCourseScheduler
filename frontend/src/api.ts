@@ -63,6 +63,7 @@ export interface Course {
   frequency: number
   semester_ids: number[]
   scheduled_entry_count: number
+  taught_with_partner_ids: number[]
 }
 
 export interface TaughtWithGroup {
@@ -109,6 +110,7 @@ export interface IssueItem {
 
 export interface EntryWithWarnings {
   entry: ScheduleEntry
+  additional_entries: ScheduleEntry[]
   errors: IssueItem[]
   warnings: IssueItem[]
 }

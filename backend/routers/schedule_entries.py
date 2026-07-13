@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, selectinload
 from database import get_db
-from models import ScheduleEntry, ScheduleTable, TimeSlot, Term, Course, Weekday
+from models import ScheduleEntry, ScheduleTable, TimeSlot, Term, Course, Weekday, TaughtWithMember
 from schemas import (
     ScheduleEntryCreate, ScheduleEntryUpdate, ScheduleEntryFacultyPatch,
     ScheduleEntryOut, EntryWithWarnings, IssueItem
@@ -35,6 +35,66 @@ def _refresh_term(db: Session, term_id: int) -> Term:
         .filter(Term.id == term_id)
         .first()
     )
+
+
+def _place_taught_with_partners(
+    db: Session,
+    source_entry: ScheduleEntry,
+    table_id: int,
+    room_id,
+    time_slot_ids: list[int],
+) -> list[ScheduleEntry]:
+    """Co-schedule all TaughtWith partners of source_entry into the same slot.
+
+    - If a partner already has a scheduled section, move it.
+    - If it has an unscheduled placeholder, place it.
+    - If it has no entry at all (not offered this term), skip it.
+    Returns the list of partner entries that were affected.
+    """
+    membership = db.query(TaughtWithMember).filter(
+        TaughtWithMember.course_id == source_entry.course_id
+    ).first()
+    if not membership:
+        return []
+
+    partner_ids = [
+        m.course_id
+        for m in db.query(TaughtWithMember).filter(
+            TaughtWithMember.group_id == membership.group_id,
+            TaughtWithMember.course_id != source_entry.course_id,
+        ).all()
+    ]
+
+    slots = db.query(TimeSlot).filter(TimeSlot.id.in_(time_slot_ids)).all()
+    affected: list[ScheduleEntry] = []
+
+    for partner_id in partner_ids:
+        # Prefer moving an already-scheduled section, otherwise use the placeholder.
+        partner_entry = (
+            db.query(ScheduleEntry)
+            .filter(
+                ScheduleEntry.term_id == source_entry.term_id,
+                ScheduleEntry.course_id == partner_id,
+                ScheduleEntry.schedule_table_id.isnot(None),
+            )
+            .first()
+            or db.query(ScheduleEntry)
+            .filter(
+                ScheduleEntry.term_id == source_entry.term_id,
+                ScheduleEntry.course_id == partner_id,
+                ScheduleEntry.schedule_table_id.is_(None),
+            )
+            .first()
+        )
+        if not partner_entry:
+            continue  # course not offered this term — skip
+
+        partner_entry.schedule_table_id = table_id
+        partner_entry.room_id = room_id
+        partner_entry.time_slots = slots
+        affected.append(partner_entry)
+
+    return affected
 
 
 @router.get("/api/terms/{term_id}/entries", response_model=list[ScheduleEntryOut])
@@ -93,6 +153,7 @@ def create_entry(table_id: int, data: ScheduleEntryCreate, db: Session = Depends
         active_days = db.query(Weekday).filter(Weekday.id.in_(data.active_weekday_ids)).all()
         entry.active_weekdays = active_days
 
+    partner_entries = _place_taught_with_partners(db, entry, table_id, data.room_id, data.time_slot_ids)
     db.flush()
 
     term = _refresh_term(db, table.term_id)
@@ -100,9 +161,12 @@ def create_entry(table_id: int, data: ScheduleEntryCreate, db: Session = Depends
 
     db.commit()
     db.refresh(entry)
+    for pe in partner_entries:
+        db.refresh(pe)
 
     return EntryWithWarnings(
         entry=ScheduleEntryOut.from_orm(entry),
+        additional_entries=[ScheduleEntryOut.from_orm(pe) for pe in partner_entries],
         errors=[IssueItem(description=c.description, courses=c.courses, entries=c.entries) for c in critical],
         warnings=[IssueItem(description=w.description, courses=w.courses, entries=w.entries) for w in warnings]
     )
@@ -131,6 +195,14 @@ def update_entry(entry_id: int, data: ScheduleEntryUpdate, db: Session = Depends
         active_days = db.query(Weekday).filter(Weekday.id.in_(data.active_weekday_ids)).all()
         entry.active_weekdays = active_days
 
+    # Co-move TaughtWith partners only when the slot/table actually changed
+    partner_entries: list[ScheduleEntry] = []
+    if data.schedule_table_id is not None or data.room_id is not None or data.time_slot_ids is not None:
+        final_slot_ids = data.time_slot_ids if data.time_slot_ids is not None else [ts.id for ts in entry.time_slots]
+        partner_entries = _place_taught_with_partners(
+            db, entry, entry.schedule_table_id, entry.room_id, final_slot_ids
+        )
+
     db.flush()
 
     term = _refresh_term(db, term_id)
@@ -138,9 +210,12 @@ def update_entry(entry_id: int, data: ScheduleEntryUpdate, db: Session = Depends
 
     db.commit()
     db.refresh(entry)
+    for pe in partner_entries:
+        db.refresh(pe)
 
     return EntryWithWarnings(
         entry=ScheduleEntryOut.from_orm(entry),
+        additional_entries=[ScheduleEntryOut.from_orm(pe) for pe in partner_entries],
         errors=[IssueItem(description=c.description, courses=c.courses, entries=c.entries) for c in critical],
         warnings=[IssueItem(description=w.description, courses=w.courses, entries=w.entries) for w in warnings]
     )
