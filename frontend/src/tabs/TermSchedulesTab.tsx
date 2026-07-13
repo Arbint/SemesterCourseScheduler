@@ -564,7 +564,7 @@ function TableCell({
                   }
                   onFacultyChange={fid => { onFacultyChange(group.primary.id, fid); onFacultyChange(group.partner!.id, fid) }}
                   onDelete={() => { onDeleteEntry(group.primary.id); onDeleteEntry(group.partner!.id) }}
-                  onActiveWeekdaysChange={ids => onActiveWeekdaysChange(group.primary.id, ids)}
+                  onActiveWeekdaysChange={ids => { onActiveWeekdaysChange(group.primary.id, ids); onActiveWeekdaysChange(group.partner!.id, ids) }}
                 />
               </div>
             )
