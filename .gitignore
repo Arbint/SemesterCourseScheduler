@@ -10,6 +10,10 @@ build/
 # Database
 backend/scheduler.db
 
+# Runtime port files (written at launch, read by tunnel.sh)
+.backend_port
+.frontend_port
+
 # Node
 node_modules/
 frontend/dist/
