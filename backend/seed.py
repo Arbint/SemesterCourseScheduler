@@ -77,7 +77,7 @@ db.commit()
 
 # ── Rooms (from Fall-2026-Schedule.xlsx only) ─────────────────────────────────
 # Capacities from the spreadsheet's "Capacity" row + enrollment data
-# (building_abbr, room_number, capacity)
+# (building_code, room_number, capacity)
 ROOMS = [
     ("FH", "3056",  16),
     ("FH", "3057",  16),
@@ -92,8 +92,8 @@ ROOMS = [
     ("JB", "123",   15),
     ("BSH","129",   20),
 ]
-for abbr, num, cap in ROOMS:
-    db.add(Room(building_name=abbr, room_number=num, building_abbr=abbr, capacity=cap))
+for code, num, cap in ROOMS:
+    db.add(Room(building_code=code, room_number=num, capacity=cap))
 db.commit()
 
 # ── Faculty ───────────────────────────────────────────────────────────────────

@@ -69,9 +69,9 @@ export interface TimeSlot {
 
 export interface Room {
   id: number
-  building_name: string
+  building_name: string | null
   room_number: string
-  building_abbr: string | null
+  building_code: string
   capacity: number
   is_online: boolean
   display_label: string

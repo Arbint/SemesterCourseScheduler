@@ -105,12 +105,12 @@ class TimeSlot(Base):
 
 class Room(Base):
     __tablename__ = "rooms"
-    __table_args__ = (UniqueConstraint("building_name", "room_number"),)
+    __table_args__ = (UniqueConstraint("building_code", "room_number"),)
 
     id = Column(Integer, primary_key=True, index=True)
-    building_name = Column(String, nullable=False)
+    building_name = Column(String, nullable=True)   # optional full name, e.g. "Fullerton Hall"
     room_number = Column(String, nullable=False)
-    building_abbr = Column(String, nullable=True)
+    building_code = Column(String, nullable=False)  # required abbreviation, e.g. "FH"
     capacity = Column(Integer, nullable=False)
     is_online = Column(Boolean, nullable=False, default=False)
 
@@ -118,7 +118,7 @@ class Room(Base):
 
     @property
     def display_label(self) -> str:
-        return f"{self.building_abbr or self.building_name} {self.room_number}"
+        return f"{self.building_code} {self.room_number}"
 
 
 class Course(Base):

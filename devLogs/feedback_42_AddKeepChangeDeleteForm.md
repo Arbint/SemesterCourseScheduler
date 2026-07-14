@@ -48,6 +48,8 @@ The structure of this spreedsheet is:
 
                 * Bldg is the building, abbreviated, AD means Admin Building, FH meand Founders Hall
 
+                * 
+
                 * RM is the room number of the building
 
 

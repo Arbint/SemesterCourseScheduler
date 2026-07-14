@@ -73,9 +73,9 @@ class TimeSlotOut(TimeSlotBase):
 # --- Room ---
 
 class RoomBase(BaseModel):
-    building_name: str
+    building_name: Optional[str] = None
     room_number: str
-    building_abbr: Optional[str] = None
+    building_code: str
     capacity: int
     is_online: bool = False
 

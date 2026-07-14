@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext'
 
 type RoomForm = Omit<Room, 'id' | 'display_label'>
 
-const EMPTY: RoomForm = { building_name: '', room_number: '', building_abbr: '', capacity: 30, is_online: false }
+const EMPTY: RoomForm = { building_name: '', room_number: '', building_code: '', capacity: 30, is_online: false }
 
 export function RoomsTab() {
   const { isLoggedIn } = useAuth()
@@ -22,14 +22,14 @@ export function RoomsTab() {
   const openNew = () => { setEditing(null); setForm(EMPTY); setShowModal(true) }
   const openEdit = (r: Room) => {
     setEditing(r)
-    setForm({ building_name: r.building_name, room_number: r.room_number, building_abbr: r.building_abbr ?? '', capacity: r.capacity, is_online: r.is_online })
+    setForm({ building_name: r.building_name ?? '', room_number: r.room_number, building_code: r.building_code, capacity: r.capacity, is_online: r.is_online })
     setShowModal(true)
   }
 
   const save = async () => {
     setSaving(true)
     try {
-      const payload = { ...form, building_abbr: form.building_abbr?.trim() || null }
+      const payload = { ...form, building_name: form.building_name?.trim() || null }
       if (editing) await roomsApi.update(editing.id, payload)
       else await roomsApi.create(payload)
       setShowModal(false)
@@ -45,6 +45,8 @@ export function RoomsTab() {
     catch (e: any) { showToast(e.response?.data?.detail || 'Delete failed') }
   }
 
+  const previewLabel = `${form.building_code || 'FH'} ${form.room_number || '3056'}`
+
   return (
     <div>
       <div className="page-header">
@@ -59,9 +61,9 @@ export function RoomsTab() {
             <thead>
               <tr>
                 <th>Display</th>
-                <th>Full Name</th>
-                <th>Abbreviation</th>
+                <th>Building Code</th>
                 <th>Room #</th>
+                <th>Full Name</th>
                 <th>Capacity</th>
                 <th>Type</th>
                 <th></th>
@@ -71,9 +73,9 @@ export function RoomsTab() {
               {rooms.map(r => (
                 <tr key={r.id}>
                   <td style={{ color: 'var(--text-bright)', fontFamily: 'monospace' }}>{r.display_label}</td>
-                  <td>{r.building_name}</td>
-                  <td style={{ color: 'var(--text-secondary)' }}>{r.building_abbr ?? '—'}</td>
+                  <td>{r.building_code}</td>
                   <td>{r.room_number}</td>
+                  <td style={{ color: 'var(--text-secondary)' }}>{r.building_name ?? '—'}</td>
                   <td>{r.is_online ? '—' : `${r.capacity} students`}</td>
                   <td>{r.is_online ? <span style={{ color: 'var(--accent)', fontSize: 12 }}>Online</span> : 'Physical'}</td>
                   <td style={{ display: 'flex', gap: 6 }}>
@@ -89,11 +91,11 @@ export function RoomsTab() {
       {showModal && (
         <FormModal title={editing ? 'Edit Room' : 'Add Room'} onClose={() => setShowModal(false)} onSave={save} saving={saving}>
           <div className="form-group">
-            <label>Full Name <span style={{ color: 'var(--error)' }}>*</span></label>
+            <label>Building Code <span style={{ color: 'var(--error)' }}>*</span></label>
             <input
-              value={form.building_name}
-              onChange={e => setForm(f => ({ ...f, building_name: e.target.value }))}
-              placeholder="Fullerton Hall"
+              value={form.building_code}
+              onChange={e => setForm(f => ({ ...f, building_code: e.target.value }))}
+              placeholder="FH"
             />
           </div>
           <div className="form-group">
@@ -105,14 +107,14 @@ export function RoomsTab() {
             />
           </div>
           <div className="form-group">
-            <label>Abbreviation <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>(optional)</span></label>
+            <label>Full Name <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>(optional)</span></label>
             <input
-              value={form.building_abbr ?? ''}
-              onChange={e => setForm(f => ({ ...f, building_abbr: e.target.value }))}
-              placeholder="FH"
+              value={form.building_name ?? ''}
+              onChange={e => setForm(f => ({ ...f, building_name: e.target.value }))}
+              placeholder="Fullerton Hall"
             />
             <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4, display: 'block' }}>
-              Shown as "{(form.building_abbr?.trim() || form.building_name || 'FH') || 'FH'} {form.room_number || '3056'}" in schedules
+              Shown in schedules as: <strong>{previewLabel}</strong>
             </span>
           </div>
           <div className="form-group">

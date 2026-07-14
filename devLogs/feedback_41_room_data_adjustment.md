@@ -21,3 +21,13 @@ In the schedule table, use the format {Abbreviation} {Room Number} as the label 
 The existing table has all abbreviations, when you update to the new schema, use the abbreviation as the Full Name.
 
 Change the Add and Edit UI widget to allow altering all of the 3 new attributes.
+
+## New Change
+
+Seems like the data is better to be this way:
+
+* Full Name (Optional, defaults to Building Code)
+* Room Number (Required)
+* Building Code  (Required, this should be the original abbreviation)
+
+Let's make the change. Ensure the change will not destory the exsiting schedules.
