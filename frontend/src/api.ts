@@ -183,6 +183,10 @@ export const coursesApi = {
   delete: (id: number) => api.delete(`/courses/${id}`),
   addSemester: (cid: number, sid: number) => api.post(`/courses/${cid}/semesters/${sid}`),
   removeSemester: (cid: number, sid: number) => api.delete(`/courses/${cid}/semesters/${sid}`),
+  getOfferingRemovalImpact: (cid: number, sid: number) =>
+    api.get<{ affected_terms: { term_id: number; term_label: string; entry_count: number; scheduled_count: number }[] }>(
+      `/courses/${cid}/semesters/${sid}/impact`
+    ).then(r => r.data),
 }
 
 export const roomsApi = {

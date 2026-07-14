@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 from database import get_db
-from models import Course, CourseOffering, Semester, SemesterEnum, ScheduleEntry
+from models import Course, CourseOffering, Semester, SemesterEnum, ScheduleEntry, Term
 from schemas import CourseCreate, CourseUpdate, CourseOut
 
 router = APIRouter(prefix="/api/courses", tags=["courses"])
@@ -59,12 +59,45 @@ def delete_course(course_id: int, db: Session = Depends(get_db)):
     db.commit()
 
 
+@router.get("/{course_id}/semesters/{semester_id}/impact")
+def get_offering_removal_impact(course_id: int, semester_id: int, db: Session = Depends(get_db)):
+    """Terms of this semester that already have schedule entries for this
+    course — used by the frontend to warn before removing the offering,
+    since those entries would otherwise be silently dropped from the term's
+    course list without ever being cleaned up (they'd become invisible
+    orphans: not shown in the course list because the course is no longer
+    offered, but still sitting in the database)."""
+    terms = db.query(Term).filter_by(semester_id=semester_id).all()
+    affected = []
+    for term in terms:
+        entries = db.query(ScheduleEntry).filter_by(course_id=course_id, term_id=term.id).all()
+        if entries:
+            affected.append({
+                "term_id": term.id,
+                "term_label": f"{term.semester.name.value.capitalize()} {term.year}",
+                "entry_count": len(entries),
+                "scheduled_count": sum(1 for e in entries if e.schedule_table_id is not None),
+            })
+    return {"affected_terms": affected}
+
+
 @router.post("/{course_id}/semesters/{semester_id}", status_code=201)
 def add_offering(course_id: int, semester_id: int, db: Session = Depends(get_db)):
     existing = db.query(CourseOffering).filter_by(course_id=course_id, semester_id=semester_id).first()
     if existing:
         raise HTTPException(409, "Offering already exists")
     db.add(CourseOffering(course_id=course_id, semester_id=semester_id))
+    db.flush()
+
+    # The course is now offered in this semester — make sure it shows up in
+    # the course list of any existing term for that semester, the same way
+    # it would if the term had been created after this offering existed.
+    terms = db.query(Term).filter_by(semester_id=semester_id).all()
+    for term in terms:
+        has_entry = db.query(ScheduleEntry).filter_by(course_id=course_id, term_id=term.id).first()
+        if not has_entry:
+            db.add(ScheduleEntry(term_id=term.id, course_id=course_id, section=1))
+
     db.commit()
     return {"ok": True}
 
@@ -75,4 +108,18 @@ def remove_offering(course_id: int, semester_id: int, db: Session = Depends(get_
     if not row:
         raise HTTPException(404, "Not found")
     db.delete(row)
+
+    # The course is no longer offered in this semester — remove any
+    # leftover schedule entries in existing terms of that semester so they
+    # don't linger as orphans (hidden from the course list, but still in
+    # the database and, if scheduled, still occupying a table slot).
+    term_ids = [t.id for t in db.query(Term).filter_by(semester_id=semester_id).all()]
+    if term_ids:
+        entries = db.query(ScheduleEntry).filter(
+            ScheduleEntry.course_id == course_id,
+            ScheduleEntry.term_id.in_(term_ids),
+        ).all()
+        for entry in entries:
+            db.delete(entry)
+
     db.commit()

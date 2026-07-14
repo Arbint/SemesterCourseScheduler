@@ -54,21 +54,39 @@ export function CourseTab() {
   }
 
   const save = async () => {
+    const toAdd = editing ? semIds.filter(id => !editing.semester_ids.includes(id)) : semIds
+    const toRemove = editing ? editing.semester_ids.filter(id => !semIds.includes(id)) : []
+
+    // Removing a semester offering can leave behind schedule entries in an
+    // existing term for that semester (scheduled or just sitting in the
+    // course list) — warn before silently dropping them.
+    if (editing && toRemove.length > 0) {
+      const impacts = await Promise.all(toRemove.map(sid => coursesApi.getOfferingRemovalImpact(editing.id, sid)))
+      const affected = impacts.flatMap(imp => imp.affected_terms)
+      if (affected.length > 0) {
+        const lines = affected
+          .map(t => `- ${t.term_label}: ${t.entry_count} section(s)${t.scheduled_count > 0 ? ` (${t.scheduled_count} currently scheduled)` : ''}`)
+          .join('\n')
+        const ok = confirm(
+          `${editing.dept_code} ${editing.course_number} — ${editing.course_name} is already in the course list of existing term schedule(s):\n\n${lines}\n\n` +
+          `Removing this semester will delete those entries from the schedule(s). Continue?`
+        )
+        if (!ok) return
+      }
+    }
+
     setSaving(true)
     try {
       let saved: Course
       if (editing) {
         saved = await coursesApi.update(editing.id, form)
-        const toAdd = semIds.filter(id => !editing.semester_ids.includes(id))
-        const toRemove = editing.semester_ids.filter(id => !semIds.includes(id))
-        await Promise.all([
-          ...toAdd.map(sid => coursesApi.addSemester(editing.id, sid)),
-          ...toRemove.map(sid => coursesApi.removeSemester(editing.id, sid)),
-        ])
       } else {
         saved = await coursesApi.create(form)
-        await Promise.all(semIds.map(sid => coursesApi.addSemester(saved.id, sid)))
       }
+      await Promise.all([
+        ...toAdd.map(sid => coursesApi.addSemester(saved.id, sid)),
+        ...toRemove.map(sid => coursesApi.removeSemester(saved.id, sid)),
+      ])
       setShowModal(false)
       await load()
     } catch (e: any) {
