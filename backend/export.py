@@ -40,7 +40,7 @@ def generate_excel(db, term_id: int) -> bytes:
     # Online rooms sorted last
     rooms = sorted(
         db.query(Room).all(),
-        key=lambda r: (r.is_online, r.label)
+        key=lambda r: (r.is_online, r.display_label)
     )
 
     if not time_slots or not rooms:
@@ -74,7 +74,7 @@ def generate_excel(db, term_id: int) -> bytes:
         # Column headers: Time Slot | Room1 | Room2 | ...
         ws.cell(row=row, column=1, value="Time Slot").font = Font(bold=True)
         for col_idx, room in enumerate(rooms, start=2):
-            hdr = room.label if room.is_online else f"{room.label} ({room.capacity})"
+            hdr = room.display_label if room.is_online else f"{room.display_label} ({room.capacity})"
             ws.cell(row=row, column=col_idx, value=hdr).font = Font(bold=True)
         row += 1
 

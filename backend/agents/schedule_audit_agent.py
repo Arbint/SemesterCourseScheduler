@@ -214,7 +214,7 @@ SCHEDULING RULES:
                     "course": f"{entry.course.dept_code}{entry.course.course_number} {entry.course.course_name}",
                     "course_id": entry.course_id,
                     "section": entry.section,
-                    "room": entry.room.label if entry.room else None,
+                    "room": entry.room.display_label if entry.room else None,
                     "faculty": f"{entry.faculty.first_name} {entry.faculty.last_name}" if entry.faculty else None,
                     "faculty_id": entry.faculty_id,
                     "faculty_rank": entry.faculty.rank.value if entry.faculty else None,
@@ -385,8 +385,8 @@ SCHEDULING RULES:
     def get_rooms(self):
         from models import Room
         return [
-            {"room_id": r.id, "label": r.label, "capacity": r.capacity}
-            for r in self.db.query(Room).order_by(Room.label).all()
+            {"room_id": r.id, "label": r.display_label, "capacity": r.capacity}
+            for r in self.db.query(Room).order_by(Room.building_name, Room.room_number).all()
         ]
 
     def get_time_slots(self):

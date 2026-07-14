@@ -629,7 +629,7 @@ function ScheduleTableView({
   const sortedRooms = [...rooms]
     .sort((a, b) => {
       if (a.is_online !== b.is_online) return a.is_online ? 1 : -1
-      return a.label.localeCompare(b.label)
+      return a.display_label.localeCompare(b.display_label)
     })
     .filter(r => !hideUnused || usedRoomIds.has(r.id))
 
@@ -698,7 +698,7 @@ function ScheduleTableView({
               <th style={{ padding: '6px 10px', textAlign: 'left', background: 'var(--bg-elevated)', fontSize: 11, border: '1px solid var(--border-color)', minWidth: 130 }}>Time Slot</th>
               {sortedRooms.map(r => (
                 <th key={r.id} style={{ padding: '6px 10px', textAlign: 'left', background: 'var(--bg-elevated)', fontSize: 11, border: '1px solid var(--border-color)', minWidth: 130 }}>
-                  {r.label}{' '}
+                  {r.display_label}{' '}
                   <span style={{ color: 'var(--text-secondary)' }}>
                     {r.is_online ? '(∞)' : `(${r.capacity})`}
                   </span>

@@ -153,7 +153,7 @@ class RoomConflict(ConflictAuditor):
                 reports.append(ConflictReport(
                     courses=[a.course_id, b.course_id],
                     entries=[a.id, b.id],
-                    description=f"Room conflict: {a.room.label} is double-booked at overlapping times"
+                    description=f"Room conflict: {a.room.display_label} is double-booked at overlapping times"
                 ))
         return reports
 
@@ -169,7 +169,7 @@ class RoomCapacity(ConflictAuditor):
                 reports.append(ConflictReport(
                     courses=[entry.course_id],
                     entries=[entry.id],
-                    description=f"Room capacity: {entry.course.dept_code}{entry.course.course_number} (cap {entry.course.capacity}) exceeds {entry.room.label} capacity ({entry.room.capacity})"
+                    description=f"Room capacity: {entry.course.dept_code}{entry.course.course_number} (cap {entry.course.capacity}) exceeds {entry.room.display_label} capacity ({entry.room.capacity})"
                 ))
         return reports
 

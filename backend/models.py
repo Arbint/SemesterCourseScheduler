@@ -105,13 +105,20 @@ class TimeSlot(Base):
 
 class Room(Base):
     __tablename__ = "rooms"
+    __table_args__ = (UniqueConstraint("building_name", "room_number"),)
 
     id = Column(Integer, primary_key=True, index=True)
-    label = Column(String, nullable=False, unique=True)
+    building_name = Column(String, nullable=False)
+    room_number = Column(String, nullable=False)
+    building_abbr = Column(String, nullable=True)
     capacity = Column(Integer, nullable=False)
     is_online = Column(Boolean, nullable=False, default=False)
 
     schedule_entries = relationship("ScheduleEntry", back_populates="room")
+
+    @property
+    def display_label(self) -> str:
+        return f"{self.building_abbr or self.building_name} {self.room_number}"
 
 
 class Course(Base):

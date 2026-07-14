@@ -73,7 +73,9 @@ class TimeSlotOut(TimeSlotBase):
 # --- Room ---
 
 class RoomBase(BaseModel):
-    label: str
+    building_name: str
+    room_number: str
+    building_abbr: Optional[str] = None
     capacity: int
     is_online: bool = False
 
@@ -86,6 +88,7 @@ class RoomUpdate(RoomBase):
 class RoomOut(RoomBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    display_label: str
 
 
 # --- Course ---

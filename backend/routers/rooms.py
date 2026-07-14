@@ -9,7 +9,7 @@ router = APIRouter(prefix="/api/rooms", tags=["rooms"])
 
 @router.get("", response_model=list[RoomOut])
 def list_rooms(db: Session = Depends(get_db)):
-    return db.query(Room).order_by(Room.label).all()
+    return db.query(Room).order_by(Room.building_name, Room.room_number).all()
 
 
 @router.post("", response_model=RoomOut, status_code=201)

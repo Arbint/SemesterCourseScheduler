@@ -69,9 +69,12 @@ export interface TimeSlot {
 
 export interface Room {
   id: number
-  label: string
+  building_name: string
+  room_number: string
+  building_abbr: string | null
   capacity: number
   is_online: boolean
+  display_label: string
 }
 
 export interface Course {
@@ -175,8 +178,8 @@ export const coursesApi = {
 
 export const roomsApi = {
   list: () => api.get<Room[]>('/rooms').then(r => r.data),
-  create: (d: Omit<Room, 'id'>) => api.post<Room>('/rooms', d).then(r => r.data),
-  update: (id: number, d: Omit<Room, 'id'>) => api.put<Room>(`/rooms/${id}`, d).then(r => r.data),
+  create: (d: Omit<Room, 'id' | 'display_label'>) => api.post<Room>('/rooms', d).then(r => r.data),
+  update: (id: number, d: Omit<Room, 'id' | 'display_label'>) => api.put<Room>(`/rooms/${id}`, d).then(r => r.data),
   delete: (id: number) => api.delete(`/rooms/${id}`),
 }
 
