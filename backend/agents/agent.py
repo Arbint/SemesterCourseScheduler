@@ -16,13 +16,22 @@ class Agent:
 
         self.maxIter = maxIter
         self.subAgents = {}
+        self.lastTrace = []
 
         self.client = Anthropic(api_key=GetAPIKey())
 
 
     def ProcessNewUserInput(self, userInput):
         self.messages.append({"role":"user", "content": userInput})
-        self.Run()
+        return self.Run()
+
+
+    def ProcessNewUserInputStream(self, userInput):
+        """Generator variant of ProcessNewUserInput: yields each trace step
+        (interim text / tool call) as it happens, ending with a {"type": "final", ...}
+        event, instead of only returning the finished answer at the end."""
+        self.messages.append({"role": "user", "content": userInput})
+        yield from self._RunSteps()
 
 
     @staticmethod
@@ -44,8 +53,21 @@ class Agent:
         return result
 
     def Run(self):
+        finalResponse = "no response"
+        for event in self._RunSteps():
+            if event["type"] == "final":
+                finalResponse = event["text"]
+        return finalResponse
+
+
+    def _RunSteps(self):
+        """Core agent loop as a generator: yields each trace step (interim
+        text, then each tool call) the moment it happens, so a streaming
+        caller can surface it live instead of waiting for the whole turn to
+        finish. Always ends with exactly one {"type": "final", "text": ...}."""
         iter = 0
         response = None
+        trace = []
         while iter < self.maxIter:
             iter += 1
 
@@ -64,16 +86,73 @@ class Agent:
             self.messages.append({"role": "assistant", "content": self._blocks_to_dicts(response.content)})
 
             if toolUseBlocks:
-                toolResults = self.__ProcessToolUse(toolUseBlocks)
+                # Interim text in a turn that also calls tools is the model
+                # "thinking out loud" before acting — record it as such. Text
+                # in the final (no tool_use) turn is the answer itself, not trace.
+                for textBlock in textBlocks:
+                    if textBlock.text.strip():
+                        step = {"type": "text", "text": textBlock.text}
+                        trace.append(step)
+                        yield step
+
+                # Every tool_use block MUST get a matching tool_result in the
+                # next message, or the next API call fails with a 400
+                # (dangling tool_use). Catch tool errors here so one broken
+                # tool can't corrupt the conversation history for the rest
+                # of the session. All results are gathered before the next
+                # message is appended — the API requires them together —
+                # but each step is yielded to the caller as soon as it's done.
+                toolResults = []
+                for toolUseBlock in toolUseBlocks:
+                    print(f"----> Calling: {toolUseBlock.name}")
+                    print(f"args: {toolUseBlock.input}")
+
+                    try:
+                        result = self.__CallTool(toolName=toolUseBlock.name, **toolUseBlock.input)
+                        content = json.dumps(result)
+                        isError = False
+                    except Exception as e:
+                        print(f"----> Tool {toolUseBlock.name} raised: {e}")
+                        content = json.dumps({"error": str(e)})
+                        isError = True
+
+                    toolResults.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": toolUseBlock.id,
+                            "content": content,
+                            **({"is_error": True} if isError else {}),
+                        }
+                    )
+
+                    # The trace is for display, not for the API — cap very
+                    # long results (e.g. the full course catalog) so a single
+                    # step can't balloon the response.
+                    traceResult = content
+                    if len(traceResult) > 4000:
+                        traceResult = traceResult[:4000] + f"... ({len(content)} chars total)"
+
+                    step = {
+                        "type": "tool_call",
+                        "name": toolUseBlock.name,
+                        "input": toolUseBlock.input,
+                        "result": traceResult,
+                        "is_error": isError,
+                    }
+                    trace.append(step)
+                    yield step
+
                 self.messages.append({"role": "user", "content": toolResults})
             else:
                 break
 
+        self.lastTrace = trace
+
         finalResponse = "".join(
             block.text for block in response.content if block.type == "text"
         )
-        return finalResponse or "no response"
-            
+        yield {"type": "final", "text": finalResponse or "no response"}
+
 
     def ConfigureInput(self, **inputs):
         pass
@@ -157,25 +236,6 @@ class Agent:
                         print(f"[{role} (tool_result id={block['tool_use_id']})]: {block['content']}")
 
         print(f"----\n")
-                    
-
-    def __ProcessToolUse(self, toolUseBlocks):
-        toolResults = []
-        for toolUseBlock in toolUseBlocks: 
-            print(f"----> Calling: {toolUseBlock.name}")
-            print(f"args: {toolUseBlock.input}")
-
-            result = self.__CallTool(toolName=toolUseBlock.name, **toolUseBlock.input)
-
-            toolResults.append(
-                {
-                    "type": "tool_result",
-                    "tool_use_id": toolUseBlock.id,
-                    "content": json.dumps(result)
-                }
-            )
-
-        return toolResults
 
 
     def _SendRequestToAgent(self):

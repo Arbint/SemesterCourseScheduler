@@ -14,6 +14,19 @@ def _load_context() -> str:
         return ""
 
 
+def _build_combined_tw_map(db, term_id: int) -> dict[int, str]:
+    """Map course_id -> group_key for both catalog-wide TaughtWith groups
+    (prefixed g_) and term-specific TaughtWith groups (prefixed t_)."""
+    from models import TaughtWithMember, TermTaughtWithGroup
+    tw_map: dict[int, str] = {}
+    for m in db.query(TaughtWithMember).all():
+        tw_map[m.course_id] = f"g_{m.group_id}"
+    for g in db.query(TermTaughtWithGroup).filter_by(term_id=term_id).all():
+        for m in g.members:
+            tw_map[m.course_id] = f"t_{g.id}"
+    return tw_map
+
+
 class ScheduleAuditAgent(Agent):
     def __init__(self, db, term_id: int):
         domain_context = _load_context()
@@ -40,6 +53,9 @@ You can:
 Before assigning instructors, always call get_faculty() to retrieve the full faculty list with IDs and teaching capabilities.
 Before proposing room or time-slot changes, call get_rooms() and get_time_slots() to retrieve their IDs.
 When the user expresses a preference about which time slots to use (e.g. avoid mornings, prefer midday), call get_time_slots() first to get IDs, then pass the preferred slot IDs to auto_schedule() via preferred_time_slot_ids.
+When a question is about the course catalog itself (capacity, duration, frequency, which semesters a course is offered in) rather than this term's schedule, call get_courses() — it covers every course, not just ones offered this term.
+When a question is about TaughtWith or co-requisite rules in general (not this term's schedule), call get_taughtwith_groups() or get_coreq_groups().
+When a question is about the full-time/part-time load limits themselves, call get_load_settings().
 
 When auditing, always check for:
 1. Long days: faculty teaching 3+ classes on same weekday
@@ -181,22 +197,31 @@ SCHEDULING RULES:
                 "description": "Get all available time slots with their IDs, labels, and display order.",
                 "input_schema": {"type": "object", "properties": {}}
             },
+            {
+                "name": self.get_courses.__name__,
+                "description": "Get the full course catalog (every course, regardless of whether it's offered this term), with IDs, department code, course number, name, duration, capacity, frequency, which semesters it's offered in, and its TaughtWith partner course IDs if any.",
+                "input_schema": {"type": "object", "properties": {}}
+            },
+            {
+                "name": self.get_taughtwith_groups.__name__,
+                "description": "Get all catalog-wide TaughtWith groups (courses that are always taught together, e.g. cross-listed sections). Distinct from term-specific TaughtWith pairing, which shows up as taught_with_group values prefixed 't_' in other tool responses.",
+                "input_schema": {"type": "object", "properties": {}}
+            },
+            {
+                "name": self.get_load_settings.__name__,
+                "description": "Get the configured full-time and part-time faculty load limits (sections per term) used to determine overloaded/underloaded faculty.",
+                "input_schema": {"type": "object", "properties": {}}
+            },
         ]
 
     def get_schedule_summary(self):
-        from models import Term, TaughtWithMember, TermTaughtWithGroup
+        from models import Term
         self.db.expire_all()
         term = self.db.query(Term).filter_by(id=self.term_id).first()
         if not term:
             return {"error": "Term not found"}
 
-        # Build combined TaughtWith map: course_id -> group_key
-        tw_map: dict[int, str] = {}
-        for m in self.db.query(TaughtWithMember).all():
-            tw_map[m.course_id] = f"g_{m.group_id}"
-        for g in self.db.query(TermTaughtWithGroup).filter_by(term_id=self.term_id).all():
-            for m in g.members:
-                tw_map[m.course_id] = f"t_{g.id}"
+        tw_map = _build_combined_tw_map(self.db, self.term_id)
 
         result = {
             "term": f"{term.semester.name.value} {term.year}",
@@ -371,7 +396,7 @@ SCHEDULING RULES:
                 "course": f"{e.course.dept_code}{e.course.course_number} {e.course.course_name}",
                 "section": e.section,
                 "time_slots": [ts.label for ts in sorted(e.time_slots, key=lambda ts: ts.display_order)],
-                "room": e.room.label if e.room else None,
+                "room": e.room.display_label if e.room else None,
                 "taught_with_group": gk,
             })
 
@@ -395,6 +420,52 @@ SCHEDULING RULES:
             {"time_slot_id": ts.id, "label": ts.label, "display_order": ts.display_order}
             for ts in self.db.query(TimeSlot).order_by(TimeSlot.display_order).all()
         ]
+
+    def get_courses(self):
+        from models import Course
+        courses = self.db.query(Course).order_by(Course.dept_code, Course.course_number).all()
+        return [
+            {
+                "course_id": c.id,
+                "course": f"{c.dept_code}{c.course_number} {c.course_name}",
+                "dept_code": c.dept_code,
+                "course_number": c.course_number,
+                "duration_minutes": c.duration_minutes,
+                "capacity": c.capacity,
+                "frequency": c.frequency,
+                "semester_ids": [o.semester_id for o in c.offerings],
+                "taught_with_partner_ids": (
+                    [m.course_id for m in c.taught_with_membership.group.members if m.course_id != c.id]
+                    if c.taught_with_membership else []
+                ),
+            }
+            for c in courses
+        ]
+
+    def get_taughtwith_groups(self):
+        from models import TaughtWithGroup
+        groups = self.db.query(TaughtWithGroup).all()
+        return [
+            {
+                "group_id": g.id,
+                "courses": [
+                    {
+                        "course_id": m.course_id,
+                        "course": f"{m.course.dept_code}{m.course.course_number} {m.course.course_name}"
+                    }
+                    for m in g.members
+                ]
+            }
+            for g in groups
+        ]
+
+    def get_load_settings(self):
+        from models import LoadSettings
+        settings = self.db.query(LoadSettings).first()
+        return {
+            "fulltime_load": settings.fulltime_load if settings else 3,
+            "parttime_load": settings.parttime_load if settings else 2,
+        }
 
     def highlight_courses(self, course_ids: list[int]):
         # This is intercepted by the chat route to extract highlighted IDs
@@ -691,11 +762,3 @@ SCHEDULING RULES:
             ),
             changes=changes
         )
-
-    def Run(self):
-        result = super().Run()
-        return result
-
-    def ProcessNewUserInput(self, userInput: str):
-        self.messages.append({"role": "user", "content": userInput})
-        return self.Run()

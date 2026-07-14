@@ -1,0 +1,1017 @@
+[
+  {
+    "entry_id": 35,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 7,
+    "course_id": 17,
+    "dept_code": "ANGD",
+    "course_number": 2334,
+    "course_name": "Environment Production II",
+    "section": 1,
+    "room_id": 1,
+    "room_label": "FH 3056",
+    "faculty_id": 2,
+    "faculty_name": "Adam Blair",
+    "time_slot_ids": [
+      3,
+      4
+    ],
+    "time_slot_labels": [
+      "10:30 AM - 11:45 AM",
+      "12:00 PM - 1:15 PM"
+    ],
+    "weekdays": [
+      "tue",
+      "thu"
+    ]
+  },
+  {
+    "entry_id": 36,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 6,
+    "course_id": 18,
+    "dept_code": "ANGD",
+    "course_number": 2341,
+    "course_name": "Period Styles",
+    "section": 1,
+    "room_id": 9,
+    "room_label": "FH 3024",
+    "faculty_id": 19,
+    "faculty_name": "Adam Watkins",
+    "time_slot_ids": [
+      1,
+      2
+    ],
+    "time_slot_labels": [
+      "7:30 AM - 8:45 AM",
+      "9:00 AM - 10:15 AM"
+    ],
+    "weekdays": [
+      "mon",
+      "wed"
+    ]
+  },
+  {
+    "entry_id": 40,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 6,
+    "course_id": 22,
+    "dept_code": "ANGD",
+    "course_number": 2361,
+    "course_name": "Character Modeling I",
+    "section": 1,
+    "room_id": 2,
+    "room_label": "FH 3057",
+    "faculty_id": 8,
+    "faculty_name": "Carlos Garcia",
+    "time_slot_ids": [
+      6,
+      7
+    ],
+    "time_slot_labels": [
+      "3:00 PM - 4:15 PM",
+      "4:30 PM - 5:45 PM"
+    ],
+    "weekdays": [
+      "mon",
+      "wed"
+    ]
+  },
+  {
+    "entry_id": 41,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 6,
+    "course_id": 23,
+    "dept_code": "ANGD",
+    "course_number": 2372,
+    "course_name": "Game Programming II",
+    "section": 1,
+    "room_id": 1,
+    "room_label": "FH 3056",
+    "faculty_id": 7,
+    "faculty_name": "Justin Gallardo",
+    "time_slot_ids": [
+      6,
+      7
+    ],
+    "time_slot_labels": [
+      "3:00 PM - 4:15 PM",
+      "4:30 PM - 5:45 PM"
+    ],
+    "weekdays": [
+      "mon",
+      "wed"
+    ]
+  },
+  {
+    "entry_id": 44,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 7,
+    "course_id": 26,
+    "dept_code": "ANGD",
+    "course_number": 3342,
+    "course_name": "Animation IV: Performance Animation",
+    "section": 1,
+    "room_id": 3,
+    "room_label": "FH 3058",
+    "faculty_id": 1,
+    "faculty_name": "Kassandra Arevalo",
+    "time_slot_ids": [
+      3,
+      4
+    ],
+    "time_slot_labels": [
+      "10:30 AM - 11:45 AM",
+      "12:00 PM - 1:15 PM"
+    ],
+    "weekdays": [
+      "tue",
+      "thu"
+    ]
+  },
+  {
+    "entry_id": 45,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 6,
+    "course_id": 27,
+    "dept_code": "ANGD",
+    "course_number": 3345,
+    "course_name": "Advanced Animation for Games",
+    "section": 1,
+    "room_id": 5,
+    "room_label": "FH 3060",
+    "faculty_id": 1,
+    "faculty_name": "Kassandra Arevalo",
+    "time_slot_ids": [
+      6,
+      7
+    ],
+    "time_slot_labels": [
+      "3:00 PM - 4:15 PM",
+      "4:30 PM - 5:45 PM"
+    ],
+    "weekdays": [
+      "mon",
+      "wed"
+    ]
+  },
+  {
+    "entry_id": 48,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 7,
+    "course_id": 30,
+    "dept_code": "ANGD",
+    "course_number": 3362,
+    "course_name": "Character Modeling III",
+    "section": 1,
+    "room_id": 2,
+    "room_label": "FH 3057",
+    "faculty_id": 15,
+    "faculty_name": "Jacob Salazar",
+    "time_slot_ids": [
+      3,
+      4
+    ],
+    "time_slot_labels": [
+      "10:30 AM - 11:45 AM",
+      "12:00 PM - 1:15 PM"
+    ],
+    "weekdays": [
+      "tue",
+      "thu"
+    ]
+  },
+  {
+    "entry_id": 49,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 6,
+    "course_id": 31,
+    "dept_code": "ANGD",
+    "course_number": 3372,
+    "course_name": "Game Programming IV",
+    "section": 1,
+    "room_id": 3,
+    "room_label": "FH 3058",
+    "faculty_id": 11,
+    "faculty_name": "Jingtian Li",
+    "time_slot_ids": [
+      6,
+      7
+    ],
+    "time_slot_labels": [
+      "3:00 PM - 4:15 PM",
+      "4:30 PM - 5:45 PM"
+    ],
+    "weekdays": [
+      "mon",
+      "wed"
+    ]
+  },
+  {
+    "entry_id": 52,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 6,
+    "course_id": 34,
+    "dept_code": "ANGD",
+    "course_number": 4360,
+    "course_name": "Senior Thesis Production II",
+    "section": 1,
+    "room_id": 3,
+    "room_label": "FH 3058",
+    "faculty_id": 11,
+    "faculty_name": "Jingtian Li",
+    "time_slot_ids": [
+      3,
+      4
+    ],
+    "time_slot_labels": [
+      "10:30 AM - 11:45 AM",
+      "12:00 PM - 1:15 PM"
+    ],
+    "weekdays": [
+      "mon",
+      "wed"
+    ]
+  },
+  {
+    "entry_id": 53,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 8,
+    "course_id": 35,
+    "dept_code": "ANGD",
+    "course_number": 2381,
+    "course_name": "Prototyping and Game Design",
+    "section": 1,
+    "room_id": 13,
+    "room_label": "Online ",
+    "faculty_id": 18,
+    "faculty_name": "Nathan Sumsion",
+    "time_slot_ids": [
+      9
+    ],
+    "time_slot_labels": [
+      "7:30 PM - 8:45 PM"
+    ],
+    "weekdays": [
+      "tue",
+      "fri"
+    ]
+  },
+  {
+    "entry_id": 54,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 6,
+    "course_id": 36,
+    "dept_code": "ANGD",
+    "course_number": 4399,
+    "course_name": "Realizing 3D",
+    "section": 1,
+    "room_id": 9,
+    "room_label": "FH 3024",
+    "faculty_id": 20,
+    "faculty_name": "William Watkins",
+    "time_slot_ids": [
+      3
+    ],
+    "time_slot_labels": [
+      "10:30 AM - 11:45 AM"
+    ],
+    "weekdays": [
+      "mon",
+      "wed"
+    ]
+  },
+  {
+    "entry_id": 57,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 7,
+    "course_id": 40,
+    "dept_code": "ANGD",
+    "course_number": 1313,
+    "course_name": "Game Engines",
+    "section": 1,
+    "room_id": 4,
+    "room_label": "FH 3059",
+    "faculty_id": 7,
+    "faculty_name": "Justin Gallardo",
+    "time_slot_ids": [
+      3,
+      4
+    ],
+    "time_slot_labels": [
+      "10:30 AM - 11:45 AM",
+      "12:00 PM - 1:15 PM"
+    ],
+    "weekdays": [
+      "tue",
+      "thu"
+    ]
+  },
+  {
+    "entry_id": 58,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 7,
+    "course_id": 41,
+    "dept_code": "ANGD",
+    "course_number": 1314,
+    "course_name": "Organic Modeling",
+    "section": 1,
+    "room_id": 4,
+    "room_label": "FH 3059",
+    "faculty_id": 15,
+    "faculty_name": "Jacob Salazar",
+    "time_slot_ids": [
+      5,
+      6
+    ],
+    "time_slot_labels": [
+      "1:30 PM - 2:45 PM",
+      "3:00 PM - 4:15 PM"
+    ],
+    "weekdays": [
+      "tue",
+      "thu"
+    ]
+  },
+  {
+    "entry_id": 59,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 6,
+    "course_id": 42,
+    "dept_code": "ANGD",
+    "course_number": 1315,
+    "course_name": "Principles of Animation",
+    "section": 1,
+    "room_id": 4,
+    "room_label": "FH 3059",
+    "faculty_id": 16,
+    "faculty_name": "Emily Sidler",
+    "time_slot_ids": [
+      6,
+      7
+    ],
+    "time_slot_labels": [
+      "3:00 PM - 4:15 PM",
+      "4:30 PM - 5:45 PM"
+    ],
+    "weekdays": [
+      "mon",
+      "wed"
+    ]
+  },
+  {
+    "entry_id": 60,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 7,
+    "course_id": 43,
+    "dept_code": "ANGD",
+    "course_number": 2321,
+    "course_name": "Technical Direction",
+    "section": 1,
+    "room_id": 5,
+    "room_label": "FH 3060",
+    "faculty_id": 11,
+    "faculty_name": "Jingtian Li",
+    "time_slot_ids": [
+      5,
+      6
+    ],
+    "time_slot_labels": [
+      "1:30 PM - 2:45 PM",
+      "3:00 PM - 4:15 PM"
+    ],
+    "weekdays": [
+      "tue",
+      "thu"
+    ]
+  },
+  {
+    "entry_id": 61,
+    "term_id": 2,
+    "scheduled": false,
+    "schedule_table_id": null,
+    "course_id": 44,
+    "dept_code": "ANGD",
+    "course_number": 3315,
+    "course_name": "Visual Narrative Conventions",
+    "section": 1,
+    "room_id": null,
+    "room_label": null,
+    "faculty_id": null,
+    "faculty_name": null,
+    "time_slot_ids": [],
+    "time_slot_labels": [],
+    "weekdays": []
+  },
+  {
+    "entry_id": 62,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 6,
+    "course_id": 45,
+    "dept_code": "ANGD",
+    "course_number": 3325,
+    "course_name": "Figure Drawing For Animators",
+    "section": 1,
+    "room_id": 14,
+    "room_label": "KAC 222",
+    "faculty_id": 4,
+    "faculty_name": "Michael Choi",
+    "time_slot_ids": [
+      8,
+      9
+    ],
+    "time_slot_labels": [
+      "6:00 PM - 7:15 PM",
+      "7:30 PM - 8:45 PM"
+    ],
+    "weekdays": [
+      "mon",
+      "wed"
+    ]
+  },
+  {
+    "entry_id": 63,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 7,
+    "course_id": 46,
+    "dept_code": "ANGD",
+    "course_number": 4100,
+    "course_name": "Animation Industry Seminar",
+    "section": 1,
+    "room_id": 7,
+    "room_label": "FH G030",
+    "faculty_id": 11,
+    "faculty_name": "Jingtian Li",
+    "time_slot_ids": [
+      9
+    ],
+    "time_slot_labels": [
+      "7:30 PM - 8:45 PM"
+    ],
+    "weekdays": [
+      "tue",
+      "thu"
+    ]
+  },
+  {
+    "entry_id": 64,
+    "term_id": 2,
+    "scheduled": false,
+    "schedule_table_id": null,
+    "course_id": 47,
+    "dept_code": "ANGD",
+    "course_number": 4305,
+    "course_name": "Senior Portfolio",
+    "section": 1,
+    "room_id": null,
+    "room_label": null,
+    "faculty_id": null,
+    "faculty_name": null,
+    "time_slot_ids": [],
+    "time_slot_labels": [],
+    "weekdays": []
+  },
+  {
+    "entry_id": 66,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 7,
+    "course_id": 39,
+    "dept_code": "ANGD",
+    "course_number": 1312,
+    "course_name": "Hardsurface Modeling",
+    "section": 2,
+    "room_id": 1,
+    "room_label": "FH 3056",
+    "faculty_id": 10,
+    "faculty_name": "Isaac Herrera",
+    "time_slot_ids": [
+      7,
+      8
+    ],
+    "time_slot_labels": [
+      "4:30 PM - 5:45 PM",
+      "6:00 PM - 7:15 PM"
+    ],
+    "weekdays": [
+      "tue",
+      "thu"
+    ]
+  },
+  {
+    "entry_id": 67,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 6,
+    "course_id": 41,
+    "dept_code": "ANGD",
+    "course_number": 1314,
+    "course_name": "Organic Modeling",
+    "section": 2,
+    "room_id": 5,
+    "room_label": "FH 3060",
+    "faculty_id": 5,
+    "faculty_name": "Alessandro Dady",
+    "time_slot_ids": [
+      8,
+      9
+    ],
+    "time_slot_labels": [
+      "6:00 PM - 7:15 PM",
+      "7:30 PM - 8:45 PM"
+    ],
+    "weekdays": [
+      "mon",
+      "wed"
+    ]
+  },
+  {
+    "entry_id": 69,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 6,
+    "course_id": 24,
+    "dept_code": "ANGD",
+    "course_number": 3330,
+    "course_name": "History of Games",
+    "section": 1,
+    "room_id": 7,
+    "room_label": "FH G030",
+    "faculty_id": 8,
+    "faculty_name": "Carlos Garcia",
+    "time_slot_ids": [
+      4
+    ],
+    "time_slot_labels": [
+      "12:00 PM - 1:15 PM"
+    ],
+    "weekdays": [
+      "mon",
+      "wed"
+    ]
+  },
+  {
+    "entry_id": 71,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 7,
+    "course_id": 29,
+    "dept_code": "ANGD",
+    "course_number": 3355,
+    "course_name": "Tools of Production Management",
+    "section": 1,
+    "room_id": 5,
+    "room_label": "FH 3060",
+    "faculty_id": 8,
+    "faculty_name": "Carlos Garcia",
+    "time_slot_ids": [
+      3
+    ],
+    "time_slot_labels": [
+      "10:30 AM - 11:45 AM"
+    ],
+    "weekdays": [
+      "tue",
+      "thu"
+    ]
+  },
+  {
+    "entry_id": 73,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 6,
+    "course_id": 16,
+    "dept_code": "ANGD",
+    "course_number": 1302,
+    "course_name": "Element of Design",
+    "section": 1,
+    "room_id": 7,
+    "room_label": "FH G030",
+    "faculty_id": 15,
+    "faculty_name": "Jacob Salazar",
+    "time_slot_ids": [
+      2
+    ],
+    "time_slot_labels": [
+      "9:00 AM - 10:15 AM"
+    ],
+    "weekdays": [
+      "mon",
+      "wed"
+    ]
+  },
+  {
+    "entry_id": 74,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 7,
+    "course_id": 32,
+    "dept_code": "ANGD",
+    "course_number": 4140,
+    "course_name": "Senior Thesis Workshop",
+    "section": 1,
+    "room_id": 9,
+    "room_label": "FH 3024",
+    "faculty_id": 16,
+    "faculty_name": "Emily Sidler",
+    "time_slot_ids": [
+      4
+    ],
+    "time_slot_labels": [
+      "12:00 PM - 1:15 PM"
+    ],
+    "weekdays": [
+      "tue",
+      "thu"
+    ]
+  },
+  {
+    "entry_id": 75,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 7,
+    "course_id": 32,
+    "dept_code": "ANGD",
+    "course_number": 4140,
+    "course_name": "Senior Thesis Workshop",
+    "section": 2,
+    "room_id": 8,
+    "room_label": "FH 3023",
+    "faculty_id": 8,
+    "faculty_name": "Carlos Garcia",
+    "time_slot_ids": [
+      4
+    ],
+    "time_slot_labels": [
+      "12:00 PM - 1:15 PM"
+    ],
+    "weekdays": [
+      "tue",
+      "thu"
+    ]
+  },
+  {
+    "entry_id": 76,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 7,
+    "course_id": 33,
+    "dept_code": "ANGD",
+    "course_number": 4340,
+    "course_name": "Business of Animation and Game Design",
+    "section": 1,
+    "room_id": 9,
+    "room_label": "FH 3024",
+    "faculty_id": 2,
+    "faculty_name": "Adam Blair",
+    "time_slot_ids": [
+      5
+    ],
+    "time_slot_labels": [
+      "1:30 PM - 2:45 PM"
+    ],
+    "weekdays": [
+      "tue",
+      "thu"
+    ]
+  },
+  {
+    "entry_id": 77,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 7,
+    "course_id": 33,
+    "dept_code": "ANGD",
+    "course_number": 4340,
+    "course_name": "Business of Animation and Game Design",
+    "section": 2,
+    "room_id": 8,
+    "room_label": "FH 3023",
+    "faculty_id": 1,
+    "faculty_name": "Kassandra Arevalo",
+    "time_slot_ids": [
+      5
+    ],
+    "time_slot_labels": [
+      "1:30 PM - 2:45 PM"
+    ],
+    "weekdays": [
+      "tue",
+      "thu"
+    ]
+  },
+  {
+    "entry_id": 78,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 7,
+    "course_id": 25,
+    "dept_code": "ANGD",
+    "course_number": 3332,
+    "course_name": "Environment Production IV",
+    "section": 1,
+    "room_id": 1,
+    "room_label": "FH 3056",
+    "faculty_id": 8,
+    "faculty_name": "Carlos Garcia",
+    "time_slot_ids": [
+      5,
+      6
+    ],
+    "time_slot_labels": [
+      "1:30 PM - 2:45 PM",
+      "3:00 PM - 4:15 PM"
+    ],
+    "weekdays": [
+      "tue",
+      "thu"
+    ]
+  },
+  {
+    "entry_id": 79,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 6,
+    "course_id": 34,
+    "dept_code": "ANGD",
+    "course_number": 4360,
+    "course_name": "Senior Thesis Production II",
+    "section": 2,
+    "room_id": 4,
+    "room_label": "FH 3059",
+    "faculty_id": 15,
+    "faculty_name": "Jacob Salazar",
+    "time_slot_ids": [
+      3,
+      4
+    ],
+    "time_slot_labels": [
+      "10:30 AM - 11:45 AM",
+      "12:00 PM - 1:15 PM"
+    ],
+    "weekdays": [
+      "mon",
+      "wed"
+    ]
+  },
+  {
+    "entry_id": 80,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 6,
+    "course_id": 34,
+    "dept_code": "ANGD",
+    "course_number": 4360,
+    "course_name": "Senior Thesis Production II",
+    "section": 3,
+    "room_id": 5,
+    "room_label": "FH 3060",
+    "faculty_id": 1,
+    "faculty_name": "Kassandra Arevalo",
+    "time_slot_ids": [
+      3,
+      4
+    ],
+    "time_slot_labels": [
+      "10:30 AM - 11:45 AM",
+      "12:00 PM - 1:15 PM"
+    ],
+    "weekdays": [
+      "mon",
+      "wed"
+    ]
+  },
+  {
+    "entry_id": 81,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 7,
+    "course_id": 40,
+    "dept_code": "ANGD",
+    "course_number": 1313,
+    "course_name": "Game Engines",
+    "section": 2,
+    "room_id": 3,
+    "room_label": "FH 3058",
+    "faculty_id": 7,
+    "faculty_name": "Justin Gallardo",
+    "time_slot_ids": [
+      5,
+      6
+    ],
+    "time_slot_labels": [
+      "1:30 PM - 2:45 PM",
+      "3:00 PM - 4:15 PM"
+    ],
+    "weekdays": [
+      "tue",
+      "thu"
+    ]
+  },
+  {
+    "entry_id": 82,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 6,
+    "course_id": 42,
+    "dept_code": "ANGD",
+    "course_number": 1315,
+    "course_name": "Principles of Animation",
+    "section": 2,
+    "room_id": 1,
+    "room_label": "FH 3056",
+    "faculty_id": 16,
+    "faculty_name": "Emily Sidler",
+    "time_slot_ids": [
+      3,
+      4
+    ],
+    "time_slot_labels": [
+      "10:30 AM - 11:45 AM",
+      "12:00 PM - 1:15 PM"
+    ],
+    "weekdays": [
+      "mon",
+      "wed"
+    ]
+  },
+  {
+    "entry_id": 83,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 7,
+    "course_id": 43,
+    "dept_code": "ANGD",
+    "course_number": 2321,
+    "course_name": "Technical Direction",
+    "section": 2,
+    "room_id": 5,
+    "room_label": "FH 3060",
+    "faculty_id": 17,
+    "faculty_name": "Joshua Starrett",
+    "time_slot_ids": [
+      7,
+      8
+    ],
+    "time_slot_labels": [
+      "4:30 PM - 5:45 PM",
+      "6:00 PM - 7:15 PM"
+    ],
+    "weekdays": [
+      "tue",
+      "thu"
+    ]
+  },
+  {
+    "entry_id": 84,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 6,
+    "course_id": 39,
+    "dept_code": "ANGD",
+    "course_number": 1312,
+    "course_name": "Hardsurface Modeling",
+    "section": 2,
+    "room_id": 2,
+    "room_label": "FH 3057",
+    "faculty_id": 2,
+    "faculty_name": "Adam Blair",
+    "time_slot_ids": [
+      3,
+      4
+    ],
+    "time_slot_labels": [
+      "10:30 AM - 11:45 AM",
+      "12:00 PM - 1:15 PM"
+    ],
+    "weekdays": [
+      "mon",
+      "wed"
+    ]
+  },
+  {
+    "entry_id": 85,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 8,
+    "course_id": 28,
+    "dept_code": "ANGD",
+    "course_number": 3352,
+    "course_name": "Production Management IV",
+    "section": 1,
+    "room_id": 11,
+    "room_label": "JB 123",
+    "faculty_id": 13,
+    "faculty_name": "Randall Rudd",
+    "time_slot_ids": [
+      2,
+      3
+    ],
+    "time_slot_labels": [
+      "9:00 AM - 10:15 AM",
+      "10:30 AM - 11:45 AM"
+    ],
+    "weekdays": [
+      "tue",
+      "fri"
+    ]
+  },
+  {
+    "entry_id": 90,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 7,
+    "course_id": 19,
+    "dept_code": "ANGD",
+    "course_number": 2342,
+    "course_name": "Animation II: Animation for Games",
+    "section": 1,
+    "room_id": 2,
+    "room_label": "FH 3057",
+    "faculty_id": 16,
+    "faculty_name": "Emily Sidler",
+    "time_slot_ids": [
+      5,
+      6
+    ],
+    "time_slot_labels": [
+      "1:30 PM - 2:45 PM",
+      "3:00 PM - 4:15 PM"
+    ],
+    "weekdays": [
+      "tue",
+      "thu"
+    ]
+  },
+  {
+    "entry_id": 91,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 7,
+    "course_id": 21,
+    "dept_code": "ANGD",
+    "course_number": 2355,
+    "course_name": "Animation Pipeline",
+    "section": 1,
+    "room_id": 2,
+    "room_label": "FH 3057",
+    "faculty_id": 16,
+    "faculty_name": "Emily Sidler",
+    "time_slot_ids": [
+      5,
+      6
+    ],
+    "time_slot_labels": [
+      "1:30 PM - 2:45 PM",
+      "3:00 PM - 4:15 PM"
+    ],
+    "weekdays": [
+      "tue",
+      "thu"
+    ]
+  },
+  {
+    "entry_id": 92,
+    "term_id": 2,
+    "scheduled": true,
+    "schedule_table_id": 8,
+    "course_id": 20,
+    "dept_code": "ANGD",
+    "course_number": 2352,
+    "course_name": "Production Management II",
+    "section": 1,
+    "room_id": 11,
+    "room_label": "JB 123",
+    "faculty_id": 13,
+    "faculty_name": "Randall Rudd",
+    "time_slot_ids": [
+      2,
+      3
+    ],
+    "time_slot_labels": [
+      "9:00 AM - 10:15 AM",
+      "10:30 AM - 11:45 AM"
+    ],
+    "weekdays": [
+      "tue",
+      "fri"
+    ]
+  }
+]

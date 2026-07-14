@@ -7,7 +7,7 @@ import {
   weekdaysApi, semestersApi, facultyApi, chatApi, termTaughtWithApi, auditApi,
   type Term, type ScheduleTable, type ScheduleEntry, type Course,
   type Room, type TimeSlot, type Weekday, type Semester, type Faculty,
-  type IssueItem, type TermTaughtWithGroup
+  type IssueItem, type TermTaughtWithGroup, type ChatTraceStep
 } from '../api'
 import { showToast } from '../components/Toast'
 import { FormModal } from '../components/FormModal'
@@ -893,6 +893,17 @@ function FilterBar({ filters, onAdd, onRemove, onToggleNot, allFaculty, weekdays
   )
 }
 
+// Pretty-print a tool call's JSON result for the Thinking panel; falls back
+// to the raw string when it isn't valid JSON (e.g. truncated payloads).
+function formatToolResult(result?: string): string {
+  if (!result) return ''
+  try {
+    return JSON.stringify(JSON.parse(result), null, 2)
+  } catch {
+    return result
+  }
+}
+
 // --- AI Chat Panel ---
 function AIChatPanel({
   termId, isLoggedIn, onHighlight, onProposalApproved
@@ -903,26 +914,44 @@ function AIChatPanel({
   onHighlight: (ids: number[]) => void
   onProposalApproved: () => void
 }) {
+  type ChatMsg = { role: 'user' | 'agent'; text: string; proposal?: any; trace?: ChatTraceStep[]; pending?: boolean }
   const sessionId = useRef(Math.random().toString(36).slice(2))
-  const [messages, setMessages] = useState<{ role: 'user' | 'agent'; text: string; proposal?: any }[]>([])
+  const [messages, setMessages] = useState<ChatMsg[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
+  // Mutates only the last (agent) message in place — safe because sends are
+  // serialized: the input is disabled until the previous stream finishes.
+  const patchLastMessage = (patch: (msg: ChatMsg) => Partial<ChatMsg>) => {
+    setMessages(m => {
+      const copy = [...m]
+      copy[copy.length - 1] = { ...copy[copy.length - 1], ...patch(copy[copy.length - 1]) }
+      return copy
+    })
+  }
+
   const send = async () => {
     if (!input.trim() || sending) return
     const msg = input.trim()
     setInput('')
-    setMessages(m => [...m, { role: 'user', text: msg }])
+    setMessages(m => [...m, { role: 'user', text: msg }, { role: 'agent', text: '', trace: [], pending: true }])
     setSending(true)
     try {
-      const res = await chatApi.send(termId, msg, sessionId.current)
-      setMessages(m => [...m, { role: 'agent', text: res.text, proposal: res.proposal }])
-      if (res.highlighted_course_ids.length) onHighlight(res.highlighted_course_ids)
-    } catch (e: any) {
-      showToast(e.response?.data?.detail || 'Agent error')
+      await chatApi.sendStream(
+        termId, msg, sessionId.current,
+        step => patchLastMessage(cur => ({ trace: [...(cur.trace || []), step] })),
+        done => {
+          patchLastMessage(() => ({ text: done.text, proposal: done.proposal, pending: false }))
+          if (done.highlighted_course_ids.length) onHighlight(done.highlighted_course_ids)
+        },
+        errMsg => {
+          showToast(errMsg || 'Agent error')
+          patchLastMessage(() => ({ text: '_(agent error — see above)_', pending: false }))
+        },
+      )
     } finally {
       setSending(false)
     }
@@ -953,6 +982,43 @@ function AIChatPanel({
         )}
         {messages.map((m, i) => (
           <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+            {m.role === 'agent' && (m.pending || (m.trace && m.trace.length > 0)) && (
+              <details open={m.pending || undefined} style={{
+                maxWidth: '85%', marginBottom: 6, fontSize: 11,
+                background: 'var(--bg-surface)', border: '1px solid var(--border-color)',
+                borderRadius: 'var(--border-radius)', padding: '4px 8px',
+              }}>
+                <summary style={{ cursor: 'pointer', color: 'var(--text-secondary)', userSelect: 'none' }}>
+                  {m.pending
+                    ? (m.trace?.length ? `Thinking (${m.trace.length} step${m.trace.length === 1 ? '' : 's'})…` : 'Thinking…')
+                    : `Thought for ${m.trace?.length || 0} step${(m.trace?.length || 0) === 1 ? '' : 's'}`}
+                </summary>
+                <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {(m.trace || []).map((step, si) => step.type === 'text' ? (
+                    <div key={si} style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>{step.text}</div>
+                  ) : (
+                    <div key={si} style={{
+                      border: `1px solid ${step.is_error ? 'var(--error)' : 'var(--border-color)'}`,
+                      borderRadius: 4, padding: '6px 8px', fontFamily: 'monospace',
+                    }}>
+                      <div style={{ color: step.is_error ? 'var(--error)' : 'var(--cyan)' }}>
+                        {step.is_error ? '✕ ' : ''}{step.name}(<span style={{ color: 'var(--text-secondary)' }}>{JSON.stringify(step.input)}</span>)
+                      </div>
+                      <pre style={{
+                        margin: '4px 0 0', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                        maxHeight: 160, overflowY: 'auto', background: 'rgba(0,0,0,0.2)', borderRadius: 3, padding: '4px 6px',
+                      }}>
+                        {formatToolResult(step.result)}
+                      </pre>
+                    </div>
+                  ))}
+                  {m.pending && (
+                    <div style={{ color: 'var(--text-secondary)' }}>…</div>
+                  )}
+                </div>
+              </details>
+            )}
+            {(!m.pending || m.text) && (
             <div style={{
               background: m.role === 'user' ? 'var(--accent)' : 'var(--bg-elevated)',
               color: m.role === 'user' ? '#fff' : 'var(--text-primary)',
@@ -982,6 +1048,7 @@ function AIChatPanel({
                 </ReactMarkdown>
               )}
             </div>
+            )}
             {m.proposal && (
               <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--warning)', borderRadius: 'var(--border-radius)', padding: 12, marginTop: 8, maxWidth: '85%' }}>
                 <div style={{ color: 'var(--warning)', fontWeight: 600, fontSize: 12, marginBottom: 6 }}>Proposed Changes</div>

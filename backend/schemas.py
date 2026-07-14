@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict
-from typing import Optional
+from typing import Literal, Optional, Union
 from models import RankEnum, SemesterEnum, WeekdayEnum
 
 
@@ -276,6 +276,58 @@ class SectionCountPatch(BaseModel):
     count: int
 
 
+# --- Change List (feedback_42) ---
+
+class ChangeListRowOut(BaseModel):
+    row_key: str
+    term_num: Optional[Union[int, str]] = None  # e.g. "G1" for grad-only sections in real registrar data
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    crn: Optional[int] = None
+    subject: Optional[str] = None
+    course_number: Optional[Union[int, str]] = None  # registrar data occasionally uses non-numeric codes (e.g. "63CS1")
+    section: Optional[Union[int, str]] = None  # e.g. "SL" for service-learning sections
+    course_title: Optional[str] = None
+    type: Optional[str] = None
+    inst_method: Optional[str] = None
+    instructor: Optional[str] = None
+    secondary_instructor: Optional[str] = None
+    hours: Optional[int] = None
+    enrollment_max: Optional[int] = None
+    waitlist_cap: Optional[int] = None
+    begin: Optional[int] = None
+    end: Optional[int] = None
+    days: Optional[str] = None
+    bldg: Optional[str] = None
+    rm: Optional[str] = None
+    course_comments: Optional[str] = None
+    prerequisite: Optional[str] = None
+    fee_detail: Optional[str] = None
+    fee_amount: Optional[str] = None
+    sig_code: Optional[str] = None
+    sig_required: Optional[str] = None
+
+class ChangeListParseOut(BaseModel):
+    departments: list[str]
+    sheets: dict[str, list[ChangeListRowOut]]
+
+class ChangeListComputeRequest(BaseModel):
+    term_id: int
+    department: str
+    old_rows: list[ChangeListRowOut] = []
+    enrollment_overrides: dict[str, int] = {}
+
+class ChangeListComputedRowOut(BaseModel):
+    row_key: str
+    status: Literal["keep", "changed", "delete", "add"]
+    changed_fields: list[str] = []
+    values: ChangeListRowOut
+    original_enrollment_max: Optional[int] = None
+
+class ChangeListComputeOut(BaseModel):
+    rows: list[ChangeListComputedRowOut]
+
+
 # --- Chat ---
 
 class ChatMessage(BaseModel):
@@ -285,8 +337,3 @@ class ChatMessage(BaseModel):
 class ProposedChange(BaseModel):
     action: str
     description: str
-
-class ChatResponse(BaseModel):
-    text: str
-    highlighted_course_ids: list[int] = []
-    proposal: Optional[dict] = None

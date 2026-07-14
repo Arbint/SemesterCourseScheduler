@@ -1,9 +1,9 @@
-import re
+import json
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
-from database import get_db
-from schemas import ChatMessage, ChatResponse
+from database import get_db, SessionLocal
+from schemas import ChatMessage
 from models import Term
 
 router = APIRouter(tags=["chat"])
@@ -25,47 +25,73 @@ def _get_agent(session_id: str, db: Session, term_id: int):
     return _sessions[key]
 
 
-@router.post("/api/terms/{term_id}/chat", response_model=ChatResponse)
-def chat(term_id: int, data: ChatMessage, db: Session = Depends(get_db)):
+@router.post("/api/terms/{term_id}/chat")
+def chat(term_id: int, data: ChatMessage):
+    # Not using the Depends(get_db) request-scoped session here: FastAPI
+    # closes yield-dependencies as soon as the path function returns, which
+    # for a StreamingResponse happens before the generator body (and the
+    # agent's DB queries within it) actually runs. Own the session's
+    # lifetime for the length of the stream instead.
+    db = SessionLocal()
     term = db.query(Term).filter(Term.id == term_id).first()
     if not term:
+        db.close()
         raise HTTPException(404, "Term not found")
 
+    key = f"{data.session_id}:{term_id}"
     agent = _get_agent(data.session_id, db, term_id)
 
-    try:
-        response_text = agent.ProcessNewUserInput(data.message)
-    except Exception as e:
-        raise HTTPException(500, f"Agent error: {str(e)}")
+    def event_stream():
+        final_text = "no response"
+        try:
+            try:
+                for step in agent.ProcessNewUserInputStream(data.message):
+                    if step["type"] == "final":
+                        final_text = step["text"]
+                    else:
+                        yield f"data: {json.dumps(step)}\n\n"
+            except Exception as e:
+                # Drop the cached session so a corrupted message history
+                # (e.g. a dangling tool_use from a prior tool error) doesn't
+                # keep failing on every subsequent message. The user can
+                # just retry.
+                _sessions.pop(key, None)
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+                return
 
-    # Extract highlighted course IDs from agent's last tool calls
-    highlighted_ids = []
-    proposal = None
+            # Extract highlighted course IDs / proposal from the agent's tool calls
+            highlighted_ids = []
+            proposal = None
+            for msg in reversed(agent.messages):
+                content = msg.get("content", [])
+                if isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "tool_result":
+                            try:
+                                result = block.get("content", "{}")
+                                if isinstance(result, str):
+                                    parsed = json.loads(result)
+                                    if "highlighted_course_ids" in parsed:
+                                        highlighted_ids = parsed["highlighted_course_ids"]
+                                    if "proposal_id" in parsed:
+                                        proposal = parsed
+                                        _proposals[parsed["proposal_id"]] = agent
+                            except Exception:
+                                pass
+                if highlighted_ids or proposal:
+                    break
 
-    for msg in reversed(agent.messages):
-        content = msg.get("content", [])
-        if isinstance(content, list):
-            for block in content:
-                if isinstance(block, dict) and block.get("type") == "tool_result":
-                    try:
-                        result = block.get("content", "{}")
-                        if isinstance(result, str):
-                            parsed = __import__("json").loads(result)
-                            if "highlighted_course_ids" in parsed:
-                                highlighted_ids = parsed["highlighted_course_ids"]
-                            if "proposal_id" in parsed:
-                                proposal = parsed
-                                _proposals[parsed["proposal_id"]] = agent
-                    except Exception:
-                        pass
-        if highlighted_ids or proposal:
-            break
+            done = {
+                "type": "done",
+                "text": final_text,
+                "highlighted_course_ids": highlighted_ids,
+                "proposal": proposal,
+            }
+            yield f"data: {json.dumps(done)}\n\n"
+        finally:
+            db.close()
 
-    return ChatResponse(
-        text=response_text,
-        highlighted_course_ids=highlighted_ids,
-        proposal=proposal,
-    )
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @router.post("/api/chat/proposals/{proposal_id}/approve")

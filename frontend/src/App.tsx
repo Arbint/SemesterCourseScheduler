@@ -9,6 +9,7 @@ import { TimeSlotsTab } from './tabs/TimeSlotsTab'
 import { ConstraintsTab } from './tabs/ConstraintsTab'
 import { TermSchedulesTab } from './tabs/TermSchedulesTab'
 import { LoadTab } from './tabs/LoadTab'
+import { ChangeListTab } from './tabs/ChangeListTab'
 
 const TABS = [
   { id: 'faculty', label: 'Faculty' },
@@ -18,6 +19,7 @@ const TABS = [
   { id: 'constraints', label: 'Constraints' },
   { id: 'schedules', label: 'Term Schedules' },
   { id: 'load', label: 'Load' },
+  { id: 'changelist', label: 'Change List' },
 ] as const
 
 type TabId = typeof TABS[number]['id']
@@ -79,6 +81,7 @@ function AppShell() {
           <TermSchedulesTab />
         </div>
         {tab === 'load' && <LoadTab />}
+        {tab === 'changelist' && <ChangeListTab />}
       </div>
 
       {showLoginModal && (

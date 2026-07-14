@@ -145,7 +145,16 @@ export interface EntryWithWarnings {
   warnings: IssueItem[]
 }
 
-export interface ChatResponse {
+export interface ChatTraceStep {
+  type: 'text' | 'tool_call'
+  text?: string
+  name?: string
+  input?: Record<string, unknown>
+  result?: string
+  is_error?: boolean
+}
+
+export interface ChatDonePayload {
   text: string
   highlighted_course_ids: number[]
   proposal: {
@@ -280,10 +289,133 @@ export const loadSettingsApi = {
 }
 
 export const chatApi = {
-  send: (termId: number, message: string, session_id: string) =>
-    api.post<ChatResponse>(`/terms/${termId}/chat`, { message, session_id }).then(r => r.data),
+  // Streams the agent's response over SSE: each trace step (interim text /
+  // tool call) fires onStep the moment it happens, then onDone fires once
+  // with the final answer. onError fires on any failure (network or agent).
+  sendStream: async (
+    termId: number, message: string, session_id: string,
+    onStep: (step: ChatTraceStep) => void,
+    onDone: (payload: ChatDonePayload) => void,
+    onError: (message: string) => void,
+  ) => {
+    let res: Response
+    try {
+      const token = getStoredToken()
+      res = await fetch(`/api/terms/${termId}/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ message, session_id }),
+      })
+    } catch {
+      onError('Network error')
+      return
+    }
+    if (!res.ok || !res.body) {
+      onError(`Agent error (${res.status})`)
+      return
+    }
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      let sep
+      while ((sep = buffer.indexOf('\n\n')) !== -1) {
+        const rawEvent = buffer.slice(0, sep)
+        buffer = buffer.slice(sep + 2)
+        const line = rawEvent.split('\n').find(l => l.startsWith('data: '))
+        if (!line) continue
+        const payload = JSON.parse(line.slice(6))
+        if (payload.type === 'error') onError(payload.error || 'Agent error')
+        else if (payload.type === 'done') onDone(payload)
+        else onStep(payload)
+      }
+    }
+  },
   approveProposal: (proposalId: string) => api.post(`/chat/proposals/${proposalId}/approve`).then(r => r.data),
   rejectProposal: (proposalId: string) => api.post(`/chat/proposals/${proposalId}/reject`),
+}
+
+// --- Change List (feedback_42) ---
+
+export interface ChangeListRow {
+  row_key: string
+  term_num: number | string | null
+  start_date: string | null
+  end_date: string | null
+  crn: number | null
+  subject: string | null
+  course_number: number | string | null
+  section: number | string | null
+  course_title: string | null
+  type: string | null
+  inst_method: string | null
+  instructor: string | null
+  secondary_instructor: string | null
+  hours: number | null
+  enrollment_max: number | null
+  waitlist_cap: number | null
+  begin: number | null
+  end: number | null
+  days: string | null
+  bldg: string | null
+  rm: string | null
+  course_comments: string | null
+  prerequisite: string | null
+  fee_detail: string | null
+  fee_amount: string | null
+  sig_code: string | null
+  sig_required: string | null
+}
+
+export type ChangeListStatus = 'keep' | 'changed' | 'delete' | 'add'
+
+export interface ComputedChangeListRow {
+  row_key: string
+  status: ChangeListStatus
+  changed_fields: string[]
+  values: ChangeListRow
+  original_enrollment_max: number | null
+}
+
+export interface ChangeListParseResult {
+  departments: string[]
+  sheets: Record<string, ChangeListRow[]>
+}
+
+export interface ChangeListComputeRequest {
+  term_id: number
+  department: string
+  old_rows: ChangeListRow[]
+  enrollment_overrides: Record<string, number>
+}
+
+export const changeListApi = {
+  parseDraft: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    // Let the browser set Content-Type itself so it includes the multipart boundary.
+    return api.post<ChangeListParseResult>('/change-list/parse', form).then(r => r.data)
+  },
+  compute: (payload: ChangeListComputeRequest) =>
+    api.post<{ rows: ComputedChangeListRow[] }>('/change-list/compute', payload).then(r => r.data.rows),
+  exportXlsx: async (payload: ChangeListComputeRequest) => {
+    const res = await api.post('/change-list/export', payload, { responseType: 'blob' })
+    const url = URL.createObjectURL(res.data as Blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `change_list_${payload.department}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  },
 }
 
 export interface AuthStatus {
