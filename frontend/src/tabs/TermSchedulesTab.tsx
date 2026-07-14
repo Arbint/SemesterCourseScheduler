@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm'
 import { DndContext, type DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core'
 import {
   termsApi, tablesApi, entriesApi, coursesApi, roomsApi, timeSlotsApi,
-  weekdaysApi, semestersApi, facultyApi, chatApi, termTaughtWithApi,
+  weekdaysApi, semestersApi, facultyApi, chatApi, termTaughtWithApi, auditApi,
   type Term, type ScheduleTable, type ScheduleEntry, type Course,
   type Room, type TimeSlot, type Weekday, type Semester, type Faculty,
   type IssueItem, type TermTaughtWithGroup
@@ -1029,6 +1029,7 @@ export function TermSchedulesTab() {
   const [allFaculty, setAllFaculty] = useState<Faculty[]>([])
   const [errors, setErrors] = useState<IssueItem[]>([])
   const [warnings, setWarnings] = useState<IssueItem[]>([])
+  const [auditLoading, setAuditLoading] = useState(false)
   const [issueHighlight, setIssueHighlight] = useState<{ key: string, entryIds: number[], severity: 'error' | 'warning' } | null>(null)
   const [highlightedIds, setHighlightedIds] = useState<number[]>([])
   const [neededSections, setNeededSections] = useState<Map<number, number>>(new Map())
@@ -1157,10 +1158,11 @@ export function TermSchedulesTab() {
   }
 
   useEffect(() => {
-    loadStatic().then(({ terms: t }) => {
+    loadStatic().then(async ({ terms: t }) => {
       if (t.length) {
         setSelectedTermId(t[0].id)
-        loadTerm(t[0].id, t[0])
+        await loadTerm(t[0].id, t[0])
+        await refreshAudit(t[0].id)
       }
     })
   }, [])
@@ -1177,12 +1179,11 @@ export function TermSchedulesTab() {
     const id = +val
     setSelectedTermId(id)
     const term = terms.find(t => t.id === id)
-    setErrors([])
-    setWarnings([])
     setIssueHighlight(null)
     setHighlightedIds([])
     setTermTaughtWith([])
     await loadTerm(id, term)
+    await refreshAudit(id)
   }
 
   const createTerm = async () => {
@@ -1222,6 +1223,22 @@ export function TermSchedulesTab() {
       }
     } catch (e: any) {
       showToast(e.response?.data?.detail || 'Failed to delete term')
+    }
+  }
+
+  const refreshAudit = async (termId?: number) => {
+    const id = termId ?? selectedTermId
+    if (!id) return
+    setAuditLoading(true)
+    try {
+      const result = await auditApi.auditTerm(id)
+      setErrors(result.errors)
+      setWarnings(result.warnings)
+      setIssueHighlight(null)
+    } catch (e: any) {
+      showToast(e.response?.data?.detail || 'Audit failed')
+    } finally {
+      setAuditLoading(false)
     }
   }
 
@@ -1518,7 +1535,19 @@ export function TermSchedulesTab() {
 
           {/* Issues List */}
           <div style={{ width: warningWidth, flexShrink: 0, overflowY: 'auto', padding: 12 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Issues</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Issues</div>
+              {selectedTermId && (
+                <button
+                  className="btn-secondary btn-sm"
+                  onClick={() => refreshAudit()}
+                  disabled={auditLoading}
+                  style={{ fontSize: 11, padding: '2px 8px' }}
+                >
+                  {auditLoading ? '...' : 'Refresh'}
+                </button>
+              )}
+            </div>
             {errors.length === 0 && warnings.length === 0 ? (
               <div style={{ color: 'var(--success)', fontSize: 12 }}>No issues</div>
             ) : (

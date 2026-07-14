@@ -266,6 +266,11 @@ export const loadApi = {
   getTermLoad: (termId: number) => api.get<FacultyLoad[]>(`/terms/${termId}/load`).then(r => r.data),
 }
 
+export const auditApi = {
+  auditTerm: (termId: number) =>
+    api.get<{ errors: IssueItem[]; warnings: IssueItem[] }>(`/terms/${termId}/audit`).then(r => r.data),
+}
+
 export const loadSettingsApi = {
   get: () => api.get<LoadSettings>('/load-settings').then(r => r.data),
   update: (d: LoadSettings) => api.put<LoadSettings>('/load-settings', d).then(r => r.data),

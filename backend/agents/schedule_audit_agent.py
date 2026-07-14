@@ -46,7 +46,14 @@ When auditing, always check for:
 2. Big gaps: faculty with 3+ empty time slots between classes on same day
 3. Unbalanced load: std deviation of faculty section counts > 1.5
 
-CRITICAL RULES:
+ANTI-HALLUCINATION RULES — follow these without exception:
+- NEVER state a specific course name, course number, room, time slot, faculty assignment, or section count unless it appears verbatim in a tool response from this conversation.
+- NEVER infer, guess, or extrapolate facts about the schedule. If you do not have data from a tool call, say so and call the appropriate tool before continuing.
+- When a user asks about a specific faculty member's courses or load, call get_faculty_load() or get_schedule_summary() first, then report only what the tool returned — nothing else.
+- If you are unsure whether a fact is in the tool data or in your training knowledge, treat it as unknown and call the tool again.
+- Do not combine data across multiple tool calls unless you are certain the IDs match exactly. Never "fill in" missing details from memory.
+
+SCHEDULING RULES:
 - To auto-schedule the entire semester (or any large batch), ALWAYS call auto_schedule() — never try to manually construct a proposal with propose_schedule_change() for this purpose.
 - When the user asks to REDO, REPLACE, or RESCHEDULE an existing schedule, call auto_schedule(clear_existing=true) to wipe the existing tables first.
 - When scheduling for the first time or filling in only the unscheduled courses, call auto_schedule() with no arguments.
@@ -154,6 +161,17 @@ CRITICAL RULES:
                 "input_schema": {"type": "object", "properties": {}}
             },
             {
+                "name": self.get_faculty_courses.__name__,
+                "description": "Get the exact list of courses currently assigned to a specific faculty member in this term. Call this whenever a user asks what a specific instructor is teaching — never infer from memory.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "faculty_id": {"type": "integer", "description": "The faculty member's ID"}
+                    },
+                    "required": ["faculty_id"]
+                }
+            },
+            {
                 "name": self.get_rooms.__name__,
                 "description": "Get all available rooms with their IDs, labels, and capacities.",
                 "input_schema": {"type": "object", "properties": {}}
@@ -230,26 +248,50 @@ CRITICAL RULES:
         def _full_load(f) -> int:
             return fulltime_load if f.rank.value == "full_time" else parttime_load
 
-        load_map: dict[int, int] = {}
+        # Build TaughtWith map so pairs are counted as 1 load unit
+        tw_map = _build_combined_tw_map(self.db, self.term_id)
+        counted_tw: set[tuple] = set()  # (faculty_id, tw_group_key)
+
+        raw_map: dict[int, int] = {}     # raw section count
+        eff_map: dict[int, int] = {}     # effective load (TW pair = 1)
         faculty_map: dict[int, object] = {}
+        courses_by_faculty: dict[int, list] = {}
 
         for entry in term.schedule_entries:
-            if entry.faculty_id:
-                load_map[entry.faculty_id] = load_map.get(entry.faculty_id, 0) + 1
-                faculty_map[entry.faculty_id] = entry.faculty
+            if not entry.faculty_id:
+                continue
+            fid = entry.faculty_id
+            faculty_map[fid] = entry.faculty
+            raw_map[fid] = raw_map.get(fid, 0) + 1
+
+            # TaughtWith deduplication for effective load
+            gk = tw_map.get(entry.course_id)
+            if gk is not None:
+                key = (fid, gk)
+                if key in counted_tw:
+                    continue  # partner already counted
+                counted_tw.add(key)
+            eff_map[fid] = eff_map.get(fid, 0) + 1
+
+            label = f"{entry.course.dept_code}{entry.course.course_number} {entry.course.course_name} §{entry.section}"
+            if gk:
+                label += f" [TaughtWith group {gk}]"
+            courses_by_faculty.setdefault(fid, []).append(label)
 
         result = []
-        for fid, count in load_map.items():
+        for fid, eff_count in eff_map.items():
             f = faculty_map[fid]
             limit = _full_load(f)
             result.append({
                 "faculty_id": fid,
                 "name": f"{f.first_name} {f.last_name}",
                 "rank": f.rank.value,
-                "sections": count,
+                "raw_section_count": raw_map.get(fid, 0),
+                "effective_load": eff_count,
                 "full_load": limit,
-                "overloaded": count > limit,
-                "underloaded": f.rank.value == "full_time" and count < limit,
+                "overloaded": eff_count > limit,
+                "underloaded": f.rank.value == "full_time" and eff_count < limit,
+                "courses": courses_by_faculty.get(fid, []),
             })
         return result
 
@@ -307,6 +349,38 @@ CRITICAL RULES:
                 ]
             })
         return result
+
+    def get_faculty_courses(self, faculty_id: int):
+        """Return the exact schedule entries assigned to one faculty member this term."""
+        from models import Term
+        term = self.db.query(Term).filter_by(id=self.term_id).first()
+        if not term:
+            return {"error": "Term not found"}
+
+        tw_map = _build_combined_tw_map(self.db, self.term_id)
+        entries = [e for e in term.schedule_entries if e.faculty_id == faculty_id]
+        if not entries:
+            return {"faculty_id": faculty_id, "courses": [], "note": "No courses assigned to this faculty member in this term."}
+
+        faculty = entries[0].faculty
+        result = []
+        for e in entries:
+            gk = tw_map.get(e.course_id)
+            result.append({
+                "entry_id": e.id,
+                "course": f"{e.course.dept_code}{e.course.course_number} {e.course.course_name}",
+                "section": e.section,
+                "time_slots": [ts.label for ts in sorted(e.time_slots, key=lambda ts: ts.display_order)],
+                "room": e.room.label if e.room else None,
+                "taught_with_group": gk,
+            })
+
+        return {
+            "faculty_id": faculty_id,
+            "name": f"{faculty.first_name} {faculty.last_name}",
+            "courses": result,
+            "note": "This is the authoritative list. Only report what is listed here.",
+        }
 
     def get_rooms(self):
         from models import Room

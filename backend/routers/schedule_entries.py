@@ -287,3 +287,15 @@ def delete_entry(entry_id: int, db: Session = Depends(get_db)):
             db.add(ScheduleEntry(term_id=term_id, course_id=course_id, section=1))
 
     db.commit()
+
+
+@router.get("/api/terms/{term_id}/audit")
+def audit_term(term_id: int, db: Session = Depends(get_db)):
+    term = _refresh_term(db, term_id)
+    if not term:
+        raise HTTPException(404, "Term not found")
+    critical, warnings = run_audits(db, term)
+    return {
+        "errors": [{"description": r.description, "courses": r.courses, "entries": r.entries} for r in critical],
+        "warnings": [{"description": r.description, "courses": r.courses, "entries": r.entries} for r in warnings],
+    }

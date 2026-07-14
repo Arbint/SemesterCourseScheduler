@@ -25,6 +25,24 @@ class Agent:
         self.Run()
 
 
+    @staticmethod
+    def _blocks_to_dicts(content) -> list[dict]:
+        """Convert SDK content block objects to plain dicts for safe re-serialization."""
+        result = []
+        for block in content:
+            if isinstance(block, dict):
+                result.append(block)
+            elif block.type == "text":
+                result.append({"type": "text", "text": block.text})
+            elif block.type == "tool_use":
+                result.append({
+                    "type": "tool_use",
+                    "id": block.id,
+                    "name": block.name,
+                    "input": block.input,
+                })
+        return result
+
     def Run(self):
         iter = 0
         response = None
@@ -36,29 +54,25 @@ class Agent:
 
             response = self._SendRequestToAgent()
 
-            toolUseBlocks =[block for block in response.content if block.type=="tool_use"]
-            textBlocks = [block for block in response.content if block.type=="text"]
+            toolUseBlocks = [block for block in response.content if block.type == "tool_use"]
+            textBlocks = [block for block in response.content if block.type == "text"]
 
-            for textBlock in textBlocks: 
+            for textBlock in textBlocks:
                 print(f"assstant: {textBlock.text}")
 
-            self.messages.append({"role": "assistant", "content": response.content})
+            # Store as plain dicts so the SDK can serialize them reliably on the next call
+            self.messages.append({"role": "assistant", "content": self._blocks_to_dicts(response.content)})
 
             if toolUseBlocks:
                 toolResults = self.__ProcessToolUse(toolUseBlocks)
-                self.messages.append({"role":"user", "content": toolResults})
+                self.messages.append({"role": "user", "content": toolResults})
             else:
                 break
 
-        finalResponseTextBlocks = [block for block in response.content if block.type=="text"]
-        finalResponse = ""
-        for textBlock in finalResponseTextBlocks:
-            finalResponse += textBlock.text
-
-        if finalResponse == "":
-            finalResponse = "no response"
-
-        return finalResponse
+        finalResponse = "".join(
+            block.text for block in response.content if block.type == "text"
+        )
+        return finalResponse or "no response"
             
 
     def ConfigureInput(self, **inputs):
@@ -127,19 +141,20 @@ class Agent:
             if isinstance(content, str):
                 print(f"[{role}]: {content}")
             elif isinstance(content, list):
-                hasText = any(not isinstance(block, dict) and block.type=="text" for block in content)
-                if not hasText: 
+                # All blocks are now plain dicts
+                hasText = any(isinstance(b, dict) and b.get("type") == "text" for b in content)
+                if not hasText:
                     print(f"[{role}]:")
                 for block in content:
-                    if isinstance(block, dict):
-                        if block.get("type")=="tool_result":
-                            print(f"[{role} (tool_result id={block['tool_use_id']})]: {block['content']}")
-
-                    else:
-                        if block.type=="text":
-                            print(f"[{role}]: {block.text}")
-                        elif block.type=="tool_use":
-                            print(f" -> tool_use (id={block.id}): {block.name}({json.dumps(block.input)})")
+                    if not isinstance(block, dict):
+                        continue
+                    btype = block.get("type")
+                    if btype == "text":
+                        print(f"[{role}]: {block['text']}")
+                    elif btype == "tool_use":
+                        print(f" -> tool_use (id={block['id']}): {block['name']}({json.dumps(block['input'])})")
+                    elif btype == "tool_result":
+                        print(f"[{role} (tool_result id={block['tool_use_id']})]: {block['content']}")
 
         print(f"----\n")
                     
