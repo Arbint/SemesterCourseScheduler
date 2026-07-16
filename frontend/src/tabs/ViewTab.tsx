@@ -7,11 +7,37 @@ import {
 } from '../api'
 import { showToast } from '../components/Toast'
 import { TermSelector } from '../components/TermSelector'
-import { ScheduleTableView } from '../components/ScheduleGrid'
+import { ScheduleTableView, DEFAULT_CELL_WIDTH, DEFAULT_CELL_HEIGHT } from '../components/ScheduleGrid'
 import { FilterBar, entryMatchesFilters, type ActiveFilter } from '../components/FilterBar'
 
-const BASE_FONT_SIZE = 11
 const noop = () => {}
+
+function SpinBox({ label, value, onChange, min, max, step = 1 }: {
+  label: string
+  value: number
+  onChange: (v: number) => void
+  min: number
+  max: number
+  step?: number
+}) {
+  return (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
+      {label}
+      <input
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={e => {
+          const raw = +e.target.value
+          if (Number.isFinite(raw)) onChange(Math.max(min, Math.min(max, raw)))
+        }}
+        style={{ width: 64, padding: '3px 6px', fontSize: 12 }}
+      />
+    </label>
+  )
+}
 
 function getTermIdFromUrl(): number | null {
   const raw = new URLSearchParams(window.location.search).get('term')
@@ -31,7 +57,9 @@ export function ViewTab() {
   const [allFaculty, setAllFaculty] = useState<Faculty[]>([])
   const [termTaughtWith, setTermTaughtWith] = useState<TermTaughtWithGroup[]>([])
   const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([])
-  const [fontSize, setFontSize] = useState(BASE_FONT_SIZE)
+  const [cellWidth, setCellWidth] = useState(DEFAULT_CELL_WIDTH)
+  const [cellHeight, setCellHeight] = useState(DEFAULT_CELL_HEIGHT)
+  const [fontScale, setFontScale] = useState(1)
 
   const loadTerm = async (termId: number, term?: Term, allTerms?: Term[]) => {
     const termData = term ?? (allTerms ?? terms).find(t => t.id === termId)
@@ -121,17 +149,9 @@ export function ViewTab() {
           onDelete={noop}
           onNew={noop}
         />
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
-          Font Size
-          <input
-            type="number"
-            min={6}
-            max={24}
-            value={fontSize}
-            onChange={e => setFontSize(Math.max(6, Math.min(24, +e.target.value || BASE_FONT_SIZE)))}
-            style={{ width: 56, padding: '3px 6px', fontSize: 12 }}
-          />
-        </label>
+        <SpinBox label="Cell Width" value={cellWidth} onChange={setCellWidth} min={60} max={400} step={5} />
+        <SpinBox label="Cell Height" value={cellHeight} onChange={setCellHeight} min={40} max={300} step={5} />
+        <SpinBox label="Font Scale" value={fontScale} onChange={setFontScale} min={0.3} max={3} step={0.1} />
         {selectedTermId && (
           <button className="btn-secondary" onClick={copyViewUrl}>
             Get View URL
@@ -149,9 +169,7 @@ export function ViewTab() {
         courses={courses}
       />
 
-      <div
-        style={{ flex: 1, overflowY: 'auto', padding: 16, ['--sched-font-scale' as string]: fontSize / BASE_FONT_SIZE }}
-      >
+      <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
         {!selectedTermId && (
           <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>No term selected.</div>
         )}
@@ -169,6 +187,10 @@ export function ViewTab() {
             isEntryDimmed={isEntryDimmed}
             isLoggedIn={false}
             forceHideUnused
+            cellWidth={cellWidth}
+            cellHeight={cellHeight}
+            viewMode
+            fontScale={fontScale}
             onWeekdaysChange={noop}
             onDeleteTable={noop}
             onFacultyChange={noop}

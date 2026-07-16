@@ -1,0 +1,1 @@
+Add the searching capabilities to the faculty filter in both the term schedule and view tab.

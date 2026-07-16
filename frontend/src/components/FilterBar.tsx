@@ -43,12 +43,13 @@ export function FilterBar({ filters, onAdd, onRemove, onToggleNot, allFaculty, w
   const [step, setStep] = useState<null | 'type' | 'value'>(null)
   const [pendingType, setPendingType] = useState<ActiveFilter['type'] | null>(null)
   const [courseSearch, setCourseSearch] = useState('')
+  const [facultySearch, setFacultySearch] = useState('')
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) {
-        setStep(null); setPendingType(null); setCourseSearch('')
+        setStep(null); setPendingType(null); setCourseSearch(''); setFacultySearch('')
       }
     }
     document.addEventListener('mousedown', handler)
@@ -60,7 +61,7 @@ export function FilterBar({ filters, onAdd, onRemove, onToggleNot, allFaculty, w
   const selectValue = (value: number | string, label: string) => {
     if (!pendingType) return
     onAdd({ type: pendingType, value, label, negated: false })
-    setStep(null); setPendingType(null); setCourseSearch('')
+    setStep(null); setPendingType(null); setCourseSearch(''); setFacultySearch('')
   }
 
   const filteredCourses = courseSearch.trim()
@@ -68,6 +69,12 @@ export function FilterBar({ filters, onAdd, onRemove, onToggleNot, allFaculty, w
         `${c.dept_code} ${c.course_number} ${c.course_name}`.toLowerCase().includes(courseSearch.toLowerCase())
       ).slice(0, 10)
     : []
+
+  const filteredFaculty = facultySearch.trim()
+    ? allFaculty.filter(f =>
+        `${f.last_name}, ${f.first_name}`.toLowerCase().includes(facultySearch.toLowerCase())
+      )
+    : allFaculty
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 16px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-surface)', flexWrap: 'wrap', minHeight: 36 }}>
@@ -112,18 +119,30 @@ export function FilterBar({ filters, onAdd, onRemove, onToggleNot, allFaculty, w
             ))}
 
             {step === 'value' && pendingType === 'faculty' && (
-              <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-                {allFaculty.map(f => (
-                  <button
-                    key={f.id}
-                    onClick={() => selectValue(f.id, `${f.last_name}, ${f.first_name}`)}
-                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', background: 'transparent', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 13 }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-elevated)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                  >
-                    {f.last_name}, {f.first_name}
-                  </button>
-                ))}
+              <div style={{ padding: 8 }}>
+                <input
+                  autoFocus
+                  placeholder="Search faculty..."
+                  value={facultySearch}
+                  onChange={e => setFacultySearch(e.target.value)}
+                  style={{ width: '100%', padding: '4px 8px', fontSize: 12, boxSizing: 'border-box' }}
+                />
+                <div style={{ marginTop: 4, maxHeight: 200, overflowY: 'auto' }}>
+                  {filteredFaculty.map(f => (
+                    <button
+                      key={f.id}
+                      onClick={() => selectValue(f.id, `${f.last_name}, ${f.first_name}`)}
+                      style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 8px', background: 'transparent', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 12 }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-elevated)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      {f.last_name}, {f.first_name}
+                    </button>
+                  ))}
+                  {facultySearch.trim() && filteredFaculty.length === 0 && (
+                    <div style={{ padding: '4px 8px', fontSize: 12, color: 'var(--text-secondary)' }}>No matches</div>
+                  )}
+                </div>
               </div>
             )}
 
