@@ -12,6 +12,10 @@ import { FilterBar, entryMatchesFilters, type ActiveFilter } from '../components
 
 const noop = () => {}
 
+const CELL_WIDTH_RANGE = { min: 60, max: 400 }
+const CELL_HEIGHT_RANGE = { min: 40, max: 300 }
+const FONT_SCALE_RANGE = { min: 0.3, max: 3 }
+
 function SpinBox({ label, value, onChange, min, max, step = 1 }: {
   label: string
   value: number
@@ -45,6 +49,12 @@ function getTermIdFromUrl(): number | null {
   return Number.isFinite(id) ? id : null
 }
 
+function getNumberParam(name: string, fallback: number, min: number, max: number): number {
+  const raw = new URLSearchParams(window.location.search).get(name)
+  const val = raw ? +raw : NaN
+  return Number.isFinite(val) ? Math.max(min, Math.min(max, val)) : fallback
+}
+
 export function ViewTab() {
   const [terms, setTerms] = useState<Term[]>([])
   const [selectedTermId, setSelectedTermId] = useState<number | null>(null)
@@ -57,9 +67,15 @@ export function ViewTab() {
   const [allFaculty, setAllFaculty] = useState<Faculty[]>([])
   const [termTaughtWith, setTermTaughtWith] = useState<TermTaughtWithGroup[]>([])
   const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([])
-  const [cellWidth, setCellWidth] = useState(DEFAULT_CELL_WIDTH)
-  const [cellHeight, setCellHeight] = useState(DEFAULT_CELL_HEIGHT)
-  const [fontScale, setFontScale] = useState(1)
+  const [cellWidth, setCellWidth] = useState(
+    () => getNumberParam('cellWidth', DEFAULT_CELL_WIDTH, CELL_WIDTH_RANGE.min, CELL_WIDTH_RANGE.max)
+  )
+  const [cellHeight, setCellHeight] = useState(
+    () => getNumberParam('cellHeight', DEFAULT_CELL_HEIGHT, CELL_HEIGHT_RANGE.min, CELL_HEIGHT_RANGE.max)
+  )
+  const [fontScale, setFontScale] = useState(
+    () => getNumberParam('fontScale', 1, FONT_SCALE_RANGE.min, FONT_SCALE_RANGE.max)
+  )
 
   const loadTerm = async (termId: number, term?: Term, allTerms?: Term[]) => {
     const termData = term ?? (allTerms ?? terms).find(t => t.id === termId)
@@ -104,7 +120,14 @@ export function ViewTab() {
 
   const copyViewUrl = async () => {
     if (!selectedTermId) return
-    const url = `${window.location.origin}${window.location.pathname}?tab=view&term=${selectedTermId}`
+    const params = new URLSearchParams({
+      tab: 'view',
+      term: String(selectedTermId),
+      cellWidth: String(cellWidth),
+      cellHeight: String(cellHeight),
+      fontScale: String(fontScale),
+    })
+    const url = `${window.location.origin}${window.location.pathname}?${params.toString()}`
     try {
       await navigator.clipboard.writeText(url)
       showToast('View URL copied to clipboard', 'success')
@@ -149,9 +172,9 @@ export function ViewTab() {
           onDelete={noop}
           onNew={noop}
         />
-        <SpinBox label="Cell Width" value={cellWidth} onChange={setCellWidth} min={60} max={400} step={5} />
-        <SpinBox label="Cell Height" value={cellHeight} onChange={setCellHeight} min={40} max={300} step={5} />
-        <SpinBox label="Font Scale" value={fontScale} onChange={setFontScale} min={0.3} max={3} step={0.1} />
+        <SpinBox label="Cell Width" value={cellWidth} onChange={setCellWidth} {...CELL_WIDTH_RANGE} step={5} />
+        <SpinBox label="Cell Height" value={cellHeight} onChange={setCellHeight} {...CELL_HEIGHT_RANGE} step={5} />
+        <SpinBox label="Font Scale" value={fontScale} onChange={setFontScale} {...FONT_SCALE_RANGE} step={0.1} />
         {selectedTermId && (
           <button className="btn-secondary" onClick={copyViewUrl}>
             Get View URL

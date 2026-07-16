@@ -14,6 +14,12 @@ export function facultyColor(facultyId: number | null): string {
 }
 
 export const DAY_ABBR: Record<string, string> = { mon: 'M', tue: 'T', wed: 'W', thu: 'Th', fri: 'F' }
+const DAY_FULL: Record<string, string> = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri' }
+// One color per weekday (One Dark Pro palette) so a table's assigned days
+// are recognizable at a glance in the View tab without needing checkboxes.
+const DAY_COLOR: Record<string, string> = {
+  mon: '#61afef', tue: '#98c379', wed: '#e5c07b', thu: '#c678dd', fri: '#e06c75',
+}
 
 // Font sizes below use calc(var(--sched-font-scale, 1) * Npx) so a container
 // (e.g. the View tab) can scale all table text via one CSS variable without
@@ -356,8 +362,6 @@ export function TaughtWithSectionCard({
     </div>
   )
 }
-
-const DAY_FULL: Record<string, string> = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri' }
 
 // Anchors a floating hover panel to a card. Positioned with the card's
 // live bounding rect and rendered as position: fixed *outside* the card
@@ -826,7 +830,6 @@ export function ScheduleTableView({
   const fontPx = useMemo(() => computeUniformFontSize(cellWidth, cellHeight) * fontScale, [cellWidth, cellHeight, fontScale])
 
   const selectedWeekdays = new Set<number>(table.weekday_ids)
-  const dayNames: Record<string, string> = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri' }
 
   const tableEntries = entries.filter(e => e.schedule_table_id === table.id)
   const usedRoomIds = new Set(tableEntries.map(e => e.room_id).filter(Boolean))
@@ -871,26 +874,34 @@ export function ScheduleTableView({
     <div className="card" style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          {weekdays.map(w => (
-            <label key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: isLoggedIn ? 'pointer' : 'default', userSelect: 'none' }}>
-              <input
-                type="checkbox"
-                checked={selectedWeekdays.has(w.id)}
-                disabled={!isLoggedIn}
-                onChange={e => {
-                  if (!isLoggedIn) return
-                  const ids = e.target.checked
-                    ? [...table.weekday_ids, w.id]
-                    : table.weekday_ids.filter(id => id !== w.id)
-                  onWeekdaysChange(ids)
-                }}
-                style={{ accentColor: 'var(--accent)' }}
-              />
-              <span style={{ color: selectedWeekdays.has(w.id) ? 'var(--accent)' : 'var(--text-secondary)', fontSize: 13 }}>
-                {dayNames[w.name] ?? w.name}
+          {viewMode ? (
+            tableWeekdays.map(w => (
+              <span key={w.id} style={{ color: DAY_COLOR[w.name] ?? 'var(--text-primary)', fontSize: 13, fontWeight: 700 }}>
+                {DAY_FULL[w.name] ?? w.name}
               </span>
-            </label>
-          ))}
+            ))
+          ) : (
+            weekdays.map(w => (
+              <label key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: isLoggedIn ? 'pointer' : 'default', userSelect: 'none' }}>
+                <input
+                  type="checkbox"
+                  checked={selectedWeekdays.has(w.id)}
+                  disabled={!isLoggedIn}
+                  onChange={e => {
+                    if (!isLoggedIn) return
+                    const ids = e.target.checked
+                      ? [...table.weekday_ids, w.id]
+                      : table.weekday_ids.filter(id => id !== w.id)
+                    onWeekdaysChange(ids)
+                  }}
+                  style={{ accentColor: 'var(--accent)' }}
+                />
+                <span style={{ color: selectedWeekdays.has(w.id) ? 'var(--accent)' : 'var(--text-secondary)', fontSize: 13 }}>
+                  {DAY_FULL[w.name] ?? w.name}
+                </span>
+              </label>
+            ))
+          )}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {!forceHideUnused && (
