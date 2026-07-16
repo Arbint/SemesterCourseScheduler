@@ -9,6 +9,7 @@ import { TimeSlotsTab } from './tabs/TimeSlotsTab'
 import { ConstraintsTab } from './tabs/ConstraintsTab'
 import { TermSchedulesTab } from './tabs/TermSchedulesTab'
 import { LoadTab } from './tabs/LoadTab'
+import { ViewTab } from './tabs/ViewTab'
 import { ChangeListTab } from './tabs/ChangeListTab'
 
 const TABS = [
@@ -19,13 +20,19 @@ const TABS = [
   { id: 'constraints', label: 'Constraints' },
   { id: 'schedules', label: 'Term Schedules' },
   { id: 'load', label: 'Load' },
+  { id: 'view', label: 'View' },
   { id: 'changelist', label: 'Change List' },
 ] as const
 
 type TabId = typeof TABS[number]['id']
 
+function initialTab(): TabId {
+  const requested = new URLSearchParams(window.location.search).get('tab')
+  return TABS.some(t => t.id === requested) ? (requested as TabId) : 'schedules'
+}
+
 function AppShell() {
-  const [tab, setTab] = useState<TabId>('schedules')
+  const [tab, setTab] = useState<TabId>(initialTab)
   const [showLoginModal, setShowLoginModal] = useState(false)
   const { isLoggedIn, hasUser, username, logout } = useAuth()
 
@@ -70,7 +77,7 @@ function AppShell() {
         </div>
       </div>
 
-      <div style={{ flex: 1, overflow: tab === 'schedules' ? 'hidden' : 'auto', position: 'relative' }}>
+      <div style={{ flex: 1, overflow: tab === 'schedules' || tab === 'view' ? 'hidden' : 'auto', position: 'relative' }}>
         {tab === 'faculty' && <FacultyTab />}
         {tab === 'courses' && <CourseTab />}
         {tab === 'rooms' && <RoomsTab />}
@@ -81,6 +88,11 @@ function AppShell() {
           <TermSchedulesTab />
         </div>
         {tab === 'load' && <LoadTab />}
+        {tab === 'view' && (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+            <ViewTab />
+          </div>
+        )}
         {tab === 'changelist' && <ChangeListTab />}
       </div>
 
