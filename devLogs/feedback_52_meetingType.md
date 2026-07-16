@@ -8,10 +8,27 @@ Faculty meeting needs to be scheduled per term.
 
 Add a meetings table. For each meeting, we should have:
 
-Name, String
+Name, as a String
 Duration, same duration schema as the course table.
 
-In the terms table, add another meettings attribute for the term.
+each term will have an associate list of meetings in their schedule, propose your backend solution to me before implementing.
+
+# Front End
+
+Add a Meetings List, tack it under Course List.
+
+In the Term Schedule tab, add a Term Meetings button, once clicked, a pop up will show asking for the Name, and Duration of the meeting. 
+
+Once added, the meeting apears in the Meetings List.
+
+The user should be able to drag and drop the meeting to the schedule table the say way as a course. and it cannot collide with any course.
+
+add undo support for meeting drag and drops.
+
+This meeting should apear in both Term Schedules and Views.
+
+
+
 
 
 
