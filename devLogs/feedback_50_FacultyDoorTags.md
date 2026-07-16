@@ -24,8 +24,6 @@ Weekdays (can be one day or multiple days)
 Duration (same as the course)
 Location (should be associate to a room)
 
-
-
 The faculty schedule should have the same setup as Classroom Schedule, but this time, instead of the the Term dropdown list, change it to Faculty dropdown list, add a search feature for the faculty dropdown list too. The faculty dropdown list should also be a multi selection dropdown list, each selected faculty 
 
 The table of the Faculty Schedule should have the same type of rows and columns, for each cell. 

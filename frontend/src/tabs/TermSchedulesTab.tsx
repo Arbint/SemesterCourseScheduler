@@ -16,6 +16,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { TermSelector } from '../components/TermSelector'
 import { ScheduleTableView, ColumnResizer } from '../components/ScheduleGrid'
 import { FilterBar, entryMatchesFilters, type ActiveFilter } from '../components/FilterBar'
+import { useUndoStack } from '../hooks/useUndoStack'
 
 // --- Draggable Course Card (from Course List) ---
 function DraggableCourseCard({
@@ -317,6 +318,7 @@ export function TermSchedulesTab() {
   const [termTaughtWith, setTermTaughtWith] = useState<TermTaughtWithGroup[]>([])
   const [showTermTWModal, setShowTermTWModal] = useState(false)
   const [termTWForm, setTermTWForm] = useState<number[]>([0, 0])
+  const undoStack = useUndoStack()
   const courseMap = new Map(courses.map(c => [c.id, c]))
 
   // Combined partner map: global (from course.taught_with_partner_ids) + per-term
@@ -459,6 +461,7 @@ export function TermSchedulesTab() {
     setIssueHighlight(null)
     setHighlightedIds([])
     setTermTaughtWith([])
+    undoStack.clear()
     await loadTerm(id, term)
     await refreshAudit(id)
   }
@@ -473,6 +476,7 @@ export function TermSchedulesTab() {
       setSelectedTermId(term.id)
       setShowNewTermModal(false)
       setNewTermForm({ semester_id: 0, year: new Date().getFullYear(), name: '', duplicate_from_id: null })
+      undoStack.clear()
       await loadTerm(term.id, term)
     } catch (e: any) {
       showToast(e.response?.data?.detail || 'Create term failed')
@@ -498,6 +502,7 @@ export function TermSchedulesTab() {
       const remaining = terms.filter(t => t.id !== termId)
       setTerms(remaining)
       if (selectedTermId === termId) {
+        undoStack.clear()
         if (remaining.length > 0) {
           setSelectedTermId(remaining[0].id)
           loadTerm(remaining[0].id, remaining[0])
@@ -532,10 +537,44 @@ export function TermSchedulesTab() {
     }
   }
 
+  const handleUndo = async () => {
+    const action = undoStack.stack[undoStack.stack.length - 1]
+    if (!action) return
+    undoStack.removeLast()
+    try {
+      await action.undo()
+      showToast(`Undid: ${action.label}`, 'success')
+    } catch (e: any) {
+      showToast(e.response?.data?.detail || 'Undo failed — refreshing to stay in sync')
+    } finally {
+      refresh()
+      refreshAudit()
+    }
+  }
+
+  // Ctrl/Cmd+Z triggers the same undo, except while the user is actively
+  // typing in a text field (so native input undo isn't hijacked).
+  useEffect(() => {
+    if (!isLoggedIn) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 'z' || !(e.ctrlKey || e.metaKey) || e.shiftKey) return
+      const tag = (document.activeElement as HTMLElement | null)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      e.preventDefault()
+      handleUndo()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [isLoggedIn, undoStack.stack])
+
   const addTable = async () => {
     if (!selectedTermId) return
     const table = await tablesApi.create(selectedTermId, [])
     setTables(prev => [...prev, table])
+    undoStack.push({
+      label: 'Add table',
+      undo: async () => { await tablesApi.delete(table.id) },
+    })
   }
 
   const updateTableWeekdays = async (tableId: number, weekdayIds: number[]) => {
@@ -552,25 +591,70 @@ export function TermSchedulesTab() {
 
   const deleteTable = async (tableId: number) => {
     if (!confirm('Delete this table?')) return
+    const termId = selectedTermId
+    const tableSnapshot = tables.find(t => t.id === tableId)
+    const entrySnapshots = entries.filter(e => e.schedule_table_id === tableId)
     await tablesApi.delete(tableId)
     setTables(prev => prev.filter(t => t.id !== tableId))
     setEntries(prev => prev.filter(e => e.schedule_table_id !== tableId))
+
+    if (tableSnapshot && termId) {
+      undoStack.push({
+        label: 'Delete table',
+        undo: async () => {
+          const newTable = await tablesApi.create(termId, tableSnapshot.weekday_ids)
+          for (const es of entrySnapshots) {
+            await entriesApi.create(newTable.id, {
+              course_id: es.course_id,
+              room_id: es.room_id ?? undefined,
+              time_slot_ids: es.time_slot_ids,
+              faculty_id: es.faculty_id ?? undefined,
+              active_weekday_ids: es.active_weekday_ids,
+            })
+          }
+        },
+      })
+    }
   }
 
   const handleFacultyChange = async (entryId: number, facultyId: number | null) => {
+    const prevFacultyId = entries.find(e => e.id === entryId)?.faculty_id ?? null
     try {
       const { entry: updated, errors: errs, warnings: warns } = await entriesApi.patchFaculty(entryId, facultyId)
       setEntries(prev => prev.map(e => e.id === entryId ? { ...e, faculty_id: updated.faculty_id } : e))
       setErrors(errs)
       setWarnings(warns)
+      if (prevFacultyId !== facultyId) {
+        undoStack.push({
+          label: 'Change instructor',
+          undo: async () => { await entriesApi.patchFaculty(entryId, prevFacultyId) },
+        })
+      }
     } catch (e: any) {
       showToast(e.response?.data?.detail || 'Failed to assign instructor')
     }
   }
 
   const handleDeleteEntry = async (entryId: number) => {
+    const snapshot = entries.find(e => e.id === entryId)
     await entriesApi.delete(entryId)
     setEntries(prev => prev.filter(e => e.id !== entryId))
+
+    if (snapshot && snapshot.schedule_table_id !== null) {
+      const tableId = snapshot.schedule_table_id
+      undoStack.push({
+        label: 'Remove course',
+        undo: async () => {
+          await entriesApi.create(tableId, {
+            course_id: snapshot.course_id,
+            room_id: snapshot.room_id ?? undefined,
+            time_slot_ids: snapshot.time_slot_ids,
+            faculty_id: snapshot.faculty_id ?? undefined,
+            active_weekday_ids: snapshot.active_weekday_ids,
+          })
+        },
+      })
+    }
   }
 
   const addFilter = (f: Omit<ActiveFilter, 'id'>) =>
@@ -619,10 +703,40 @@ export function TermSchedulesTab() {
 
   const handleSectionChange = async (courseId: number, count: number) => {
     if (!selectedTermId) return
+    const termId = selectedTermId
+    const priorEntries = entries.filter(e => e.course_id === courseId)
     setNeededSections(prev => new Map(prev).set(courseId, count))
     try {
-      await entriesApi.patchSectionCount(selectedTermId, courseId, count)
-      await loadTerm(selectedTermId)
+      await entriesApi.patchSectionCount(termId, courseId, count)
+      await loadTerm(termId)
+      undoStack.push({
+        label: 'Change sections needed',
+        undo: async () => {
+          // Reconcile the course's entries back to the pre-change snapshot:
+          // delete anything the increase added, recreate anything a decrease
+          // deleted that was actually scheduled somewhere (a plain recount
+          // can't resurrect the room/time/faculty), then top up any
+          // remaining unscheduled slots via patchSectionCount.
+          const currentAll = await entriesApi.listByTerm(termId)
+          const current = currentAll.filter(e => e.course_id === courseId)
+          const priorIds = new Set(priorEntries.map(e => e.id))
+          for (const e of current) {
+            if (!priorIds.has(e.id)) await entriesApi.delete(e.id)
+          }
+          const currentIds = new Set(current.map(e => e.id))
+          for (const e of priorEntries) {
+            if (currentIds.has(e.id) || e.schedule_table_id === null) continue
+            await entriesApi.create(e.schedule_table_id, {
+              course_id: e.course_id,
+              room_id: e.room_id ?? undefined,
+              time_slot_ids: e.time_slot_ids,
+              faculty_id: e.faculty_id ?? undefined,
+              active_weekday_ids: e.active_weekday_ids,
+            })
+          }
+          await entriesApi.patchSectionCount(termId, courseId, priorEntries.length || 1)
+        },
+      })
     } catch (e: any) {
       showToast(e.response?.data?.detail || 'Failed')
     }
@@ -650,6 +764,11 @@ export function TermSchedulesTab() {
         if (startIdx === -1) return
         const slotIds = sortedSlots.slice(startIdx, startIdx + slotsNeeded).map(ts => ts.id)
 
+        // Snapshot possible TaughtWith partners' prior placement before the
+        // create call, since the backend may co-schedule/move them too.
+        const partnerCourseIds = effectivePartnerIds.get(activeData.course_id) ?? []
+        const partnerSnapshots = entries.filter(e => partnerCourseIds.includes(e.course_id))
+
         const result = await entriesApi.create(table_id, {
           course_id: activeData.course_id,
           room_id,
@@ -662,6 +781,29 @@ export function TermSchedulesTab() {
         ])
         setErrors(result.errors)
         setWarnings(result.warnings)
+
+        const newEntryId = result.entry.id
+        const partnerResults = result.additional_entries
+        undoStack.push({
+          label: `Schedule ${course!.dept_code} ${course!.course_number}`,
+          undo: async () => {
+            await entriesApi.delete(newEntryId)
+            for (const pe of partnerResults) {
+              const prior = partnerSnapshots.find(p => p.id === pe.id)
+              if (!prior) continue
+              if (prior.schedule_table_id !== null) {
+                await entriesApi.update(pe.id, {
+                  schedule_table_id: prior.schedule_table_id,
+                  room_id: prior.room_id ?? undefined,
+                  time_slot_ids: prior.time_slot_ids,
+                  active_weekday_ids: prior.active_weekday_ids,
+                })
+              } else {
+                await entriesApi.delete(pe.id)
+              }
+            }
+          },
+        })
       } else if (activeData?.type === 'entry') {
         const entryId = activeData.entry_id
         const existing = entries.find(e => e.id === entryId)
@@ -674,6 +816,20 @@ export function TermSchedulesTab() {
         const slotIds = sortedSlots.slice(startIdx, startIdx + slotsNeeded).map(ts => ts.id)
 
         const tableChanged = existing.schedule_table_id !== table_id
+        const noOpMove = !tableChanged && existing.room_id === room_id
+          && existing.time_slot_ids.length === slotIds.length
+          && existing.time_slot_ids.every(id => slotIds.includes(id))
+
+        // Snapshot this entry's + any TaughtWith partners' prior placement.
+        const priorSelf = {
+          schedule_table_id: existing.schedule_table_id,
+          room_id: existing.room_id,
+          time_slot_ids: existing.time_slot_ids,
+          active_weekday_ids: existing.active_weekday_ids,
+        }
+        const partnerCourseIds = effectivePartnerIds.get(existing.course_id) ?? []
+        const partnerSnapshots = entries.filter(e => partnerCourseIds.includes(e.course_id))
+
         const result = await entriesApi.update(entryId, {
           schedule_table_id: table_id,
           room_id,
@@ -687,6 +843,35 @@ export function TermSchedulesTab() {
         }))
         setErrors(result.errors)
         setWarnings(result.warnings)
+
+        if (!noOpMove) {
+          const partnerResults = result.additional_entries
+          undoStack.push({
+            label: 'Move course',
+            undo: async () => {
+              await entriesApi.update(entryId, {
+                schedule_table_id: priorSelf.schedule_table_id!,
+                room_id: priorSelf.room_id ?? undefined,
+                time_slot_ids: priorSelf.time_slot_ids,
+                active_weekday_ids: priorSelf.active_weekday_ids,
+              })
+              for (const pe of partnerResults) {
+                const prior = partnerSnapshots.find(p => p.id === pe.id)
+                if (!prior) continue
+                if (prior.schedule_table_id !== null) {
+                  await entriesApi.update(pe.id, {
+                    schedule_table_id: prior.schedule_table_id,
+                    room_id: prior.room_id ?? undefined,
+                    time_slot_ids: prior.time_slot_ids,
+                    active_weekday_ids: prior.active_weekday_ids,
+                  })
+                } else {
+                  await entriesApi.delete(pe.id)
+                }
+              }
+            },
+          })
+        }
       }
     } catch (e: any) {
       showToast(e.response?.data?.detail || 'Drop failed')
@@ -724,6 +909,16 @@ export function TermSchedulesTab() {
                   onClick={() => { setRenameForm(selectedTerm?.name ?? ''); setShowRenameModal(true) }}
                 >
                   Rename
+                </button>
+              )}
+              {isLoggedIn && (
+                <button
+                  className="btn-secondary"
+                  onClick={handleUndo}
+                  disabled={undoStack.stack.length === 0}
+                  title={undoStack.stack.length ? `Undo: ${undoStack.stack[undoStack.stack.length - 1].label}` : undefined}
+                >
+                  Undo{undoStack.stack.length > 1 ? ` (${undoStack.stack.length})` : ''}
                 </button>
               )}
               <button
