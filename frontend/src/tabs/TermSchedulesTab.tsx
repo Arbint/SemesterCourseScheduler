@@ -5,6 +5,7 @@ import { DndContext, type DragEndEvent, useDraggable, useDroppable } from '@dnd-
 import {
   termsApi, tablesApi, entriesApi, coursesApi, roomsApi, timeSlotsApi,
   weekdaysApi, semestersApi, facultyApi, chatApi, termTaughtWithApi, auditApi,
+  termLabel,
   type Term, type ScheduleTable, type ScheduleEntry, type Course,
   type Room, type TimeSlot, type Weekday, type Semester, type Faculty,
   type IssueItem, type TermTaughtWithGroup, type ChatTraceStep
@@ -56,9 +57,7 @@ function TermSelector({
   }, [])
 
   const selected = terms.find(t => t.id === selectedTermId)
-  const label = selected
-    ? `${selected.semester_name.charAt(0).toUpperCase() + selected.semester_name.slice(1)} ${selected.year}`
-    : 'Select term...'
+  const label = selected ? termLabel(selected) : 'Select term...'
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
@@ -71,7 +70,7 @@ function TermSelector({
       {open && (
         <div style={{ position: 'absolute', top: 'calc(100% + 2px)', left: 0, background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 4, boxShadow: '0 4px 12px rgba(0,0,0,0.35)', zIndex: 1000, minWidth: 200 }}>
           {terms.map(t => {
-            const tLabel = `${t.semester_name.charAt(0).toUpperCase() + t.semester_name.slice(1)} ${t.year}`
+            const tLabel = termLabel(t)
             return (
               <div key={t.id} style={{ display: 'flex', alignItems: 'center' }}>
                 <button
@@ -1101,8 +1100,13 @@ export function TermSchedulesTab() {
   const [highlightedIds, setHighlightedIds] = useState<number[]>([])
   const [neededSections, setNeededSections] = useState<Map<number, number>>(new Map())
   const [showNewTermModal, setShowNewTermModal] = useState(false)
-  const [newTermForm, setNewTermForm] = useState({ semester_id: 0, year: new Date().getFullYear() })
+  const [newTermForm, setNewTermForm] = useState<{ semester_id: number; year: number; name: string; duplicate_from_id: number | null }>(
+    { semester_id: 0, year: new Date().getFullYear(), name: '', duplicate_from_id: null }
+  )
   const [savingTerm, setSavingTerm] = useState(false)
+  const [showRenameModal, setShowRenameModal] = useState(false)
+  const [renameForm, setRenameForm] = useState('')
+  const [savingRename, setSavingRename] = useState(false)
   const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([])
   const [termTaughtWith, setTermTaughtWith] = useState<TermTaughtWithGroup[]>([])
   const [showTermTWModal, setShowTermTWModal] = useState(false)
@@ -1262,10 +1266,23 @@ export function TermSchedulesTab() {
       setTerms(updated)
       setSelectedTermId(term.id)
       setShowNewTermModal(false)
+      setNewTermForm({ semester_id: 0, year: new Date().getFullYear(), name: '', duplicate_from_id: null })
       await loadTerm(term.id, term)
     } catch (e: any) {
       showToast(e.response?.data?.detail || 'Create term failed')
     } finally { setSavingTerm(false) }
+  }
+
+  const renameTerm = async () => {
+    if (!selectedTermId) return
+    setSavingRename(true)
+    try {
+      const updated = await termsApi.rename(selectedTermId, renameForm.trim())
+      setTerms(prev => prev.map(t => t.id === updated.id ? updated : t))
+      setShowRenameModal(false)
+    } catch (e: any) {
+      showToast(e.response?.data?.detail || 'Rename failed')
+    } finally { setSavingRename(false) }
   }
 
   const handleTermDelete = async (termId: number) => {
@@ -1504,10 +1521,21 @@ export function TermSchedulesTab() {
             isLoggedIn={isLoggedIn}
             onSelect={handleTermChange}
             onDelete={handleTermDelete}
-            onNew={() => setShowNewTermModal(true)}
+            onNew={() => {
+              setNewTermForm({ semester_id: 0, year: new Date().getFullYear(), name: '', duplicate_from_id: null })
+              setShowNewTermModal(true)
+            }}
           />
           {selectedTermId && (
             <>
+              {isLoggedIn && (
+                <button
+                  className="btn-secondary"
+                  onClick={() => { setRenameForm(selectedTerm?.name ?? ''); setShowRenameModal(true) }}
+                >
+                  Rename
+                </button>
+              )}
               <button
                 className="btn-secondary"
                 onClick={() => window.open(`/api/terms/${selectedTermId}/export`, '_blank')}
@@ -1742,6 +1770,40 @@ export function TermSchedulesTab() {
           <div className="form-group">
             <label>Year</label>
             <input type="number" value={newTermForm.year} onChange={e => setNewTermForm(f => ({ ...f, year: +e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label>Name</label>
+            <input
+              type="text"
+              placeholder="e.g. V1, V2-BetterLoads"
+              value={newTermForm.name}
+              onChange={e => setNewTermForm(f => ({ ...f, name: e.target.value }))}
+            />
+          </div>
+          <div className="form-group">
+            <label>Duplicate From</label>
+            <select
+              value={newTermForm.duplicate_from_id ?? ''}
+              onChange={e => setNewTermForm(f => ({ ...f, duplicate_from_id: e.target.value ? +e.target.value : null }))}
+            >
+              <option value="">None</option>
+              {terms.map(t => <option key={t.id} value={t.id}>{termLabel(t)}</option>)}
+            </select>
+          </div>
+        </FormModal>
+      )}
+
+      {showRenameModal && selectedTerm && (
+        <FormModal title="Rename Term" onClose={() => setShowRenameModal(false)} onSave={renameTerm} saving={savingRename}>
+          <div className="form-group">
+            <label>Name</label>
+            <input
+              type="text"
+              autoFocus
+              placeholder="e.g. V1, V2-BetterLoads"
+              value={renameForm}
+              onChange={e => setRenameForm(e.target.value)}
+            />
           </div>
         </FormModal>
       )}

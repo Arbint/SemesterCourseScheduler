@@ -2,8 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from database import get_db
-from models import Term, ScheduleEntry, CourseOffering, TermTaughtWithGroup, TermTaughtWithMember
-from schemas import TermCreate, TermOut, TermTaughtWithGroupOut
+from models import (
+    Term, ScheduleEntry, ScheduleTable, CourseOffering,
+    TermTaughtWithGroup, TermTaughtWithMember,
+)
+from schemas import TermCreate, TermOut, TermRename, TermTaughtWithGroupOut
 
 router = APIRouter(prefix="/api/terms", tags=["terms"])
 
@@ -16,24 +19,81 @@ def list_terms(db: Session = Depends(get_db)):
 
 @router.post("", response_model=TermOut, status_code=201)
 def create_term(data: TermCreate, db: Session = Depends(get_db)):
-    existing = db.query(Term).filter_by(semester_id=data.semester_id, year=data.year).first()
+    name = data.name.strip()
+    existing = db.query(Term).filter_by(semester_id=data.semester_id, year=data.year, name=name).first()
     if existing:
         raise HTTPException(409, "Term already exists")
 
-    term = Term(semester_id=data.semester_id, year=data.year)
+    source = None
+    if data.duplicate_from_id is not None:
+        source = db.query(Term).filter(Term.id == data.duplicate_from_id).first()
+        if not source:
+            raise HTTPException(404, "Duplicate-from term not found")
+
+    term = Term(semester_id=data.semester_id, year=data.year, name=name)
     db.add(term)
     db.flush()
 
-    # Auto-populate one ScheduleEntry per offered course
-    offerings = db.query(CourseOffering).filter(CourseOffering.semester_id == data.semester_id).all()
-    for offering in offerings:
-        entry = ScheduleEntry(
-            term_id=term.id,
-            course_id=offering.course_id,
-            section=1,
-        )
-        db.add(entry)
+    if source is None:
+        # Auto-populate one ScheduleEntry per offered course
+        offerings = db.query(CourseOffering).filter(CourseOffering.semester_id == data.semester_id).all()
+        for offering in offerings:
+            entry = ScheduleEntry(
+                term_id=term.id,
+                course_id=offering.course_id,
+                section=1,
+            )
+            db.add(entry)
+    else:
+        # Duplicate schedule tables, entries, and per-term TaughtWith groups
+        # from the source term as a starting point.
+        table_id_map: dict[int, int] = {}
+        for src_table in source.schedule_tables:
+            new_table = ScheduleTable(term_id=term.id, weekdays=list(src_table.weekdays))
+            db.add(new_table)
+            db.flush()
+            table_id_map[src_table.id] = new_table.id
 
+        for src_entry in source.schedule_entries:
+            new_entry = ScheduleEntry(
+                term_id=term.id,
+                schedule_table_id=table_id_map.get(src_entry.schedule_table_id),
+                course_id=src_entry.course_id,
+                section=src_entry.section,
+                room_id=src_entry.room_id,
+                faculty_id=src_entry.faculty_id,
+                time_slots=list(src_entry.time_slots),
+                active_weekdays=list(src_entry.active_weekdays),
+            )
+            db.add(new_entry)
+
+        for src_group in source.term_taught_with_groups:
+            new_group = TermTaughtWithGroup(term_id=term.id)
+            db.add(new_group)
+            db.flush()
+            for member in src_group.members:
+                db.add(TermTaughtWithMember(group_id=new_group.id, course_id=member.course_id))
+
+    db.commit()
+    db.refresh(term)
+    return TermOut.from_orm(term)
+
+
+@router.patch("/{term_id}", response_model=TermOut)
+def rename_term(term_id: int, data: TermRename, db: Session = Depends(get_db)):
+    term = db.query(Term).filter(Term.id == term_id).first()
+    if not term:
+        raise HTTPException(404, "Term not found")
+
+    name = data.name.strip()
+    existing = db.query(Term).filter(
+        Term.semester_id == term.semester_id, Term.year == term.year,
+        Term.name == name, Term.id != term_id,
+    ).first()
+    if existing:
+        raise HTTPException(409, "A term with that name already exists for this semester/year")
+
+    term.name = name
     db.commit()
     db.refresh(term)
     return TermOut.from_orm(term)

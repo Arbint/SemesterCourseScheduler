@@ -74,7 +74,7 @@ def get_offering_removal_impact(course_id: int, semester_id: int, db: Session = 
         if entries:
             affected.append({
                 "term_id": term.id,
-                "term_label": f"{term.semester.name.value.capitalize()} {term.year}",
+                "term_label": f"{term.semester.name.value.capitalize()} {term.year}" + (f" {term.name}" if term.name else ""),
                 "entry_count": len(entries),
                 "scheduled_count": sum(1 for e in entries if e.schedule_table_id is not None),
             })

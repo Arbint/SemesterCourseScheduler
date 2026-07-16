@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  termsApi, changeListApi,
+  termsApi, changeListApi, termLabel,
   type Term, type ChangeListRow, type ComputedChangeListRow,
 } from '../api'
 
@@ -103,9 +103,6 @@ export function ChangeListTab() {
       if (t.length) setSelectedTermId(t[t.length - 1].id)
     })
   }, [])
-
-  const termLabel = (t: Term) =>
-    `${t.semester_name.charAt(0).toUpperCase() + t.semester_name.slice(1)} ${t.year}`
 
   const handleImportDraft = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]

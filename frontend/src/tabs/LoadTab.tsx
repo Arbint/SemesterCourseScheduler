@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { termsApi, semestersApi, loadApi, type Term, type FacultyLoad } from '../api'
+import { termsApi, semestersApi, loadApi, termLabel, type Term, type FacultyLoad } from '../api'
 
 type SortKey = 'name' | 'sections' | 'credit_hours'
 
@@ -26,9 +26,6 @@ export function LoadTab() {
       .then(setLoadData)
       .finally(() => setLoading(false))
   }, [selectedTermId])
-
-  const termLabel = (t: Term) =>
-    `${t.semester_name.charAt(0).toUpperCase() + t.semester_name.slice(1)} ${t.year}`
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortAsc(a => !a)

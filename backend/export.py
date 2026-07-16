@@ -52,7 +52,7 @@ def generate_excel(db, term_id: int) -> bytes:
     row = 1
 
     # Term header
-    term_label = f"Term: {term.semester.name.value.capitalize()} {term.year}"
+    term_label = f"Term: {term.semester.name.value.capitalize()} {term.year}" + (f" {term.name}" if term.name else "")
     ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=len(rooms) + 1)
     cell = ws.cell(row=row, column=1, value=term_label)
     cell.font = Font(bold=True, size=14)

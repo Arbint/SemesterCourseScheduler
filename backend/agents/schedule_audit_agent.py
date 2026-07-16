@@ -224,7 +224,7 @@ SCHEDULING RULES:
         tw_map = _build_combined_tw_map(self.db, self.term_id)
 
         result = {
-            "term": f"{term.semester.name.value} {term.year}",
+            "term": f"{term.semester.name.value} {term.year}" + (f" {term.name}" if term.name else ""),
             "note": "All entries listed are offered in this semester. TaughtWith pairs share the same group_key and count as 1 load unit.",
             "tables": [],
             "unscheduled_entries": []

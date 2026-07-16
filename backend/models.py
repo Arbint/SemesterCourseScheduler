@@ -227,8 +227,9 @@ class Term(Base):
     id = Column(Integer, primary_key=True, index=True)
     semester_id = Column(Integer, ForeignKey("semesters.id"), nullable=False)
     year = Column(Integer, nullable=False)
+    name = Column(String, nullable=False, default="")
 
-    __table_args__ = (UniqueConstraint("semester_id", "year", name="uq_term_semester_year"),)
+    __table_args__ = (UniqueConstraint("semester_id", "year", "name", name="uq_term_semester_year_name"),)
 
     semester = relationship("Semester", back_populates="terms")
     schedule_tables = relationship("ScheduleTable", back_populates="term", cascade="all, delete-orphan")

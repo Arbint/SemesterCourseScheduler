@@ -110,7 +110,13 @@ export interface Term {
   id: number
   semester_id: number
   year: number
+  name: string
   semester_name: string
+}
+
+export function termLabel(t: Term): string {
+  const base = `${t.semester_name.charAt(0).toUpperCase() + t.semester_name.slice(1)} ${t.year}`
+  return t.name ? `${base} ${t.name}` : base
 }
 
 export interface ScheduleTable {
@@ -227,7 +233,9 @@ export const constraintsApi = {
 
 export const termsApi = {
   list: () => api.get<Term[]>('/terms').then(r => r.data),
-  create: (d: { semester_id: number; year: number }) => api.post<Term>('/terms', d).then(r => r.data),
+  create: (d: { semester_id: number; year: number; name?: string; duplicate_from_id?: number | null }) =>
+    api.post<Term>('/terms', d).then(r => r.data),
+  rename: (id: number, name: string) => api.patch<Term>(`/terms/${id}`, { name }).then(r => r.data),
   delete: (id: number) => api.delete(`/terms/${id}`),
 }
 

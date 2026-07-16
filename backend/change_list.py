@@ -366,7 +366,7 @@ def to_excel(computed_rows: list, department: str, term) -> bytes:
     yellow = PatternFill(fill_type="solid", fgColor="FFEB9C")
     red = PatternFill(fill_type="solid", fgColor="FFC7CE")
 
-    title = f"{term.semester.name.value.upper()} {term.year}"
+    title = f"{term.semester.name.value.upper()} {term.year}" + (f" {term.name}" if term.name else "")
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(HEADER))
     ws.cell(row=1, column=1, value=title).font = Font(bold=True, size=14)
 

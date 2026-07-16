@@ -252,12 +252,18 @@ class ScheduleTableOut(BaseModel):
 class TermCreate(BaseModel):
     semester_id: int
     year: int
+    name: str = ""
+    duplicate_from_id: int | None = None
+
+class TermRename(BaseModel):
+    name: str
 
 class TermOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     semester_id: int
     year: int
+    name: str = ""
     semester_name: str = ""
 
     @classmethod
@@ -266,6 +272,7 @@ class TermOut(BaseModel):
             id=term.id,
             semester_id=term.semester_id,
             year=term.year,
+            name=term.name or "",
             semester_name=term.semester.name.value,
         )
 

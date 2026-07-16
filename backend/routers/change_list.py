@@ -61,7 +61,8 @@ def compute(data: ChangeListComputeRequest, db: Session = Depends(get_db)):
 def export(data: ChangeListComputeRequest, db: Session = Depends(get_db)):
     term, computed = _compute_rows(data, db)
     content = cl.to_excel(computed, data.department, term)
-    filename = f"change_list_{data.department}_{term.year}.xlsx"
+    name_suffix = f"_{term.name.replace(' ', '')}" if term.name else ""
+    filename = f"change_list_{data.department}_{term.year}{name_suffix}.xlsx"
     return Response(
         content=content,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
