@@ -10,6 +10,7 @@ import { ConstraintsTab } from './tabs/ConstraintsTab'
 import { TermSchedulesTab } from './tabs/TermSchedulesTab'
 import { LoadTab } from './tabs/LoadTab'
 import { ViewTab } from './tabs/ViewTab'
+import { DoorTagsTab } from './tabs/DoorTagsTab'
 import { ChangeListTab } from './tabs/ChangeListTab'
 
 const TABS = [
@@ -21,6 +22,7 @@ const TABS = [
   { id: 'schedules', label: 'Term Schedules' },
   { id: 'load', label: 'Load' },
   { id: 'view', label: 'View' },
+  { id: 'doortags', label: 'Door Tags' },
   { id: 'changelist', label: 'Change List' },
 ] as const
 
@@ -93,6 +95,7 @@ function AppShell() {
             <ViewTab />
           </div>
         )}
+        {tab === 'doortags' && <DoorTagsTab />}
         {tab === 'changelist' && <ChangeListTab />}
       </div>
 

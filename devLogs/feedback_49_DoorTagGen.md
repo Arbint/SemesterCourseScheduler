@@ -9,6 +9,7 @@ On the top, a configure row that has the following settings layed out horizontal
 * Term selection, be sure to add a search functionality.
 * Room Selection, be sure to add a search functionality.
 * A text field with the label: Empty Slot Label.
+* An Export button that would export the result as a well formated pdf that can be printed out on a tabloids sized paper.
 
 Below the configure row, show a table that displays the schedule of the selected room in the selected term:
 

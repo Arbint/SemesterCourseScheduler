@@ -7,7 +7,7 @@ import models  # ensure all models are registered
 from routers import (
     faculty, courses, rooms, timeslots, constraints,
     terms, schedule_tables, schedule_entries, sections, chat, static_data, load, auth, load_settings,
-    change_list
+    change_list, door_tags
 )
 
 app = FastAPI(title="Semester Course Scheduler")
@@ -93,6 +93,7 @@ app.include_router(load.router)
 app.include_router(load_settings.router)
 app.include_router(auth.router)
 app.include_router(change_list.router)
+app.include_router(door_tags.router)
 
 
 if __name__ == "__main__":
