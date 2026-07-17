@@ -237,6 +237,9 @@ export function printConfigParams(config: PrintConfig): Record<string, string> {
     time_font_color: config.time_font_color,
     weekday_font_color: config.weekday_font_color,
     weekday_offset_y_in: String(config.weekday_offset_y_in),
+    entry_name_padding_in: String(config.entry_name_padding_in),
+    entry_instructor_padding_in: String(config.entry_instructor_padding_in),
+    entry_time_padding_in: String(config.entry_time_padding_in),
   }
 }
 
@@ -496,6 +499,13 @@ export interface PrintConfig {
   time_font_color: string
   weekday_font_color: string
   weekday_offset_y_in: number
+  // Vertical gap (inches, feedback_71) inserted before each of these lines
+  // within a course/meeting/office-hours cell — "Name Padding" is the gap
+  // above the whole cell's content (Name is always first), the other two
+  // are the gap from whatever line precedes them.
+  entry_name_padding_in: number
+  entry_instructor_padding_in: number
+  entry_time_padding_in: number
   // Image nudge (feedback_67, extended to footer + attribute icons in
   // feedback_69) — dx/dy (inches) sent to the backend; the per-arrow step
   // sizes are UI-only (how far one click moves it) and never leave the
@@ -554,6 +564,9 @@ export const DEFAULT_PRINT_CONFIG: PrintConfig = {
   time_font_color: '#333333',
   weekday_font_color: '#222222',
   weekday_offset_y_in: 0,
+  entry_name_padding_in: 0,
+  entry_instructor_padding_in: 0,
+  entry_time_padding_in: 0,
   header_offset_x_in: 0,
   header_offset_y_in: 0,
   header_offset_step_up_in: 0.1,

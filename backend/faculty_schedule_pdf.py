@@ -209,8 +209,8 @@ def _build_faculty_info_area(
 
 
 def _build_attribute_icon_area(faculty: Faculty, icon_scale: float = 1.0):
-    """The attribute icon area — always a vertical stack of icons (or a text
-    pill fallback for attributes with no uploaded icon), independent of the
+    """The attribute icon area — a horizontal row of icons (or a text pill
+    fallback for attributes with no uploaded icon), independent of the
     Header Section Layout option. Returns (flowable | None, height, width)."""
     attributes = sorted(faculty.attributes, key=lambda a: a.name)
     if not attributes:
@@ -222,14 +222,22 @@ def _build_attribute_icon_area(faculty: Faculty, icon_scale: float = 1.0):
         textColor=colors.HexColor("#444444"), borderColor=colors.HexColor("#aaaaaa"),
         borderWidth=0.5, borderPadding=3,
     )
-    width = icon_size + 10
-    rows = [[_attribute_flowable(a, pill_style, icon_size)] for a in attributes]
-    table = Table(rows, colWidths=[width])
+    col_width = icon_size + 10
+    cells, col_widths = [], []
+    for i, a in enumerate(attributes):
+        cells.append(_attribute_flowable(a, pill_style, icon_size))
+        col_widths.append(col_width)
+        if i < len(attributes) - 1:
+            cells.append(Spacer(ICON_GAP, 1))
+            col_widths.append(ICON_GAP)
+    table = Table([cells], colWidths=col_widths)
     table.setStyle(TableStyle([
         ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("TOPPADDING", (0, 0), (-1, -1), ICON_GAP / 2), ("BOTTOMPADDING", (0, 0), (-1, -1), ICON_GAP / 2),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
     ]))
-    height = len(attributes) * (icon_size + ICON_GAP) + ICON_GAP
+    width = sum(col_widths)
+    height = icon_size + ICON_GAP
     return table, height, width
 
 
@@ -252,6 +260,7 @@ def generate_faculty_schedule_pdf(
     entry_time_font_scale: float = 1.0, entry_time_font_color: str = "#333333",
     time_font_color: str = "#333333", weekday_font_color: str = "#222222",
     weekday_offset_y_in: float = 0.0,
+    entry_name_padding_in: float = 0.0, entry_instructor_padding_in: float = 0.0, entry_time_padding_in: float = 0.0,
 ) -> bytes:
     weekdays, ticks, grid = build_faculty_schedule_grid(db, term, faculty)
     page_width, page_height = resolve_page_size(page_size, orientation, custom_width_in, custom_height_in)
@@ -301,6 +310,9 @@ def generate_faculty_schedule_pdf(
 
     header_gap = max(0.0, header_padding_in) * inch
     info_gap = max(0.0, info_padding_in) * inch
+    name_pad = max(0.0, entry_name_padding_in) * inch
+    instructor_pad = max(0.0, entry_instructor_padding_in) * inch
+    time_pad = max(0.0, entry_time_padding_in) * inch
 
     num_header_items = (1 if header_flowable else 0) + 1 + (1 if icon_flowable else 0)
     info_width = item_width(header_layout, content_width, num_header_items)
@@ -364,7 +376,10 @@ def generate_faculty_schedule_pdf(
             name = escape(entry["name"])
             instructor = escape(entry["instructor"])
             time_range = escape(entry["time_range"])
-            cell_content = _entry_cell_content(title, name, instructor, time_range, cell_body_style, instructor_style, cell_time_style)
+            cell_content = _entry_cell_content(
+                title, name, instructor, time_range, cell_body_style, instructor_style, cell_time_style,
+                name_pad, instructor_pad, time_pad,
+            )
             card = _make_card(cell_content, day_col_width, block_height, entry["color"], ENTRY_EDGE_COLOR, "TOP", "LEFT")
             row.append(card)
             if span > 1:

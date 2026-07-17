@@ -14,15 +14,27 @@ const numberInputStyle = { padding: '5px 8px', fontSize: 13, width: 70 } as cons
 const colorInputStyle = { width: 44, height: 32, padding: 2, border: '1px solid var(--border-color)', borderRadius: 4, background: 'transparent', cursor: 'pointer' } as const
 
 // One "Table Body" row (feedback_70) — a font-size multiplier next to a
-// native color swatch. Takes plain value/setter pairs rather than PrintConfig
-// keys so it stays fully type-safe without generic key-narrowing machinery.
-function sizeColorField(label: string, sizeValue: number, onSize: (v: number) => void, colorValue: string, onColor: (v: string) => void) {
+// native color swatch, plus an optional vertical padding field (feedback_71,
+// the gap inserted above this line within its cell). Takes plain
+// value/setter pairs rather than PrintConfig keys so it stays fully
+// type-safe without generic key-narrowing machinery.
+function sizeColorField(
+  label: string, sizeValue: number, onSize: (v: number) => void, colorValue: string, onColor: (v: string) => void,
+  padding?: { value: number; onChange: (v: number) => void },
+) {
   return (
     <div key={label}>
       <div style={labelStyle}>{label}</div>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <input type="number" min={0.25} max={3} step={0.1} value={sizeValue} onChange={e => onSize(+e.target.value)} style={numberInputStyle} />
         <input type="color" value={colorValue} onChange={e => onColor(e.target.value)} style={colorInputStyle} />
+        {padding && (
+          <input
+            type="number" min={0} max={0.5} step={0.02} title="Padding above this line (in)"
+            value={padding.value} onChange={e => padding.onChange(+e.target.value)}
+            style={{ ...numberInputStyle, width: 56 }}
+          />
+        )}
       </div>
     </div>
   )
@@ -530,9 +542,18 @@ export function PrintConfigPanel({
                 <input type="color" value={config.empty_bg_color} onChange={e => set('empty_bg_color', e.target.value)} style={colorInputStyle} />
               </div>
               {sizeColorField('Empty Slot Font', config.empty_font_scale, v => set('empty_font_scale', v), config.empty_font_color, v => set('empty_font_color', v))}
-              {sizeColorField('Name Font', config.entry_name_font_scale, v => set('entry_name_font_scale', v), config.entry_name_font_color, v => set('entry_name_font_color', v))}
-              {sizeColorField('Instructor Name Font', config.entry_instructor_font_scale, v => set('entry_instructor_font_scale', v), config.entry_instructor_font_color, v => set('entry_instructor_font_color', v))}
-              {sizeColorField('Time Range Font', config.entry_time_font_scale, v => set('entry_time_font_scale', v), config.entry_time_font_color, v => set('entry_time_font_color', v))}
+              {sizeColorField(
+                'Name Font', config.entry_name_font_scale, v => set('entry_name_font_scale', v), config.entry_name_font_color, v => set('entry_name_font_color', v),
+                { value: config.entry_name_padding_in, onChange: v => set('entry_name_padding_in', v) },
+              )}
+              {sizeColorField(
+                'Instructor Name Font', config.entry_instructor_font_scale, v => set('entry_instructor_font_scale', v), config.entry_instructor_font_color, v => set('entry_instructor_font_color', v),
+                { value: config.entry_instructor_padding_in, onChange: v => set('entry_instructor_padding_in', v) },
+              )}
+              {sizeColorField(
+                'Time Range Font', config.entry_time_font_scale, v => set('entry_time_font_scale', v), config.entry_time_font_color, v => set('entry_time_font_color', v),
+                { value: config.entry_time_padding_in, onChange: v => set('entry_time_padding_in', v) },
+              )}
               {sizeColorField('Time Label Font', config.time_font_scale, v => set('time_font_scale', v), config.time_font_color, v => set('time_font_color', v))}
               {sizeColorField('Weekday Font', config.weekday_font_scale, v => set('weekday_font_scale', v), config.weekday_font_color, v => set('weekday_font_color', v))}
               <div>

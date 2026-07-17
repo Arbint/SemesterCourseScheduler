@@ -135,18 +135,32 @@ def _safe_hex_color(value: str, fallback: str) -> str:
     return value if value and _HEX_COLOR_RE.match(value) else fallback
 
 
-def _entry_cell_content(title: str, name: str, instructor: str, time_range: str, name_style, instructor_style, time_style) -> list:
+def _entry_cell_content(
+    title: str, name: str, instructor: str, time_range: str, name_style, instructor_style, time_style,
+    name_padding: float = 0, instructor_padding: float = 0, time_padding: float = 0,
+) -> list:
     """Builds the paragraph list for one course/meeting grid cell (feedback_70):
     a combined bold-title + name line ("Name Font" — title alone for meetings/
     office hours, title+name for courses), an optional instructor line (only
     present when non-empty — the Faculty export's cells never have one), and
     the time range line. Shared by both generate_door_tag_pdf and
     generate_faculty_schedule_pdf so the two exports can't drift apart.
-    Callers must already have escape()d every argument."""
+    `*_padding` (points, feedback_71) is a vertical gap inserted immediately
+    before its line — a leading Spacer, so "Name Padding" pushes the whole
+    block down from the top of the card, "Instructor/Time Range Padding" is
+    the gap from the line above it. Callers must already have escape()d
+    every argument."""
     name_lines = "<br/>".join(x for x in [f"<b>{title}</b>", name] if x)
-    content = [Paragraph(name_lines, name_style)]
+    content = []
+    if name_padding:
+        content.append(Spacer(1, name_padding))
+    content.append(Paragraph(name_lines, name_style))
     if instructor:
+        if instructor_padding:
+            content.append(Spacer(1, instructor_padding))
         content.append(Paragraph(instructor, instructor_style))
+    if time_padding:
+        content.append(Spacer(1, time_padding))
     content.append(Paragraph(time_range, time_style))
     return content
 
@@ -485,6 +499,7 @@ def generate_door_tag_pdf(
     entry_time_font_scale: float = 1.0, entry_time_font_color: str = "#333333",
     time_font_color: str = "#333333", weekday_font_color: str = "#222222",
     weekday_offset_y_in: float = 0.0,
+    entry_name_padding_in: float = 0.0, entry_instructor_padding_in: float = 0.0, entry_time_padding_in: float = 0.0,
 ) -> bytes:
     weekdays, ticks, grid = build_door_tag_grid(db, term, room)
     page_width, page_height = resolve_page_size(page_size, orientation, custom_width_in, custom_height_in)
@@ -534,6 +549,9 @@ def generate_door_tag_pdf(
 
     header_gap = max(0.0, header_padding_in) * inch
     info_gap = max(0.0, info_padding_in) * inch
+    name_pad = max(0.0, entry_name_padding_in) * inch
+    instructor_pad = max(0.0, entry_instructor_padding_in) * inch
+    time_pad = max(0.0, entry_time_padding_in) * inch
 
     num_header_items = 1 + (1 if header_flowable else 0)
     info_width = item_width(header_layout, content_width, num_header_items)
@@ -601,7 +619,10 @@ def generate_door_tag_pdf(
                     if avail >= empty_style.leading + cell_time_style.leading:
                         end_min = tick_min + span * TICK_MINUTES
                         time_range = f"{_format_clock(tick_min)} to {_format_clock(end_min)}"
-                        content = [Paragraph(escape(empty_label), empty_style), Paragraph(time_range, cell_time_style)]
+                        content = [Paragraph(escape(empty_label), empty_style)]
+                        if time_pad:
+                            content.append(Spacer(1, time_pad))
+                        content.append(Paragraph(time_range, cell_time_style))
                     elif avail >= empty_style.leading:
                         content = Paragraph(escape(empty_label), empty_style)
                 row.append(_make_card(content, day_col_width, block_height, empty_bg, None, "MIDDLE", "CENTER", pad=EMPTY_PAD))
@@ -616,7 +637,10 @@ def generate_door_tag_pdf(
             name = escape(entry["name"])
             instructor = escape(entry["instructor"])
             time_range = escape(entry["time_range"])
-            cell_content = _entry_cell_content(title, name, instructor, time_range, cell_body_style, instructor_style, cell_time_style)
+            cell_content = _entry_cell_content(
+                title, name, instructor, time_range, cell_body_style, instructor_style, cell_time_style,
+                name_pad, instructor_pad, time_pad,
+            )
             card = _make_card(cell_content, day_col_width, block_height, _entry_color(entry["course_id"]), ENTRY_EDGE_COLOR, "TOP", "LEFT")
             row.append(card)
             if span > 1:

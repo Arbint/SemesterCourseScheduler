@@ -60,6 +60,7 @@ def door_tag_pdf(
     entry_time_font_scale: float = 1.0, entry_time_font_color: str = "#333333",
     time_font_color: str = "#333333", weekday_font_color: str = "#222222",
     weekday_offset_y_in: float = 0.0,
+    entry_name_padding_in: float = 0.0, entry_instructor_padding_in: float = 0.0, entry_time_padding_in: float = 0.0,
     inline: bool = False,
     db: Session = Depends(get_db),
 ):
@@ -87,6 +88,9 @@ def door_tag_pdf(
     entry_instructor_font_scale = max(0.25, min(3.0, entry_instructor_font_scale))
     entry_time_font_scale = max(0.25, min(3.0, entry_time_font_scale))
     weekday_offset_y_in = max(-2.0, min(2.0, weekday_offset_y_in))
+    entry_name_padding_in = max(0.0, min(0.5, entry_name_padding_in))
+    entry_instructor_padding_in = max(0.0, min(0.5, entry_instructor_padding_in))
+    entry_time_padding_in = max(0.0, min(0.5, entry_time_padding_in))
     empty_bg_color = _safe_hex_color(empty_bg_color, "#3a3a3a")
     empty_font_color = _safe_hex_color(empty_font_color, "#ffffff")
     entry_name_font_color = _safe_hex_color(entry_name_font_color, "#000000")
@@ -104,6 +108,7 @@ def door_tag_pdf(
         entry_instructor_font_scale, entry_instructor_font_color,
         entry_time_font_scale, entry_time_font_color,
         time_font_color, weekday_font_color, weekday_offset_y_in,
+        entry_name_padding_in, entry_instructor_padding_in, entry_time_padding_in,
     )
     filename = f"door_tag_{room.building_code}{room.room_number}_{term.year}.pdf"
     disposition = "inline" if inline else "attachment"
