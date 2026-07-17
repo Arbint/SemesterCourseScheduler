@@ -226,10 +226,13 @@ export function FacultyScheduleTab() {
   const [weekdays, setWeekdays] = useState<Weekday[]>([])
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([])
   const [rooms, setRooms] = useState<Room[]>([])
-  const [loadSettings, setLoadSettings] = useState<LoadSettings>({ fulltime_load: 3, parttime_load: 2, min_office_hours_per_week: 4 })
+  const [loadSettings, setLoadSettings] = useState<LoadSettings>({ fulltime_load: 3, parttime_load: 2, min_office_hours_fulltime: 4, min_office_hours_parttime: 1 })
 
   const [selectedTermId, setSelectedTermId] = useState<number | null>(null)
   const [facultyFilters, setFacultyFilters] = useState<FacultyFilter[]>([])
+  const [filterFullTime, setFilterFullTime] = useState(false)
+  const [filterPartTime, setFilterPartTime] = useState(false)
+  const [filterDeptOnly, setFilterDeptOnly] = useState(false)
 
   const [tables, setTables] = useState<ScheduleTable[]>([])
   const [entries, setEntries] = useState<ScheduleEntry[]>([])
@@ -382,7 +385,17 @@ export function FacultyScheduleTab() {
 
   const selectedTerm = terms.find(t => t.id === selectedTermId)
   const sortedFaculty = [...allFaculty].sort((a, b) => facultyDisplayName(a).localeCompare(facultyDisplayName(b)))
-  const visibleFaculty = sortedFaculty.filter(f => facultyVisible(f, facultyFilters))
+  const visibleFaculty = sortedFaculty.filter(f => {
+    if (!facultyVisible(f, facultyFilters)) return false
+    // Full-Time/Part-Time are two checkboxes on the same dimension (rank) —
+    // checking either narrows to that rank; checking neither shows both.
+    const rankOk = (!filterFullTime && !filterPartTime) ||
+      (filterFullTime && f.rank === 'full_time') ||
+      (filterPartTime && f.rank === 'part_time')
+    if (!rankOk) return false
+    if (filterDeptOnly && !f.is_department_owned) return false
+    return true
+  })
 
   const addFacultyFilter = (value: string) => {
     setFacultyFilters(prev => [...prev, { id: `${Date.now()}-${Math.random()}`, value, negated: false }])
@@ -471,13 +484,25 @@ export function FacultyScheduleTab() {
           </div>
         </div>
 
-        <div style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
           <FacultyFilterBar
             filters={facultyFilters}
             onAdd={addFacultyFilter}
             onRemove={removeFacultyFilter}
             onToggleNot={toggleFacultyFilterNot}
           />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', userSelect: 'none', fontSize: 12, color: 'var(--text-secondary)' }}>
+            <input type="checkbox" checked={filterFullTime} onChange={e => setFilterFullTime(e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
+            Full-Time
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', userSelect: 'none', fontSize: 12, color: 'var(--text-secondary)' }}>
+            <input type="checkbox" checked={filterPartTime} onChange={e => setFilterPartTime(e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
+            Part-Time
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', userSelect: 'none', fontSize: 12, color: 'var(--text-secondary)' }}>
+            <input type="checkbox" checked={filterDeptOnly} onChange={e => setFilterDeptOnly(e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
+            Department Only
+          </label>
         </div>
 
         {!selectedTerm ? (
@@ -488,7 +513,8 @@ export function FacultyScheduleTab() {
           visibleFaculty.map(faculty => {
             const grid = buildFacultyGrid(faculty.id)
             const minutes = officeHourMinutes(faculty.id)
-            const minMinutes = loadSettings.min_office_hours_per_week * 60
+            const minHours = faculty.rank === 'full_time' ? loadSettings.min_office_hours_fulltime : loadSettings.min_office_hours_parttime
+            const minMinutes = minHours * 60
             const underMin = minutes < minMinutes
             return (
               <div key={faculty.id} className="card" style={{ marginBottom: 16 }}>
@@ -502,7 +528,7 @@ export function FacultyScheduleTab() {
                     </div>
                   </div>
                   <div style={{ fontSize: 12, color: underMin ? 'var(--warning)' : 'var(--text-secondary)', fontWeight: underMin ? 700 : 400 }}>
-                    Office Hours: {(minutes / 60).toFixed(1)} / {loadSettings.min_office_hours_per_week} hrs/week
+                    Office Hours: {(minutes / 60).toFixed(1)} / {minHours} hrs/week
                   </div>
                 </div>
                 <div style={{ overflowX: 'auto' }}>

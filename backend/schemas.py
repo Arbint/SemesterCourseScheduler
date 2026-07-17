@@ -11,6 +11,7 @@ class FacultyBase(BaseModel):
     rank: RankEnum
     tags: list[str] = []
     office: Optional[str] = None
+    is_department_owned: bool = False
 
 class FacultyCreate(FacultyBase):
     pass
@@ -29,12 +30,14 @@ class LoadSettingsOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     fulltime_load: int
     parttime_load: int
-    min_office_hours_per_week: int
+    min_office_hours_fulltime: int
+    min_office_hours_parttime: int
 
 class LoadSettingsUpdate(BaseModel):
     fulltime_load: int
     parttime_load: int
-    min_office_hours_per_week: int
+    min_office_hours_fulltime: int
+    min_office_hours_parttime: int
 
 
 # --- DoorTagSettings ---

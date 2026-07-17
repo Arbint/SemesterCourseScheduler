@@ -27,7 +27,8 @@ def update_load_settings(data: LoadSettingsUpdate, db: Session = Depends(get_db)
     settings = get_or_create_settings(db)
     settings.fulltime_load = data.fulltime_load
     settings.parttime_load = data.parttime_load
-    settings.min_office_hours_per_week = data.min_office_hours_per_week
+    settings.min_office_hours_fulltime = data.min_office_hours_fulltime
+    settings.min_office_hours_parttime = data.min_office_hours_parttime
     db.commit()
     db.refresh(settings)
     return settings

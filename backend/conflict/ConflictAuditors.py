@@ -345,7 +345,13 @@ class OfficeHourConflict(ConflictAuditor):
 
         for oh in office_hours:
             for e in entries:
-                if not e.meeting_id and e.faculty_id != oh.faculty_id:
+                if e.meeting_id:
+                    # Department meetings only bind faculty who are both
+                    # department-owned and full-time (feedback_59) — others
+                    # are free to schedule office hours over it.
+                    if not (oh.faculty.is_department_owned and oh.faculty.rank.value == "full_time"):
+                        continue
+                elif e.faculty_id != oh.faculty_id:
                     continue
                 if oh.weekday_id not in _get_effective_weekdays(e):
                     continue
@@ -368,7 +374,8 @@ class MinOfficeHours(ConflictAuditor):
         from models import LoadSettings
         reports = []
         settings = self.db.query(LoadSettings).first()
-        min_minutes = (settings.min_office_hours_per_week if settings else 4) * 60
+        fulltime_min_minutes = (settings.min_office_hours_fulltime if settings else 4) * 60
+        parttime_min_minutes = (settings.min_office_hours_parttime if settings else 1) * 60
 
         teaching_faculty_ids = {e.faculty_id for e in term.schedule_entries if e.faculty_id}
         minutes_by_faculty: dict[int, int] = {}
@@ -377,13 +384,14 @@ class MinOfficeHours(ConflictAuditor):
 
         for fid in teaching_faculty_ids:
             total = minutes_by_faculty.get(fid, 0)
+            f = next((e.faculty for e in term.schedule_entries if e.faculty_id == fid), None)
+            if not f:
+                continue
+            min_minutes = fulltime_min_minutes if f.rank.value == "full_time" else parttime_min_minutes
             if total < min_minutes:
-                f = next((e.faculty for e in term.schedule_entries if e.faculty_id == fid), None)
-                if not f:
-                    continue
                 reports.append(ConflictReport(
                     courses=[],
                     entries=[],
-                    description=f"Office hours: {f.first_name} {f.last_name} has {total / 60:.1f} office hour(s)/week (minimum is {min_minutes / 60:.0f})"
+                    description=f"Office hours: {f.first_name} {f.last_name} has {total / 60:.1f} office hour(s)/week (minimum is {min_minutes / 60:.1f})"
                 ))
         return reports

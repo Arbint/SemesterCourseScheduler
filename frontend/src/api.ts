@@ -42,12 +42,14 @@ export interface Faculty {
   rank: Rank
   tags: string[]
   office: string | null
+  is_department_owned: boolean
 }
 
 export interface LoadSettings {
   fulltime_load: number
   parttime_load: number
-  min_office_hours_per_week: number
+  min_office_hours_fulltime: number
+  min_office_hours_parttime: number
 }
 
 export interface Semester {

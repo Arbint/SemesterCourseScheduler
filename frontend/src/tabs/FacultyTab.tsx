@@ -6,7 +6,7 @@ import { MultiSelect } from '../components/MultiSelect'
 import { showToast } from '../components/Toast'
 import { useAuth } from '../contexts/AuthContext'
 
-const EMPTY: Omit<Faculty, 'id'> = { first_name: '', last_name: '', rank: 'full_time', tags: [], office: '' }
+const EMPTY: Omit<Faculty, 'id'> = { first_name: '', last_name: '', rank: 'full_time', tags: [], office: '', is_department_owned: false }
 
 export function FacultyTab() {
   const { isLoggedIn } = useAuth()
@@ -35,7 +35,7 @@ export function FacultyTab() {
 
   const openEdit = async (f: Faculty) => {
     setEditing(f)
-    setForm({ first_name: f.first_name, last_name: f.last_name, rank: f.rank, tags: f.tags, office: f.office ?? '' })
+    setForm({ first_name: f.first_name, last_name: f.last_name, rank: f.rank, tags: f.tags, office: f.office ?? '', is_department_owned: f.is_department_owned })
     const taught = await facultyApi.getCourses(f.id)
     setTeachingIds(taught.map(c => c.id))
     setShowModal(true)
@@ -95,6 +95,7 @@ export function FacultyTab() {
                 <th>Name</th>
                 <th>Rank</th>
                 <th>Office</th>
+                <th>Ownership</th>
                 <th>Tags</th>
                 <th></th>
               </tr>
@@ -109,6 +110,11 @@ export function FacultyTab() {
                     </span>
                   </td>
                   <td style={{ color: 'var(--text-secondary)' }}>{f.office || '—'}</td>
+                  <td>
+                    {f.is_department_owned
+                      ? <span style={{ color: 'var(--accent)', fontSize: 12 }}>Department</span>
+                      : <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>—</span>}
+                  </td>
                   <td>{f.tags.map(t => <span key={t} className="tag">{t}</span>)}</td>
                   <td style={{ display: 'flex', gap: 6 }}>
                     {isLoggedIn && <button className="btn-secondary btn-sm" onClick={() => openEdit(f)}>Edit</button>}
@@ -145,6 +151,17 @@ export function FacultyTab() {
               onChange={e => setForm(f => ({ ...f, office: e.target.value }))}
               placeholder="e.g. JB 245"
             />
+          </div>
+          <div className="form-group">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={form.is_department_owned}
+                onChange={e => setForm(f => ({ ...f, is_department_owned: e.target.checked }))}
+                style={{ accentColor: 'var(--accent)' }}
+              />
+              Department owned (required at department meetings when full-time)
+            </label>
           </div>
           <div className="form-group">
             <label>Tags</label>

@@ -59,6 +59,7 @@ class Faculty(Base):
     rank = Column(Enum(RankEnum), nullable=False)
     tags = Column(JSON, default=list)
     office = Column(String, nullable=True)
+    is_department_owned = Column(Boolean, nullable=False, default=False)
 
     teaching_capabilities = relationship("FacultyTeaching", back_populates="faculty", cascade="all, delete-orphan")
     schedule_entries = relationship("ScheduleEntry", back_populates="faculty")
@@ -70,7 +71,8 @@ class LoadSettings(Base):
     id = Column(Integer, primary_key=True, default=1)
     fulltime_load = Column(Integer, nullable=False, default=3)
     parttime_load = Column(Integer, nullable=False, default=2)
-    min_office_hours_per_week = Column(Integer, nullable=False, default=4)
+    min_office_hours_fulltime = Column(Integer, nullable=False, default=4)
+    min_office_hours_parttime = Column(Integer, nullable=False, default=1)
 
 
 class DoorTagSettings(Base):

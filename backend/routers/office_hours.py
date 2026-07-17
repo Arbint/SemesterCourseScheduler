@@ -13,7 +13,7 @@ router = APIRouter(tags=["office_hours"])
 MIN_OFFICE_HOUR_MINUTES = 30
 
 
-def _office_hour_conflict(db: Session, faculty_id: int, term_id: int, weekday_id: int,
+def _office_hour_conflict(db: Session, faculty: Faculty, term_id: int, weekday_id: int,
                            start_time: str, end_time: str, exclude_id: int | None = None) -> str | None:
     """Returns a human-readable conflict description, or None if the placement is clear."""
     if start_time >= end_time:
@@ -21,6 +21,7 @@ def _office_hour_conflict(db: Session, faculty_id: int, term_id: int, weekday_id
     if _minutes_between(start_time, end_time) < MIN_OFFICE_HOUR_MINUTES:
         return f"Office hours must be at least {MIN_OFFICE_HOUR_MINUTES} minutes"
 
+    faculty_id = faculty.id
     other_office_hours = db.query(OfficeHour).filter(
         OfficeHour.faculty_id == faculty_id,
         OfficeHour.term_id == term_id,
@@ -33,13 +34,18 @@ def _office_hour_conflict(db: Session, faculty_id: int, term_id: int, weekday_id
             return "Overlaps an existing office hour"
 
     # Meetings (feedback_58) have no faculty_id of their own — they're
-    # department-wide, so they block every faculty's office hours regardless
-    # of whose office-hours request this is.
+    # department-wide, but department meetings only bind faculty who are both
+    # department-owned and full-time (feedback_59); everyone else is free to
+    # schedule office hours over them.
+    requires_department_meeting = faculty.is_department_owned and faculty.rank.value == "full_time"
+    entry_filter = ScheduleEntry.faculty_id == faculty_id
+    if requires_department_meeting:
+        entry_filter = or_(entry_filter, ScheduleEntry.meeting_id.isnot(None))
     entries = (
         db.query(ScheduleEntry)
         .filter(
             ScheduleEntry.term_id == term_id,
-            or_(ScheduleEntry.faculty_id == faculty_id, ScheduleEntry.meeting_id.isnot(None)),
+            entry_filter,
             ScheduleEntry.schedule_table_id.isnot(None),
         )
         .options(
@@ -75,7 +81,7 @@ def create_office_hour(faculty_id: int, data: OfficeHourCreate, db: Session = De
     if not term:
         raise HTTPException(404, "Term not found")
 
-    conflict = _office_hour_conflict(db, faculty_id, data.term_id, data.weekday_id, data.start_time, data.end_time)
+    conflict = _office_hour_conflict(db, faculty, data.term_id, data.weekday_id, data.start_time, data.end_time)
     if conflict:
         raise HTTPException(409, conflict)
 
@@ -99,9 +105,12 @@ def update_office_hour(office_hour_id: int, data: OfficeHourUpdate, db: Session 
     office_hour = db.query(OfficeHour).filter(OfficeHour.id == office_hour_id).first()
     if not office_hour:
         raise HTTPException(404, "Office hour not found")
+    faculty = db.query(Faculty).filter(Faculty.id == office_hour.faculty_id).first()
+    if not faculty:
+        raise HTTPException(404, "Faculty not found")
 
     conflict = _office_hour_conflict(
-        db, office_hour.faculty_id, office_hour.term_id, office_hour.weekday_id,
+        db, faculty, office_hour.term_id, office_hour.weekday_id,
         data.start_time, data.end_time, exclude_id=office_hour.id,
     )
     if conflict:
