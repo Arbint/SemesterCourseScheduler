@@ -5,11 +5,37 @@ from sqlalchemy.orm import Session
 import door_tag_assets as assets
 from database import get_db
 from door_tag_pdf import generate_door_tag_pdf
-from models import Room, Term
+from models import DoorTagSettings, Room, Term
+from schemas import DoorTagSettingsOut, DoorTagSettingsUpdate
 
 router = APIRouter(prefix="/api/door-tags", tags=["door-tags"])
 
 ASSET_KINDS = ("header", "footer")
+
+
+def _get_or_create_door_tag_settings(db: Session) -> DoorTagSettings:
+    settings = db.query(DoorTagSettings).first()
+    if not settings:
+        settings = DoorTagSettings(id=1, department_empty_label="OPEN", shared_empty_label="OPEN")
+        db.add(settings)
+        db.commit()
+        db.refresh(settings)
+    return settings
+
+
+@router.get("/settings", response_model=DoorTagSettingsOut)
+def get_door_tag_settings(db: Session = Depends(get_db)):
+    return _get_or_create_door_tag_settings(db)
+
+
+@router.put("/settings", response_model=DoorTagSettingsOut)
+def update_door_tag_settings(data: DoorTagSettingsUpdate, db: Session = Depends(get_db)):
+    settings = _get_or_create_door_tag_settings(db)
+    settings.department_empty_label = data.department_empty_label
+    settings.shared_empty_label = data.shared_empty_label
+    db.commit()
+    db.refresh(settings)
+    return settings
 
 
 @router.get("/pdf")

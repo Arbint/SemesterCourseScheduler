@@ -73,6 +73,16 @@ class LoadSettings(Base):
     min_office_hours_per_week = Column(Integer, nullable=False, default=4)
 
 
+class DoorTagSettings(Base):
+    """Singleton (id=1), same pattern as LoadSettings — persists across all
+    terms rather than being scoped to one."""
+    __tablename__ = "door_tag_settings"
+
+    id = Column(Integer, primary_key=True, default=1)
+    department_empty_label = Column(String, nullable=False, default="OPEN")
+    shared_empty_label = Column(String, nullable=False, default="OPEN")
+
+
 class Semester(Base):
     __tablename__ = "semesters"
 
@@ -116,6 +126,7 @@ class Room(Base):
     building_code = Column(String, nullable=False)  # required abbreviation, e.g. "FH"
     capacity = Column(Integer, nullable=False)
     is_online = Column(Boolean, nullable=False, default=False)
+    is_department_owned = Column(Boolean, nullable=False, default=False)
 
     schedule_entries = relationship("ScheduleEntry", back_populates="room")
 

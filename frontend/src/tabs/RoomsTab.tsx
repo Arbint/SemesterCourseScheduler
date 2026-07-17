@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext'
 
 type RoomForm = Omit<Room, 'id' | 'display_label'>
 
-const EMPTY: RoomForm = { building_name: '', room_number: '', building_code: '', capacity: 30, is_online: false }
+const EMPTY: RoomForm = { building_name: '', room_number: '', building_code: '', capacity: 30, is_online: false, is_department_owned: false }
 
 export function RoomsTab() {
   const { isLoggedIn } = useAuth()
@@ -22,7 +22,7 @@ export function RoomsTab() {
   const openNew = () => { setEditing(null); setForm(EMPTY); setShowModal(true) }
   const openEdit = (r: Room) => {
     setEditing(r)
-    setForm({ building_name: r.building_name ?? '', room_number: r.room_number, building_code: r.building_code, capacity: r.capacity, is_online: r.is_online })
+    setForm({ building_name: r.building_name ?? '', room_number: r.room_number, building_code: r.building_code, capacity: r.capacity, is_online: r.is_online, is_department_owned: r.is_department_owned })
     setShowModal(true)
   }
 
@@ -66,6 +66,7 @@ export function RoomsTab() {
                 <th>Full Name</th>
                 <th>Capacity</th>
                 <th>Type</th>
+                <th>Ownership</th>
                 <th></th>
               </tr>
             </thead>
@@ -78,6 +79,11 @@ export function RoomsTab() {
                   <td style={{ color: 'var(--text-secondary)' }}>{r.building_name ?? '—'}</td>
                   <td>{r.is_online ? '—' : `${r.capacity} students`}</td>
                   <td>{r.is_online ? <span style={{ color: 'var(--accent)', fontSize: 12 }}>Online</span> : 'Physical'}</td>
+                  <td>
+                    {r.is_department_owned
+                      ? <span style={{ color: 'var(--accent)', fontSize: 12 }}>Department</span>
+                      : <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>Shared</span>}
+                  </td>
                   <td style={{ display: 'flex', gap: 6 }}>
                     {isLoggedIn && <button className="btn-secondary btn-sm" onClick={() => openEdit(r)}>Edit</button>}
                     {isLoggedIn && <button className="btn-danger btn-sm" onClick={() => del(r)}>Delete</button>}
@@ -135,6 +141,17 @@ export function RoomsTab() {
                 style={{ accentColor: 'var(--accent)' }}
               />
               Online room (unlimited capacity, no room conflicts)
+            </label>
+          </div>
+          <div className="form-group">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={form.is_department_owned}
+                onChange={e => setForm(f => ({ ...f, is_department_owned: e.target.checked }))}
+                style={{ accentColor: 'var(--accent)' }}
+              />
+              Department owned (vs. shared)
             </label>
           </div>
         </FormModal>

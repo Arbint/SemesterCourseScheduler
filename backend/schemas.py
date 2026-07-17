@@ -37,6 +37,18 @@ class LoadSettingsUpdate(BaseModel):
     min_office_hours_per_week: int
 
 
+# --- DoorTagSettings ---
+
+class DoorTagSettingsOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    department_empty_label: str
+    shared_empty_label: str
+
+class DoorTagSettingsUpdate(BaseModel):
+    department_empty_label: str
+    shared_empty_label: str
+
+
 # --- Semester ---
 
 class SemesterOut(BaseModel):
@@ -81,6 +93,7 @@ class RoomBase(BaseModel):
     building_code: str
     capacity: int
     is_online: bool = False
+    is_department_owned: bool = False
 
 class RoomCreate(RoomBase):
     pass

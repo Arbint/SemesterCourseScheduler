@@ -76,6 +76,7 @@ export interface Room {
   building_code: string
   capacity: number
   is_online: boolean
+  is_department_owned: boolean
   display_label: string
 }
 
@@ -320,6 +321,16 @@ export const doorTagAssetsApi = {
   exists: (kind: 'header' | 'footer') =>
     api.get(`/door-tags/${kind}-image`, { validateStatus: () => true }).then(r => r.status === 200),
   url: (kind: 'header' | 'footer') => `/api/door-tags/${kind}-image`,
+}
+
+export interface DoorTagSettings {
+  department_empty_label: string
+  shared_empty_label: string
+}
+
+export const doorTagSettingsApi = {
+  get: () => api.get<DoorTagSettings>('/door-tags/settings').then(r => r.data),
+  update: (d: DoorTagSettings) => api.put<DoorTagSettings>('/door-tags/settings', d).then(r => r.data),
 }
 
 export interface FacultyCourseLoad {

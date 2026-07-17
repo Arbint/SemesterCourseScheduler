@@ -1,15 +1,17 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   termsApi, roomsApi, weekdaysApi, timeSlotsApi, tablesApi, entriesApi, coursesApi, facultyApi, meetingsApi,
-  termLabel, doorTagAssetsApi,
+  termLabel, doorTagAssetsApi, doorTagSettingsApi,
   type Term, type Room, type Weekday, type TimeSlot, type ScheduleTable, type ScheduleEntry,
-  type Course, type Faculty, type Meeting,
+  type Course, type Faculty, type Meeting, type DoorTagSettings,
 } from '../api'
 import { SearchableSelect } from '../components/SearchableSelect'
 import { courseColor, MEETING_SOLID_COLOR } from '../components/ScheduleGrid'
 import { showToast } from '../components/Toast'
+import { useAuth } from '../contexts/AuthContext'
 
-const DEFAULT_EMPTY_LABEL = 'OPEN'
+const DEFAULT_DEPARTMENT_EMPTY_LABEL = 'OPEN'
+const DEFAULT_SHARED_EMPTY_LABEL = 'OPEN'
 
 type CellData = { entry: ScheduleEntry; course: Course | null; meeting: Meeting | null; faculty: Faculty | null; span: number }
 type EmptyRun = { emptySpan: number }
@@ -137,6 +139,7 @@ function RoomFilterBar({ filters, onAdd, onRemove, onToggleNot }: {
 }
 
 export function DoorTagsTab() {
+  const { isLoggedIn } = useAuth()
   const [terms, setTerms] = useState<Term[]>([])
   const [rooms, setRooms] = useState<Room[]>([])
   const [weekdays, setWeekdays] = useState<Weekday[]>([])
@@ -144,8 +147,15 @@ export function DoorTagsTab() {
   const [allFaculty, setAllFaculty] = useState<Faculty[]>([])
 
   const [selectedTermId, setSelectedTermId] = useState<number | null>(null)
-  const [emptyLabel, setEmptyLabel] = useState(DEFAULT_EMPTY_LABEL)
+  // Persisted server-side (feedback_60) — shared across all terms/users, not
+  // local browser state, and only editable while logged in.
+  const [savedLabels, setSavedLabels] = useState<DoorTagSettings>({
+    department_empty_label: DEFAULT_DEPARTMENT_EMPTY_LABEL, shared_empty_label: DEFAULT_SHARED_EMPTY_LABEL,
+  })
+  const [labelForm, setLabelForm] = useState<DoorTagSettings>(savedLabels)
+  const [savingLabels, setSavingLabels] = useState(false)
   const [roomFilters, setRoomFilters] = useState<RoomFilter[]>([])
+  const [deptOwnedOnly, setDeptOwnedOnly] = useState(true)
 
   const [tables, setTables] = useState<ScheduleTable[]>([])
   const [entries, setEntries] = useState<ScheduleEntry[]>([])
@@ -172,7 +182,25 @@ export function DoorTagsTab() {
     })
     doorTagAssetsApi.exists('header').then(setHasHeaderImage)
     doorTagAssetsApi.exists('footer').then(setHasFooterImage)
+    doorTagSettingsApi.get().then(s => { setSavedLabels(s); setLabelForm(s) })
   }, [])
+
+  const labelsDirty = labelForm.department_empty_label !== savedLabels.department_empty_label ||
+    labelForm.shared_empty_label !== savedLabels.shared_empty_label
+
+  const saveLabels = async () => {
+    setSavingLabels(true)
+    try {
+      const updated = await doorTagSettingsApi.update(labelForm)
+      setSavedLabels(updated)
+      setLabelForm(updated)
+      showToast('Empty slot labels saved', 'success')
+    } catch (e: any) {
+      showToast(e.response?.data?.detail || 'Save failed')
+    } finally {
+      setSavingLabels(false)
+    }
+  }
 
   useEffect(() => {
     if (!selectedTermId) { setTables([]); setEntries([]); setCourses([]); setMeetings([]); return }
@@ -236,7 +264,7 @@ export function DoorTagsTab() {
   const selectedTerm = terms.find(t => t.id === selectedTermId)
 
   const sortedRooms = [...rooms].sort((a, b) => a.display_label.localeCompare(b.display_label))
-  const visibleRooms = sortedRooms.filter(r => roomVisible(r, roomFilters))
+  const visibleRooms = sortedRooms.filter(r => roomVisible(r, roomFilters) && (!deptOwnedOnly || r.is_department_owned))
 
   const addRoomFilter = (value: string) => {
     setRoomFilters(prev => [...prev, { id: `${Date.now()}-${Math.random()}`, value, negated: false }])
@@ -270,10 +298,14 @@ export function DoorTagsTab() {
 
   const exportPdf = (roomId: number) => {
     if (!selectedTermId) return
+    const room = rooms.find(r => r.id === roomId)
+    const label = room?.is_department_owned
+      ? (savedLabels.department_empty_label || DEFAULT_DEPARTMENT_EMPTY_LABEL)
+      : (savedLabels.shared_empty_label || DEFAULT_SHARED_EMPTY_LABEL)
     const params = new URLSearchParams({
       term_id: String(selectedTermId),
       room_id: String(roomId),
-      empty_label: emptyLabel || DEFAULT_EMPTY_LABEL,
+      empty_label: label,
     })
     window.open(`/api/door-tags/pdf?${params.toString()}`, '_blank')
   }
@@ -296,14 +328,35 @@ export function DoorTagsTab() {
             />
           </div>
           <div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>Empty Slot Label</div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>Department Owned Empty Slot Label</div>
             <input
-              value={emptyLabel}
-              onChange={e => setEmptyLabel(e.target.value)}
-              placeholder={DEFAULT_EMPTY_LABEL}
-              style={{ padding: '5px 10px', fontSize: 13, width: 160 }}
+              value={labelForm.department_empty_label}
+              onChange={e => isLoggedIn && setLabelForm(f => ({ ...f, department_empty_label: e.target.value }))}
+              placeholder={DEFAULT_DEPARTMENT_EMPTY_LABEL}
+              disabled={!isLoggedIn}
+              style={{ padding: '5px 10px', fontSize: 13, width: 200 }}
             />
           </div>
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>Shared Empty Slot Label</div>
+            <input
+              value={labelForm.shared_empty_label}
+              onChange={e => isLoggedIn && setLabelForm(f => ({ ...f, shared_empty_label: e.target.value }))}
+              placeholder={DEFAULT_SHARED_EMPTY_LABEL}
+              disabled={!isLoggedIn}
+              style={{ padding: '5px 10px', fontSize: 13, width: 200 }}
+            />
+          </div>
+          {isLoggedIn && (
+            <button
+              className="btn-primary btn-sm"
+              onClick={saveLabels}
+              disabled={savingLabels || !labelsDirty}
+              style={{ alignSelf: 'flex-end' }}
+            >
+              {savingLabels ? 'Saving...' : 'Save Labels'}
+            </button>
+          )}
           {([
             { kind: 'header' as const, label: 'Header Image', has: hasHeaderImage, uploading: uploadingHeader, ref: headerFileRef },
             { kind: 'footer' as const, label: 'Footer Image', has: hasFooterImage, uploading: uploadingFooter, ref: footerFileRef },
@@ -344,13 +397,22 @@ export function DoorTagsTab() {
           ))}
         </div>
 
-        <div style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
           <RoomFilterBar
             filters={roomFilters}
             onAdd={addRoomFilter}
             onRemove={removeRoomFilter}
             onToggleNot={toggleRoomFilterNot}
           />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', userSelect: 'none', fontSize: 12, color: 'var(--text-secondary)' }}>
+            <input
+              type="checkbox"
+              checked={deptOwnedOnly}
+              onChange={e => setDeptOwnedOnly(e.target.checked)}
+              style={{ accentColor: 'var(--accent)' }}
+            />
+            Department owned only
+          </label>
         </div>
 
         {!selectedTerm ? (
@@ -364,8 +426,17 @@ export function DoorTagsTab() {
               <div key={room.id} className="card" style={{ marginBottom: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                   <div>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-bright)', marginBottom: 2 }}>
-                      {room.display_label}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-bright)' }}>
+                        {room.display_label}
+                      </div>
+                      <span style={{
+                        fontSize: 11, padding: '1px 6px', borderRadius: 10,
+                        color: room.is_department_owned ? 'var(--accent)' : 'var(--text-secondary)',
+                        border: '1px solid var(--border-color)',
+                      }}>
+                        {room.is_department_owned ? 'Department' : 'Shared'}
+                      </span>
                     </div>
                     <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                       {termLabel(selectedTerm)} Schedule
@@ -395,6 +466,9 @@ export function DoorTagsTab() {
                             const cell = grid.get(w.id)?.[r] ?? null
                             if (cell === 'covered' || cell === null) return null
                             if ('emptySpan' in cell) {
+                              const label = room.is_department_owned
+                                ? (savedLabels.department_empty_label || DEFAULT_DEPARTMENT_EMPTY_LABEL)
+                                : (savedLabels.shared_empty_label || DEFAULT_SHARED_EMPTY_LABEL)
                               return (
                                 <td key={w.id} rowSpan={cell.emptySpan} style={{ padding: 4, border: '1px solid var(--border-color)' }}>
                                   <div style={{
@@ -402,7 +476,7 @@ export function DoorTagsTab() {
                                     textAlign: 'center', fontSize: 12, color: 'var(--text-secondary)', opacity: 0.6,
                                     minHeight: 26, boxSizing: 'border-box',
                                   }}>
-                                    {emptyLabel || DEFAULT_EMPTY_LABEL}
+                                    {label}
                                   </div>
                                 </td>
                               )
