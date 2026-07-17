@@ -3,7 +3,7 @@ from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
-from reportlab.lib.pagesizes import TABLOID
+from reportlab.lib.pagesizes import letter, legal, TABLOID, A4, A3
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
@@ -16,7 +16,32 @@ from models import Room, Term, TimeSlot, Weekday
 
 WEEKDAY_FULL = {"mon": "Monday", "tue": "Tuesday", "wed": "Wednesday", "thu": "Thursday", "fri": "Friday"}
 
-PAGE_WIDTH, PAGE_HEIGHT = TABLOID  # portrait 11x17 — vertical door-sign layout
+# --- Page setup (feedback_64) ---
+PAGE_SIZE_OPTIONS = ["letter", "legal", "tabloid", "a4", "a3", "custom"]
+DEFAULT_PAGE_SIZE = "tabloid"
+ORIENTATION_OPTIONS = ["portrait", "landscape"]
+DEFAULT_ORIENTATION = "portrait"
+_PAGE_SIZES = {"letter": letter, "legal": legal, "tabloid": TABLOID, "a4": A4, "a3": A3}
+
+
+def resolve_page_size(
+    page_size: str, orientation: str,
+    custom_width_in: float | None = None, custom_height_in: float | None = None,
+) -> tuple[float, float]:
+    """Returns (width, height) in points for one of the common sizes or a
+    custom width/height (inches), oriented portrait or landscape regardless
+    of how the base size tuple happens to be ordered."""
+    if page_size == "custom":
+        w = (custom_width_in or 11) * inch
+        h = (custom_height_in or 17) * inch
+    else:
+        w, h = _PAGE_SIZES.get(page_size, TABLOID)
+    if orientation == "landscape":
+        return max(w, h), min(w, h)
+    return min(w, h), max(w, h)
+
+
+PAGE_WIDTH, PAGE_HEIGHT = TABLOID  # default/legacy fallback — generate_* now resolves its own per-call size
 MARGIN = 0.45 * inch
 TIME_COL_WIDTH = 0.8 * inch
 TICK_MINUTES = 15
@@ -47,24 +72,31 @@ PASTEL = [
 ]
 MEETING_COLOR = "#8fb8d9"
 
-# --- Info section layout (feedback_63) ---
-# The "info section" is the header image + info area (room/faculty name,
-# term, etc) that sits above the schedule table. The Layout option only
-# changes how these two elements are positioned relative to each other —
-# never the info area's own internal structure.
+# --- Header section layout (feedback_63/64) ---
+# The "header section" holds up to 3 items: the header image, the info text
+# area (name/term/etc), and — faculty export only — the attribute icon area.
+# Two independent 8-option Layout dropdowns control this: one for how these
+# top-level items relate to each other (header_layout), and one reused
+# internally for how the info text area's own lines (name / rank-office /
+# term) relate to each other (info_layout). Same 8 options, same function.
 LAYOUT_OPTIONS = [
-    "vertical_center", "vertical_left", "vertical_right",
-    "horizontal_center", "horizontal_left", "horizontal_right",
+    "vertical_center", "vertical_left", "vertical_right", "vertical_fill",
+    "horizontal_center", "horizontal_left", "horizontal_right", "horizontal_fill",
 ]
 DEFAULT_LAYOUT = "vertical_center"
-INFO_HEADER_GAP = 0.18 * inch
+ITEM_GAP = 0.18 * inch
+# Non-fill vertical/horizontal items are sized to a fixed "natural" width
+# rather than the full content width — otherwise Left/Center/Right would be
+# visually indistinguishable from each other (or from Fill) for text blocks,
+# which have no true intrinsic width of their own.
+NATURAL_TEXT_WIDTH = 4.5 * inch
 
-_ALIGN_NAME = {"center": "CENTER", "left": "LEFT", "right": "RIGHT"}
-_ALIGN_TA = {"center": TA_CENTER, "left": TA_LEFT, "right": TA_RIGHT}
+_ALIGN_NAME = {"center": "CENTER", "left": "LEFT", "right": "RIGHT", "fill": "CENTER"}
+_ALIGN_TA = {"center": TA_CENTER, "left": TA_LEFT, "right": TA_RIGHT, "fill": TA_CENTER}
 
 
 def parse_layout(layout: str) -> tuple[str, str]:
-    """"horizontal_left" -> ("horizontal", "left"); anything unrecognized
+    """"horizontal_fill" -> ("horizontal", "fill"); anything unrecognized
     falls back to vertical_center."""
     if layout not in LAYOUT_OPTIONS:
         layout = DEFAULT_LAYOUT
@@ -72,71 +104,115 @@ def parse_layout(layout: str) -> tuple[str, str]:
     return axis, align
 
 
-def compose_info_section(header_flowable, header_height: float, header_width: float,
-                          info_area, info_area_height: float, layout: str, content_width: float):
-    """Arranges the header image and the info area (a single pre-built
-    flowable — see _build_*_info_area) per one of the 6 layout options.
-    Returns (elements: list, total_height: float)."""
+def item_width(layout: str, content_width: float, num_items: int) -> float:
+    """How wide a single item (or the info text area as a whole) should be
+    built to. Fill claims real estate (full width stacked, or an even split
+    side by side); anything else gets a fixed natural width, positioned via
+    hAlign."""
+    axis, align = parse_layout(layout)
+    if align != "fill":
+        return NATURAL_TEXT_WIDTH
+    return content_width if axis == "vertical" else content_width / max(1, num_items)
+
+
+def compose_items(items: list[dict], layout: str, available_width: float):
+    """Arranges 1-3 pre-built {"flowable", "height"} items per one of the 8
+    layout options. Used for both the header section (image / info text area
+    / icon area) and, recursively, the info text area's own lines. Returns
+    (elements: list, total_height: float)."""
+    items = [it for it in items if it.get("flowable") is not None]
+    if not items:
+        return [], 0
+
     axis, align = parse_layout(layout)
     ra = _ALIGN_NAME[align]
 
-    if header_flowable is None:
-        info_area.hAlign = ra
-        return [info_area], info_area_height
-
-    header_flowable.hAlign = ra
-    info_area.hAlign = ra
+    if len(items) == 1:
+        items[0]["flowable"].hAlign = ra
+        return [items[0]["flowable"]], items[0]["height"]
 
     if axis == "vertical":
-        return (
-            [header_flowable, Spacer(1, SECTION_GAP), info_area],
-            header_height + SECTION_GAP + info_area_height,
-        )
+        elements = []
+        total_h = 0.0
+        for i, it in enumerate(items):
+            it["flowable"].hAlign = ra
+            elements.append(it["flowable"])
+            total_h += it["height"]
+            if i < len(items) - 1:
+                elements.append(Spacer(1, SECTION_GAP))
+                total_h += SECTION_GAP
+        return elements, total_h
 
-    # horizontal — side by side in one row, the row itself positioned via hAlign
-    gap = Spacer(INFO_HEADER_GAP, 1)
-    row = Table([[header_flowable, gap, info_area]])
+    # horizontal — one row, either evenly split (fill) or each item at its
+    # own natural size with a small fixed gap between them
+    if align == "fill":
+        col_w = available_width / len(items)
+        row = Table([[it["flowable"] for it in items]], colWidths=[col_w] * len(items))
+    else:
+        cells, col_widths = [], []
+        for i, it in enumerate(items):
+            cells.append(it["flowable"])
+            col_widths.append(None)
+            if i < len(items) - 1:
+                cells.append(Spacer(ITEM_GAP, 1))
+                col_widths.append(ITEM_GAP)
+        row = Table([cells], colWidths=col_widths)
     row.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 0),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-        ("TOPPADDING", (0, 0), (-1, -1), 0),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
     ]))
     row.hAlign = ra
-    return [row], max(header_height, info_area_height)
+    return [row], max(it["height"] for it in items)
 
 
-def info_area_width(axis: str, header_flowable, header_width: float, content_width: float) -> float:
-    """How wide the info area's own content should wrap to: full content
-    width when stacked vertically (or when there's no header image to share
-    the row with), otherwise whatever's left after the header image."""
-    if axis == "vertical" or header_flowable is None:
-        return content_width
-    return max(2.5 * inch, content_width - header_width - INFO_HEADER_GAP)
+def _text_item(paragraph, width: float, height: float) -> dict:
+    """Wraps a single Paragraph as one compose_items() line item — every
+    item needs an explicit width to wrap to, and its own reserved height."""
+    table = Table([[paragraph]], colWidths=[width])
+    table.setStyle(TableStyle([
+        ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    return {"flowable": table, "height": height}
 
 
-def _build_room_info_area(room: Room, term: Term, align: str, width: float):
-    """The room export's info area — just a title + subtitle stack, text
-    alignment following the chosen Layout option. Returns (flowable, height)."""
-    ta = _ALIGN_TA[align]
-    title_style = ParagraphStyle("DoorTagTitle", parent=getSampleStyleSheet()["Title"], alignment=ta, fontSize=22, leading=25)
-    subtitle_style = ParagraphStyle(
-        "DoorTagSubtitle", parent=getSampleStyleSheet()["Normal"], alignment=ta, fontSize=12,
-        textColor=colors.HexColor("#444444"),
-    )
-    rows = [
-        [Paragraph(escape(room.display_label), title_style)],
-        [Paragraph(escape(f"{_term_label(term)} Schedule"), subtitle_style)],
-    ]
+TITLE_LINE_HEIGHT = 0.42 * inch
+SUBLINE_HEIGHT = 0.26 * inch
+
+
+def wrap_as_single_flowable(elements: list, width: float):
+    """compose_items() returns a *list* of flowables (e.g. [line1, Spacer,
+    line2] for a vertical arrangement) — wraps that list into ONE flowable so
+    the caller can treat it as a single composable item (set .hAlign on it,
+    pass it into another compose_items() call as one item, etc)."""
+    if len(elements) == 1:
+        return elements[0]
+    rows = [[e] for e in elements]
     table = Table(rows, colWidths=[width])
     table.setStyle(TableStyle([
-        ("LEFTPADDING", (0, 0), (-1, -1), 0),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-        ("TOPPADDING", (0, 0), (-1, -1), 0),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
     ]))
-    return table, TITLE_HEIGHT
+    return table
+
+
+def _build_room_info_area(room: Room, term: Term, info_layout: str, width: float):
+    """The room export's info area — a title + subtitle line, arranged per
+    the Info Text Area Layout option. Returns (flowable, height)."""
+    title_style = ParagraphStyle("DoorTagTitle", parent=getSampleStyleSheet()["Title"], alignment=TA_CENTER, fontSize=22, leading=25)
+    subtitle_style = ParagraphStyle(
+        "DoorTagSubtitle", parent=getSampleStyleSheet()["Normal"], alignment=TA_CENTER, fontSize=12,
+        textColor=colors.HexColor("#444444"),
+    )
+    line_width = item_width(info_layout, width, 2)
+    lines = [
+        _text_item(Paragraph(escape(room.display_label), title_style), line_width, TITLE_LINE_HEIGHT),
+        _text_item(Paragraph(escape(f"{_term_label(term)} Schedule"), subtitle_style), line_width, SUBLINE_HEIGHT),
+    ]
+    elements, height = compose_items(lines, info_layout, width)
+    return wrap_as_single_flowable(elements, width), height
 
 
 def _entry_color(course_id: int | None) -> colors.HexColor:
@@ -314,17 +390,20 @@ def _make_card(content, width: float, height: float, bg_color, edge_color, valig
 
 def generate_door_tag_pdf(
     db: Session, term: Term, room: Room, empty_label: str,
-    layout: str = DEFAULT_LAYOUT, header_scale: float = 1.0, footer_scale: float = 1.0,
+    header_layout: str = DEFAULT_LAYOUT, info_layout: str = DEFAULT_LAYOUT,
+    header_scale: float = 1.0, footer_scale: float = 1.0,
+    page_size: str = DEFAULT_PAGE_SIZE, orientation: str = DEFAULT_ORIENTATION,
+    custom_width_in: float | None = None, custom_height_in: float | None = None,
 ) -> bytes:
     weekdays, ticks, grid = build_door_tag_grid(db, term, room)
-    axis, align = parse_layout(layout)
+    page_width, page_height = resolve_page_size(page_size, orientation, custom_width_in, custom_height_in)
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
-        buf, pagesize=TABLOID,
+        buf, pagesize=(page_width, page_height),
         leftMargin=MARGIN, rightMargin=MARGIN, topMargin=MARGIN, bottomMargin=MARGIN,
     )
-    content_width = PAGE_WIDTH - 2 * MARGIN
+    content_width = page_width - 2 * MARGIN
 
     styles = getSampleStyleSheet()
     header_style = ParagraphStyle(
@@ -358,11 +437,12 @@ def generate_door_tag_pdf(
     if footer_band:
         footer_band.hAlign = "CENTER"  # footer is never affected by the Layout option
 
-    info_width = info_area_width(axis, header_flowable, header_width, content_width)
-    info_area, info_height = _build_room_info_area(room, term, align, info_width)
-    info_elements, info_section_height = compose_info_section(
-        header_flowable, header_height, header_width, info_area, info_height, layout, content_width
-    )
+    num_header_items = 1 + (1 if header_flowable else 0)
+    info_width = item_width(header_layout, content_width, num_header_items)
+    info_area, info_height = _build_room_info_area(room, term, info_layout, info_width)
+
+    header_items = [{"flowable": header_flowable, "height": header_height}, {"flowable": info_area, "height": info_height}]
+    info_elements, info_section_height = compose_items(header_items, header_layout, content_width)
 
     elements = []
     elements.extend(info_elements)
@@ -379,7 +459,7 @@ def generate_door_tag_pdf(
     num_ticks = len(ticks)
     footer_reserved = (SECTION_GAP + footer_height) if footer_band else 0
     usable_height = (
-        PAGE_HEIGHT - 2 * MARGIN - info_section_height - SECTION_GAP
+        page_height - 2 * MARGIN - info_section_height - SECTION_GAP
         - WEEKDAY_ROW_HEIGHT - footer_reserved
     )
     # 0.94 safety factor: reportlab treats explicit rowHeights as targets, not

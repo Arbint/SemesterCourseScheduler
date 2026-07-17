@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 import door_tag_assets as assets
 from database import get_db
-from door_tag_pdf import generate_door_tag_pdf, DEFAULT_LAYOUT
+from door_tag_pdf import generate_door_tag_pdf, DEFAULT_LAYOUT, DEFAULT_PAGE_SIZE, DEFAULT_ORIENTATION
 from models import DoorTagSettings, Room, Term
 from schemas import DoorTagSettingsOut, DoorTagSettingsUpdate
 
@@ -41,7 +41,10 @@ def update_door_tag_settings(data: DoorTagSettingsUpdate, db: Session = Depends(
 @router.get("/pdf")
 def door_tag_pdf(
     term_id: int, room_id: int, empty_label: str = "OPEN",
-    layout: str = DEFAULT_LAYOUT, header_scale: float = 1.0, footer_scale: float = 1.0,
+    header_layout: str = DEFAULT_LAYOUT, info_layout: str = DEFAULT_LAYOUT,
+    header_scale: float = 1.0, footer_scale: float = 1.0,
+    page_size: str = DEFAULT_PAGE_SIZE, orientation: str = DEFAULT_ORIENTATION,
+    custom_width_in: float | None = None, custom_height_in: float | None = None,
     db: Session = Depends(get_db),
 ):
     term = db.query(Term).filter(Term.id == term_id).first()
@@ -53,7 +56,10 @@ def door_tag_pdf(
 
     header_scale = max(0.25, min(3.0, header_scale))
     footer_scale = max(0.25, min(3.0, footer_scale))
-    content = generate_door_tag_pdf(db, term, room, empty_label, layout, header_scale, footer_scale)
+    content = generate_door_tag_pdf(
+        db, term, room, empty_label, header_layout, info_layout, header_scale, footer_scale,
+        page_size, orientation, custom_width_in, custom_height_in,
+    )
     filename = f"door_tag_{room.building_code}{room.room_number}_{term.year}.pdf"
     return Response(
         content=content,

@@ -5,7 +5,7 @@ from database import get_db
 from models import Faculty, FacultyTeaching, FacultyAttribute, Course, Term
 from schemas import FacultyCreate, FacultyUpdate, FacultyOut, CourseOut
 from faculty_schedule_pdf import generate_faculty_schedule_pdf
-from door_tag_pdf import DEFAULT_LAYOUT
+from door_tag_pdf import DEFAULT_LAYOUT, DEFAULT_PAGE_SIZE, DEFAULT_ORIENTATION
 
 router = APIRouter(prefix="/api/faculty", tags=["faculty"])
 
@@ -109,7 +109,10 @@ def remove_faculty_attribute(faculty_id: int, attribute_id: int, db: Session = D
 @router.get("/{faculty_id}/schedule-pdf")
 def faculty_schedule_pdf(
     faculty_id: int, term_id: int,
-    layout: str = DEFAULT_LAYOUT, header_scale: float = 1.0, footer_scale: float = 1.0,
+    header_layout: str = DEFAULT_LAYOUT, info_layout: str = DEFAULT_LAYOUT,
+    header_scale: float = 1.0, footer_scale: float = 1.0,
+    page_size: str = DEFAULT_PAGE_SIZE, orientation: str = DEFAULT_ORIENTATION,
+    custom_width_in: float | None = None, custom_height_in: float | None = None,
     db: Session = Depends(get_db),
 ):
     faculty = db.query(Faculty).filter(Faculty.id == faculty_id).first()
@@ -121,7 +124,10 @@ def faculty_schedule_pdf(
 
     header_scale = max(0.25, min(3.0, header_scale))
     footer_scale = max(0.25, min(3.0, footer_scale))
-    content = generate_faculty_schedule_pdf(db, term, faculty, layout, header_scale, footer_scale)
+    content = generate_faculty_schedule_pdf(
+        db, term, faculty, header_layout, info_layout, header_scale, footer_scale,
+        page_size, orientation, custom_width_in, custom_height_in,
+    )
     filename = f"faculty_schedule_{faculty.last_name}_{faculty.first_name}_{term.year}.pdf".replace(" ", "_")
     return Response(
         content=content,

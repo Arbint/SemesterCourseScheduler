@@ -82,6 +82,19 @@ class DoorTagSettingsUpdate(BaseModel):
     shared_empty_label: str
 
 
+# --- PdfLayoutPreset ---
+
+class PdfLayoutPresetCreate(BaseModel):
+    name: str
+    config: dict
+
+class PdfLayoutPresetOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    config: dict
+
+
 # --- Semester ---
 
 class SemesterOut(BaseModel):

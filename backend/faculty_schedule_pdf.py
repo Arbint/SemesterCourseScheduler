@@ -3,7 +3,6 @@ from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
-from reportlab.lib.pagesizes import TABLOID
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
@@ -13,12 +12,13 @@ from svglib.svglib import svg2rlg
 
 import faculty_attribute_assets as attr_assets
 from door_tag_pdf import (
-    PAGE_WIDTH, PAGE_HEIGHT, MARGIN, TIME_COL_WIDTH, TICK_MINUTES,
+    MARGIN, TIME_COL_WIDTH, TICK_MINUTES,
     WEEKDAY_ROW_HEIGHT, HEADER_IMAGE_MAX_HEIGHT, FOOTER_IMAGE_MAX_HEIGHT, SECTION_GAP,
     GRID_LINE_COLOR, ENTRY_EDGE_COLOR, CELL_INSET, MEETING_COLOR,
     WEEKDAY_FULL, _entry_color, _merge_empty_runs, _term_label, _parse_hhmm, _format_clock,
-    _fit_image_band, _make_card,
-    DEFAULT_LAYOUT, parse_layout, compose_info_section, info_area_width, _ALIGN_TA,
+    _fit_image_band, _make_card, _text_item, wrap_as_single_flowable,
+    DEFAULT_LAYOUT, DEFAULT_PAGE_SIZE, DEFAULT_ORIENTATION, resolve_page_size,
+    parse_layout, compose_items, item_width, TITLE_LINE_HEIGHT, SUBLINE_HEIGHT,
 )
 from models import Faculty, Term, TimeSlot, Weekday
 
@@ -37,10 +37,6 @@ RANK_LABELS = {
 OFFICE_HOURS_COLOR = "#c3ecc3"
 FACULTY_EMPTY_BG_COLOR = colors.white
 
-# Generous fixed budget for the name/rank-office/term-label text stack —
-# mirrors how door_tag_pdf's TITLE_HEIGHT covers title+subtitle together
-# rather than budgeting each paragraph separately.
-INFO_TEXT_HEIGHT = 0.95 * inch
 ICON_SIZE = 0.32 * inch
 ICON_GAP = 4
 
@@ -169,25 +165,15 @@ def _attribute_flowable(attribute, pill_style):
     return Image(str(path), width=iw * scale, height=ih * scale)
 
 
-def _build_faculty_info_area(faculty: Faculty, term: Term, align: str, width: float):
-    """The faculty export's info area — name/rank/office/term text stack,
-    alignment following the chosen Layout option, with attribute icons in
-    their own vertical column immediately to the right (feedback_63: this
-    icon placement is the one thing that *doesn't* follow the Layout
-    option). Returns (flowable, height)."""
-    ta = _ALIGN_TA[align]
+def _build_faculty_info_area(faculty: Faculty, term: Term, info_layout: str, width: float):
+    """The faculty export's info area — name / rank-office / term lines,
+    arranged per the Info Text Area Layout option. Returns (flowable, height)."""
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle("FacultyTitle", parent=styles["Title"], alignment=ta, fontSize=22, leading=25)
-    info_style = ParagraphStyle("FacultyInfo", parent=styles["Normal"], alignment=ta, fontSize=12, textColor=colors.HexColor("#444444"))
-    subtitle_style = ParagraphStyle("FacultySubtitle", parent=styles["Normal"], alignment=ta, fontSize=11, textColor=colors.HexColor("#666666"))
-    pill_style = ParagraphStyle(
-        "AttributePill", parent=styles["Normal"], alignment=TA_CENTER, fontSize=8,
-        textColor=colors.HexColor("#444444"), borderColor=colors.HexColor("#aaaaaa"),
-        borderWidth=0.5, borderPadding=3,
-    )
+    title_style = ParagraphStyle("FacultyTitle", parent=styles["Title"], alignment=TA_CENTER, fontSize=22, leading=25)
+    info_style = ParagraphStyle("FacultyInfo", parent=styles["Normal"], alignment=TA_CENTER, fontSize=12, textColor=colors.HexColor("#444444"))
+    subtitle_style = ParagraphStyle("FacultySubtitle", parent=styles["Normal"], alignment=TA_CENTER, fontSize=11, textColor=colors.HexColor("#666666"))
 
-    full_name = f"{faculty.first_name} {faculty.last_name}"
-    text_rows = [[Paragraph(escape(full_name), title_style)]]
+    lines_data = [(f"{faculty.first_name} {faculty.last_name}", title_style, TITLE_LINE_HEIGHT)]
 
     info_bits = []
     if faculty.rank:
@@ -195,53 +181,58 @@ def _build_faculty_info_area(faculty: Faculty, term: Term, align: str, width: fl
     if faculty.office:
         info_bits.append(f"Office: {faculty.office}")
     if info_bits:
-        text_rows.append([Paragraph(escape("  |  ".join(info_bits)), info_style)])
+        lines_data.append(("  |  ".join(info_bits), info_style, SUBLINE_HEIGHT))
 
-    text_rows.append([Paragraph(escape(f"{_term_label(term)} Schedule"), subtitle_style)])
+    lines_data.append((f"{_term_label(term)} Schedule", subtitle_style, SUBLINE_HEIGHT))
 
+    num_lines = len(lines_data)
+    line_width = item_width(info_layout, width, num_lines)
+    line_items = [_text_item(Paragraph(escape(text), style), line_width, height) for text, style, height in lines_data]
+
+    elements, height = compose_items(line_items, info_layout, width)
+    return wrap_as_single_flowable(elements, width), height
+
+
+def _build_attribute_icon_area(faculty: Faculty):
+    """The attribute icon area — always a vertical stack of icons (or a text
+    pill fallback for attributes with no uploaded icon), independent of the
+    Header Section Layout option. Returns (flowable | None, height, width)."""
     attributes = sorted(faculty.attributes, key=lambda a: a.name)
-    icon_col_width = (ICON_SIZE + 10) if attributes else 0
-    text_width = max(2 * inch, width - icon_col_width)
-
-    text_table = Table(text_rows, colWidths=[text_width])
-    text_table.setStyle(TableStyle([
-        ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-        ("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
-    ]))
-
     if not attributes:
-        return text_table, INFO_TEXT_HEIGHT
+        return None, 0, 0
 
-    icon_rows = [[_attribute_flowable(a, pill_style)] for a in attributes]
-    icon_table = Table(icon_rows, colWidths=[icon_col_width])
-    icon_table.setStyle(TableStyle([
+    pill_style = ParagraphStyle(
+        "AttributePill", parent=getSampleStyleSheet()["Normal"], alignment=TA_CENTER, fontSize=8,
+        textColor=colors.HexColor("#444444"), borderColor=colors.HexColor("#aaaaaa"),
+        borderWidth=0.5, borderPadding=3,
+    )
+    width = ICON_SIZE + 10
+    rows = [[_attribute_flowable(a, pill_style)] for a in attributes]
+    table = Table(rows, colWidths=[width])
+    table.setStyle(TableStyle([
         ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("TOPPADDING", (0, 0), (-1, -1), ICON_GAP / 2), ("BOTTOMPADDING", (0, 0), (-1, -1), ICON_GAP / 2),
     ]))
-    icon_height = len(attributes) * (ICON_SIZE + ICON_GAP) + ICON_GAP
-
-    combined = Table([[text_table, icon_table]], colWidths=[text_width, icon_col_width])
-    combined.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-        ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-    ]))
-    return combined, max(INFO_TEXT_HEIGHT, icon_height)
+    height = len(attributes) * (ICON_SIZE + ICON_GAP) + ICON_GAP
+    return table, height, width
 
 
 def generate_faculty_schedule_pdf(
     db: Session, term: Term, faculty: Faculty,
-    layout: str = DEFAULT_LAYOUT, header_scale: float = 1.0, footer_scale: float = 1.0,
+    header_layout: str = DEFAULT_LAYOUT, info_layout: str = DEFAULT_LAYOUT,
+    header_scale: float = 1.0, footer_scale: float = 1.0,
+    page_size: str = DEFAULT_PAGE_SIZE, orientation: str = DEFAULT_ORIENTATION,
+    custom_width_in: float | None = None, custom_height_in: float | None = None,
 ) -> bytes:
     weekdays, ticks, grid = build_faculty_schedule_grid(db, term, faculty)
-    axis, align = parse_layout(layout)
+    page_width, page_height = resolve_page_size(page_size, orientation, custom_width_in, custom_height_in)
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
-        buf, pagesize=TABLOID,
+        buf, pagesize=(page_width, page_height),
         leftMargin=MARGIN, rightMargin=MARGIN, topMargin=MARGIN, bottomMargin=MARGIN,
     )
-    content_width = PAGE_WIDTH - 2 * MARGIN
+    content_width = page_width - 2 * MARGIN
 
     styles = getSampleStyleSheet()
     header_style = ParagraphStyle(
@@ -267,11 +258,18 @@ def generate_faculty_schedule_pdf(
     if footer_band:
         footer_band.hAlign = "CENTER"
 
-    info_width = info_area_width(axis, header_flowable, header_width, content_width)
-    info_area, info_height = _build_faculty_info_area(faculty, term, align, info_width)
-    info_elements, info_section_height = compose_info_section(
-        header_flowable, header_height, header_width, info_area, info_height, layout, content_width
-    )
+    icon_flowable, icon_height, icon_width = _build_attribute_icon_area(faculty)
+
+    num_header_items = (1 if header_flowable else 0) + 1 + (1 if icon_flowable else 0)
+    info_width = item_width(header_layout, content_width, num_header_items)
+    info_area, info_height = _build_faculty_info_area(faculty, term, info_layout, info_width)
+
+    header_items = [
+        {"flowable": header_flowable, "height": header_height},
+        {"flowable": info_area, "height": info_height},
+        {"flowable": icon_flowable, "height": icon_height},
+    ]
+    info_elements, info_section_height = compose_items(header_items, header_layout, content_width)
 
     elements = []
     elements.extend(info_elements)
@@ -288,7 +286,7 @@ def generate_faculty_schedule_pdf(
     num_ticks = len(ticks)
     footer_reserved = (SECTION_GAP + footer_height) if footer_band else 0
     usable_height = (
-        PAGE_HEIGHT - 2 * MARGIN - info_section_height - SECTION_GAP
+        page_height - 2 * MARGIN - info_section_height - SECTION_GAP
         - WEEKDAY_ROW_HEIGHT - footer_reserved
     )
     tick_height = max(6, usable_height / num_ticks * 0.94)

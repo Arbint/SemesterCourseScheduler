@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import {
   termsApi, tablesApi, entriesApi, coursesApi, weekdaysApi, timeSlotsApi, facultyApi, roomsApi,
-  officeHoursApi, loadSettingsApi, meetingsApi, facultyAttributesApi, termLabel, PDF_LAYOUT_OPTIONS,
+  officeHoursApi, loadSettingsApi, meetingsApi, facultyAttributesApi, termLabel, DEFAULT_PRINT_CONFIG,
   type Term, type Weekday, type TimeSlot, type ScheduleTable, type ScheduleEntry,
   type Course, type Faculty, type OfficeHour, type LoadSettings, type Room, type Meeting,
-  type FacultyRank, type FacultyAttribute,
+  type FacultyRank, type FacultyAttribute, type PrintConfig,
 } from '../api'
 import { SearchableSelect } from '../components/SearchableSelect'
 import { courseColor, OFFICE_HOUR_SOLID_COLOR, MEETING_SOLID_COLOR } from '../components/ScheduleGrid'
+import { PrintConfigPanel } from '../components/PrintConfigPanel'
 import { showToast } from '../components/Toast'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -244,9 +245,7 @@ export function FacultyScheduleTab() {
   const [filterFullTime, setFilterFullTime] = useState(false)
   const [filterPartTime, setFilterPartTime] = useState(false)
   const [filterDeptOnly, setFilterDeptOnly] = useState(false)
-  const [pdfLayout, setPdfLayout] = useState('vertical_center')
-  const [pdfHeaderScale, setPdfHeaderScale] = useState(1)
-  const [pdfFooterScale, setPdfFooterScale] = useState(1)
+  const [printConfig, setPrintConfig] = useState<PrintConfig>(DEFAULT_PRINT_CONFIG)
 
   const [tables, setTables] = useState<ScheduleTable[]>([])
   const [entries, setEntries] = useState<ScheduleEntry[]>([])
@@ -530,32 +529,7 @@ export function FacultyScheduleTab() {
           </label>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
-          <div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>Export Layout</div>
-            <select value={pdfLayout} onChange={e => setPdfLayout(e.target.value)} style={{ padding: '5px 8px', fontSize: 13 }}>
-              {PDF_LAYOUT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>Header Size</div>
-            <input
-              type="number" min={0.25} max={3} step={0.1}
-              value={pdfHeaderScale}
-              onChange={e => setPdfHeaderScale(+e.target.value)}
-              style={{ padding: '5px 8px', fontSize: 13, width: 70 }}
-            />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>Footer Size</div>
-            <input
-              type="number" min={0.25} max={3} step={0.1}
-              value={pdfFooterScale}
-              onChange={e => setPdfFooterScale(+e.target.value)}
-              style={{ padding: '5px 8px', fontSize: 13, width: 70 }}
-            />
-          </div>
-        </div>
+        <PrintConfigPanel config={printConfig} onChange={setPrintConfig} />
 
         {!selectedTerm ? (
           <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Select a term.</div>
@@ -608,9 +582,7 @@ export function FacultyScheduleTab() {
                     <button
                       className="btn-secondary btn-sm"
                       onClick={() => selectedTermId != null && window.open(
-                        facultyApi.schedulePdfUrl(faculty.id, selectedTermId, {
-                          layout: pdfLayout, headerScale: pdfHeaderScale, footerScale: pdfFooterScale,
-                        }),
+                        facultyApi.schedulePdfUrl(faculty.id, selectedTermId, printConfig),
                         '_blank'
                       )}
                     >

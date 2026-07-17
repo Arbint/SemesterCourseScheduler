@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   termsApi, roomsApi, weekdaysApi, timeSlotsApi, tablesApi, entriesApi, coursesApi, facultyApi, meetingsApi,
-  termLabel, doorTagAssetsApi, doorTagSettingsApi, PDF_LAYOUT_OPTIONS,
+  termLabel, doorTagSettingsApi, printConfigParams, DEFAULT_PRINT_CONFIG,
   type Term, type Room, type Weekday, type TimeSlot, type ScheduleTable, type ScheduleEntry,
-  type Course, type Faculty, type Meeting, type DoorTagSettings,
+  type Course, type Faculty, type Meeting, type DoorTagSettings, type PrintConfig,
 } from '../api'
 import { SearchableSelect } from '../components/SearchableSelect'
 import { courseColor, MEETING_SOLID_COLOR } from '../components/ScheduleGrid'
+import { PrintConfigPanel } from '../components/PrintConfigPanel'
 import { showToast } from '../components/Toast'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -156,21 +157,12 @@ export function DoorTagsTab() {
   const [savingLabels, setSavingLabels] = useState(false)
   const [roomFilters, setRoomFilters] = useState<RoomFilter[]>([])
   const [deptOwnedOnly, setDeptOwnedOnly] = useState(true)
-  const [layout, setLayout] = useState('vertical_center')
-  const [headerScale, setHeaderScale] = useState(1)
-  const [footerScale, setFooterScale] = useState(1)
+  const [printConfig, setPrintConfig] = useState<PrintConfig>(DEFAULT_PRINT_CONFIG)
 
   const [tables, setTables] = useState<ScheduleTable[]>([])
   const [entries, setEntries] = useState<ScheduleEntry[]>([])
   const [courses, setCourses] = useState<Course[]>([])
   const [meetings, setMeetings] = useState<Meeting[]>([])
-
-  const [hasHeaderImage, setHasHeaderImage] = useState(false)
-  const [hasFooterImage, setHasFooterImage] = useState(false)
-  const [uploadingHeader, setUploadingHeader] = useState(false)
-  const [uploadingFooter, setUploadingFooter] = useState(false)
-  const headerFileRef = useRef<HTMLInputElement>(null)
-  const footerFileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     Promise.all([
@@ -183,8 +175,6 @@ export function DoorTagsTab() {
       setAllFaculty(f)
       if (t.length) setSelectedTermId(t[0].id)
     })
-    doorTagAssetsApi.exists('header').then(setHasHeaderImage)
-    doorTagAssetsApi.exists('footer').then(setHasFooterImage)
     doorTagSettingsApi.get().then(s => { setSavedLabels(s); setLabelForm(s) })
   }, [])
 
@@ -275,30 +265,6 @@ export function DoorTagsTab() {
   const removeRoomFilter = (id: string) => setRoomFilters(prev => prev.filter(f => f.id !== id))
   const toggleRoomFilterNot = (id: string) => setRoomFilters(prev => prev.map(f => f.id === id ? { ...f, negated: !f.negated } : f))
 
-  const uploadAsset = async (kind: 'header' | 'footer', file: File) => {
-    const setUploading = kind === 'header' ? setUploadingHeader : setUploadingFooter
-    const setHas = kind === 'header' ? setHasHeaderImage : setHasFooterImage
-    setUploading(true)
-    try {
-      await doorTagAssetsApi.upload(kind, file)
-      setHas(true)
-    } catch (e: any) {
-      showToast(e.response?.data?.detail || `Failed to upload ${kind} image`)
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  const removeAsset = async (kind: 'header' | 'footer') => {
-    const setHas = kind === 'header' ? setHasHeaderImage : setHasFooterImage
-    try {
-      await doorTagAssetsApi.remove(kind)
-      setHas(false)
-    } catch (e: any) {
-      showToast(e.response?.data?.detail || `Failed to remove ${kind} image`)
-    }
-  }
-
   const exportPdf = (roomId: number) => {
     if (!selectedTermId) return
     const room = rooms.find(r => r.id === roomId)
@@ -309,9 +275,7 @@ export function DoorTagsTab() {
       term_id: String(selectedTermId),
       room_id: String(roomId),
       empty_label: label,
-      layout,
-      header_scale: String(headerScale),
-      footer_scale: String(footerScale),
+      ...printConfigParams(printConfig),
     })
     window.open(`/api/door-tags/pdf?${params.toString()}`, '_blank')
   }
@@ -363,69 +327,9 @@ export function DoorTagsTab() {
               {savingLabels ? 'Saving...' : 'Save Labels'}
             </button>
           )}
-          {([
-            { kind: 'header' as const, label: 'Header Image', has: hasHeaderImage, uploading: uploadingHeader, ref: headerFileRef },
-            { kind: 'footer' as const, label: 'Footer Image', has: hasFooterImage, uploading: uploadingFooter, ref: footerFileRef },
-          ]).map(({ kind, label, has, uploading, ref }) => (
-            <div key={kind}>
-              <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>{label}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                {has && (
-                  <img
-                    src={doorTagAssetsApi.url(kind)}
-                    alt={`${label} preview`}
-                    style={{ height: 26, maxWidth: 80, objectFit: 'contain', background: 'var(--bg-elevated)', borderRadius: 3 }}
-                  />
-                )}
-                <input
-                  ref={ref}
-                  type="file"
-                  accept=".jpg,.jpeg,.png,.svg,image/jpeg,image/png,image/svg+xml"
-                  style={{ display: 'none' }}
-                  onChange={e => {
-                    const file = e.target.files?.[0]
-                    if (file) uploadAsset(kind, file)
-                    e.target.value = ''
-                  }}
-                />
-                <button
-                  className="btn-secondary btn-sm"
-                  disabled={uploading}
-                  onClick={() => ref.current?.click()}
-                >
-                  {uploading ? 'Uploading...' : has ? 'Replace' : 'Upload'}
-                </button>
-                {has && (
-                  <button className="btn-secondary btn-sm" onClick={() => removeAsset(kind)}>Remove</button>
-                )}
-              </div>
-            </div>
-          ))}
-          <div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>Layout</div>
-            <select value={layout} onChange={e => setLayout(e.target.value)} style={{ padding: '5px 8px', fontSize: 13 }}>
-              {PDF_LAYOUT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>Header Size</div>
-            <input
-              type="number" min={0.25} max={3} step={0.1}
-              value={headerScale}
-              onChange={e => setHeaderScale(+e.target.value)}
-              style={{ padding: '5px 8px', fontSize: 13, width: 70 }}
-            />
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>Footer Size</div>
-            <input
-              type="number" min={0.25} max={3} step={0.1}
-              value={footerScale}
-              onChange={e => setFooterScale(+e.target.value)}
-              style={{ padding: '5px 8px', fontSize: 13, width: 70 }}
-            />
-          </div>
         </div>
+
+        <PrintConfigPanel config={printConfig} onChange={setPrintConfig} />
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
           <RoomFilterBar

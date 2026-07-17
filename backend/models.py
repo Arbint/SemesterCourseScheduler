@@ -115,6 +115,16 @@ class DoorTagSettings(Base):
     shared_empty_label = Column(String, nullable=False, default="OPEN")
 
 
+class PdfLayoutPreset(Base):
+    """A saved snapshot of Print Configuration settings (feedback_64) — usable
+    from either the Room Schedule or Faculty Schedule export panel."""
+    __tablename__ = "pdf_layout_presets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, unique=True)
+    config = Column(JSON, nullable=False)
+
+
 class Semester(Base):
     __tablename__ = "semesters"
 

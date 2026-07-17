@@ -199,6 +199,21 @@ export interface ChatDonePayload {
 
 // --- API functions ---
 
+// Shared by both PDF export URL builders — every field in PrintConfig maps
+// 1:1 to a backend query param name.
+export function printConfigParams(config: PrintConfig): Record<string, string> {
+  return {
+    header_layout: config.header_layout,
+    info_layout: config.info_layout,
+    header_scale: String(config.header_scale),
+    footer_scale: String(config.footer_scale),
+    page_size: config.page_size,
+    orientation: config.orientation,
+    custom_width_in: String(config.custom_width_in),
+    custom_height_in: String(config.custom_height_in),
+  }
+}
+
 export const facultyApi = {
   list: () => api.get<Faculty[]>('/faculty').then(r => r.data),
   create: (d: Omit<Faculty, 'id' | 'attribute_ids'>) => api.post<Faculty>('/faculty', d).then(r => r.data),
@@ -209,11 +224,8 @@ export const facultyApi = {
   removeCourse: (fid: number, cid: number) => api.delete(`/faculty/${fid}/courses/${cid}`),
   addAttribute: (fid: number, attributeId: number) => api.post(`/faculty/${fid}/attributes/${attributeId}`),
   removeAttribute: (fid: number, attributeId: number) => api.delete(`/faculty/${fid}/attributes/${attributeId}`),
-  schedulePdfUrl: (facultyId: number, termId: number, opts?: { layout?: string; headerScale?: number; footerScale?: number }) => {
-    const params = new URLSearchParams({ term_id: String(termId) })
-    if (opts?.layout) params.set('layout', opts.layout)
-    if (opts?.headerScale != null) params.set('header_scale', String(opts.headerScale))
-    if (opts?.footerScale != null) params.set('footer_scale', String(opts.footerScale))
+  schedulePdfUrl: (facultyId: number, termId: number, config: PrintConfig) => {
+    const params = new URLSearchParams({ term_id: String(termId), ...printConfigParams(config) })
     return `/api/faculty/${facultyId}/schedule-pdf?${params.toString()}`
   },
 }
@@ -368,16 +380,69 @@ export const doorTagSettingsApi = {
 }
 
 // Shared between the Room Schedule and Faculty Schedule PDF exports
-// (feedback_63) — controls how the header image and info area (name/term/
-// etc) are positioned relative to each other.
+// (feedback_63/64). Two independent dropdowns reuse this same 8-option set:
+// one for the header section's 3 items (header image / info text area /
+// attribute icon area), one for the info text area's own internal lines.
 export const PDF_LAYOUT_OPTIONS: { value: string; label: string }[] = [
   { value: 'vertical_center', label: 'Vertical Center' },
   { value: 'vertical_left', label: 'Vertical Left' },
   { value: 'vertical_right', label: 'Vertical Right' },
+  { value: 'vertical_fill', label: 'Vertical Fill' },
   { value: 'horizontal_center', label: 'Horizontal Center' },
   { value: 'horizontal_left', label: 'Horizontal Left' },
   { value: 'horizontal_right', label: 'Horizontal Right' },
+  { value: 'horizontal_fill', label: 'Horizontal Fill' },
 ]
+
+export const PDF_PAGE_SIZE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'letter', label: 'Letter (8.5 x 11 in)' },
+  { value: 'legal', label: 'Legal (8.5 x 14 in)' },
+  { value: 'tabloid', label: 'Tabloid (11 x 17 in)' },
+  { value: 'a4', label: 'A4' },
+  { value: 'a3', label: 'A3' },
+  { value: 'custom', label: 'Custom Size' },
+]
+
+export const PDF_ORIENTATION_OPTIONS: { value: string; label: string }[] = [
+  { value: 'portrait', label: 'Portrait' },
+  { value: 'landscape', label: 'Landscape' },
+]
+
+// One "Print Configuration" snapshot (feedback_64) — everything needed to
+// reproduce a PDF export's page/layout settings, shared by both exports.
+export interface PrintConfig {
+  header_layout: string
+  info_layout: string
+  header_scale: number
+  footer_scale: number
+  page_size: string
+  orientation: string
+  custom_width_in: number
+  custom_height_in: number
+}
+
+export const DEFAULT_PRINT_CONFIG: PrintConfig = {
+  header_layout: 'vertical_center',
+  info_layout: 'vertical_center',
+  header_scale: 1,
+  footer_scale: 1,
+  page_size: 'tabloid',
+  orientation: 'portrait',
+  custom_width_in: 11,
+  custom_height_in: 17,
+}
+
+export interface PdfLayoutPreset {
+  id: number
+  name: string
+  config: PrintConfig
+}
+
+export const pdfPresetsApi = {
+  list: () => api.get<PdfLayoutPreset[]>('/pdf-presets').then(r => r.data),
+  create: (name: string, config: PrintConfig) => api.post<PdfLayoutPreset>('/pdf-presets', { name, config }).then(r => r.data),
+  delete: (id: number) => api.delete(`/pdf-presets/${id}`),
+}
 
 export interface FacultyCourseLoad {
   display: string
