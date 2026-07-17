@@ -1,18 +1,14 @@
-it looks like the layout setting is still not working as intended.
+The layout setting in both the Roomt Scheduole Table and the Facult Schedule Table are not working as intended.
 
+First, rename the Print Configuration section to Export Configuration in both tabs.
 
 ## Layout alignment issue:
 
-for the info text area, if the layout for it is set to vertical left, the user are expecting it the layout the name, rank|office, term vertcially, but they all align to the left (first character aligned to the left of the whole area)
+for the info text area, if the layout for it is set to vertical left, the user are expecting it to layout the name, rank|office, term vertcially, and all align to the left (first character aligned to the left of the whole area)
 
+for the info text area, if the layout for it is set to vertical right, the user are expecting it to layout the name, rank|office, term vertcially, and all align to the right (first character aligned to the right of the whole area)
 
-for the info text area, if the layout for it is set to vertical left, the user are expecting it the layout the name, rank|office, term vertcially, but they all align to the left (first character aligned to the left of the whole area)
-
-
-for the info text area, if the layout for it is set to vertical right, the user are expecting it the layout the name, rank|office, term vertcially, but they all align to the right (first character aligned to the right of the whole area)
-
-for now, both of the above settings leads to the same as the vertical center.
-
+for now, both of the above settings leads to the same as the vertical center, the text are aligned at the center.
 
 ## Layout fill vs not fill:
 
