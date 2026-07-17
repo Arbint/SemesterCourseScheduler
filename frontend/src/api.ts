@@ -45,6 +45,7 @@ export interface Faculty {
   office: string | null
   is_department_owned: boolean
   rank: FacultyRank | null
+  attribute_ids: number[]
 }
 
 export interface LoadSettings {
@@ -200,12 +201,34 @@ export interface ChatDonePayload {
 
 export const facultyApi = {
   list: () => api.get<Faculty[]>('/faculty').then(r => r.data),
-  create: (d: Omit<Faculty, 'id'>) => api.post<Faculty>('/faculty', d).then(r => r.data),
-  update: (id: number, d: Omit<Faculty, 'id'>) => api.put<Faculty>(`/faculty/${id}`, d).then(r => r.data),
+  create: (d: Omit<Faculty, 'id' | 'attribute_ids'>) => api.post<Faculty>('/faculty', d).then(r => r.data),
+  update: (id: number, d: Omit<Faculty, 'id' | 'attribute_ids'>) => api.put<Faculty>(`/faculty/${id}`, d).then(r => r.data),
   delete: (id: number) => api.delete(`/faculty/${id}`),
   getCourses: (id: number) => api.get<Course[]>(`/faculty/${id}/courses`).then(r => r.data),
   addCourse: (fid: number, cid: number) => api.post(`/faculty/${fid}/courses/${cid}`),
   removeCourse: (fid: number, cid: number) => api.delete(`/faculty/${fid}/courses/${cid}`),
+  addAttribute: (fid: number, attributeId: number) => api.post(`/faculty/${fid}/attributes/${attributeId}`),
+  removeAttribute: (fid: number, attributeId: number) => api.delete(`/faculty/${fid}/attributes/${attributeId}`),
+}
+
+export interface FacultyAttribute {
+  id: number
+  name: string
+  has_icon: boolean
+}
+
+export const facultyAttributesApi = {
+  list: () => api.get<FacultyAttribute[]>('/faculty-attributes').then(r => r.data),
+  create: (name: string) => api.post<FacultyAttribute>('/faculty-attributes', { name }).then(r => r.data),
+  update: (id: number, name: string) => api.put<FacultyAttribute>(`/faculty-attributes/${id}`, { name }).then(r => r.data),
+  delete: (id: number) => api.delete(`/faculty-attributes/${id}`),
+  uploadIcon: (id: number, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post(`/faculty-attributes/${id}/icon`, form)
+  },
+  removeIcon: (id: number) => api.delete(`/faculty-attributes/${id}/icon`),
+  iconUrl: (id: number) => `/api/faculty-attributes/${id}/icon`,
 }
 
 export const coursesApi = {

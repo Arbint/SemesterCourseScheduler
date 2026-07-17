@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import {
   termsApi, tablesApi, entriesApi, coursesApi, weekdaysApi, timeSlotsApi, facultyApi, roomsApi,
-  officeHoursApi, loadSettingsApi, meetingsApi, termLabel,
+  officeHoursApi, loadSettingsApi, meetingsApi, facultyAttributesApi, termLabel,
   type Term, type Weekday, type TimeSlot, type ScheduleTable, type ScheduleEntry,
   type Course, type Faculty, type OfficeHour, type LoadSettings, type Room, type Meeting,
+  type FacultyRank, type FacultyAttribute,
 } from '../api'
 import { SearchableSelect } from '../components/SearchableSelect'
 import { courseColor, OFFICE_HOUR_SOLID_COLOR, MEETING_SOLID_COLOR } from '../components/ScheduleGrid'
@@ -15,6 +16,15 @@ const MIN_OFFICE_HOUR_MINUTES = 30
 // Below this rendered height, the normal 3-line card (label + office +
 // time) can't fit — collapse to a single centered line instead.
 const COMPACT_HEIGHT_PX = 42
+
+const RANK_LABELS: Record<FacultyRank, string> = {
+  instructor: 'Instructor',
+  senior_instructor: 'Senior Instructor',
+  assistant_professor: 'Assistant Professor',
+  associate_professor: 'Associate Professor',
+  professor_of_practice: 'Professor of Practice',
+  professor: 'Professor',
+}
 
 type CourseCell = { kind: 'course'; entry: ScheduleEntry; course: Course; room: Room | null; span: number; timeRange: string }
 // Meetings (feedback_58) carry no faculty_id of their own — they're
@@ -226,6 +236,7 @@ export function FacultyScheduleTab() {
   const [weekdays, setWeekdays] = useState<Weekday[]>([])
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([])
   const [rooms, setRooms] = useState<Room[]>([])
+  const [attributes, setAttributes] = useState<FacultyAttribute[]>([])
   const [loadSettings, setLoadSettings] = useState<LoadSettings>({ fulltime_load: 3, parttime_load: 2, min_office_hours_fulltime: 4, min_office_hours_parttime: 1 })
 
   const [selectedTermId, setSelectedTermId] = useState<number | null>(null)
@@ -247,13 +258,15 @@ export function FacultyScheduleTab() {
   useEffect(() => {
     Promise.all([
       termsApi.list(), facultyApi.list(), weekdaysApi.list(), timeSlotsApi.list(), roomsApi.list(), loadSettingsApi.get(),
-    ]).then(([t, f, w, ts, r, ls]) => {
+      facultyAttributesApi.list(),
+    ]).then(([t, f, w, ts, r, ls, attrs]) => {
       setTerms(t)
       setAllFaculty(f)
       setWeekdays(w)
       setTimeSlots(ts)
       setRooms(r)
       setLoadSettings(ls)
+      setAttributes(attrs)
       if (t.length) setSelectedTermId(t[0].id)
     })
   }, [])
@@ -293,6 +306,7 @@ export function FacultyScheduleTab() {
   const courseMap = new Map(courses.map(c => [c.id, c]))
   const meetingMap = new Map(meetings.map(m => [m.id, m]))
   const roomMap = new Map(rooms.map(r => [r.id, r]))
+  const attributeMap = new Map(attributes.map(a => [a.id, a]))
   const sortedWeekdays = useMemo(
     () => [...weekdays].sort((a, b) => a.display_order - b.display_order),
     [weekdays]
@@ -411,6 +425,11 @@ export function FacultyScheduleTab() {
       .filter(oh => oh.faculty_id === facultyId)
       .reduce((sum, oh) => sum + minutesBetween(oh.start_time, oh.end_time), 0)
 
+  // Scheduled section count this term — same "raw section count" the Load
+  // tab shows, just scoped to whichever faculty's card is rendering.
+  const sectionCount = (facultyId: number): number =>
+    entries.filter(e => e.faculty_id === facultyId && e.course_id && e.schedule_table_id).length
+
   const openCreatePopup = (e: React.MouseEvent, facultyId: number, weekdayId: number, slot: TimeSlot) => {
     if (!isLoggedIn) return
     e.preventDefault()
@@ -519,15 +538,37 @@ export function FacultyScheduleTab() {
             const minHours = faculty.full_time_or_part_time === 'full_time' ? loadSettings.min_office_hours_fulltime : loadSettings.min_office_hours_parttime
             const minMinutes = minHours * 60
             const underMin = minutes < minMinutes
+            const fullLoad = faculty.full_time_or_part_time === 'full_time' ? loadSettings.fulltime_load : loadSettings.parttime_load
+            const sections = sectionCount(faculty.id)
+            const facultyAttrs = faculty.attribute_ids.map(id => attributeMap.get(id)).filter((a): a is FacultyAttribute => !!a)
             return (
               <div key={faculty.id} className="card" style={{ marginBottom: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                   <div>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-bright)', marginBottom: 2 }}>
-                      {facultyDisplayName(faculty)}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-bright)' }}>
+                        {facultyDisplayName(faculty)}
+                      </div>
+                      {facultyAttrs.length > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {facultyAttrs.map(a => a.has_icon ? (
+                            <img key={a.id} src={facultyAttributesApi.iconUrl(a.id)} alt={a.name} title={a.name} style={{ width: 64, height: 64, objectFit: 'contain' }} />
+                          ) : (
+                            <span key={a.id} className="tag" title={a.name}>{a.name}</span>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                    <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>
                       {termLabel(selectedTerm)} Schedule
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, fontSize: 12, color: 'var(--text-secondary)' }}>
+                      <span>{faculty.rank ? RANK_LABELS[faculty.rank] : 'Rank not set'}</span>
+                      <span className={`badge ${faculty.full_time_or_part_time === 'full_time' ? 'badge-fall' : 'badge-spring'}`}>
+                        {faculty.full_time_or_part_time === 'full_time' ? 'Full Time' : 'Part Time'}
+                      </span>
+                      <span>Load: {sections} / {fullLoad}</span>
+                      {faculty.office && <span>Office: {faculty.office}</span>}
                     </div>
                   </div>
                   <div style={{ fontSize: 12, color: underMin ? 'var(--warning)' : 'var(--text-secondary)', fontWeight: underMin ? 700 : 400 }}>

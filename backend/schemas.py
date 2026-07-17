@@ -23,6 +23,35 @@ class FacultyUpdate(FacultyBase):
 class FacultyOut(FacultyBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    attribute_ids: list[int] = []
+
+    @classmethod
+    def from_orm(cls, faculty):
+        obj = cls.model_validate(faculty)
+        obj.attribute_ids = [a.id for a in faculty.attributes]
+        return obj
+
+
+# --- FacultyAttribute ---
+
+class FacultyAttributeCreate(BaseModel):
+    name: str
+
+class FacultyAttributeUpdate(BaseModel):
+    name: str
+
+class FacultyAttributeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    has_icon: bool = False
+
+    @classmethod
+    def from_orm(cls, attribute):
+        import faculty_attribute_assets as assets
+        obj = cls.model_validate(attribute)
+        obj.has_icon = assets.get_asset_path(attribute.id) is not None
+        return obj
 
 
 # --- LoadSettings ---

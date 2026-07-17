@@ -57,6 +57,23 @@ schedule_entry_active_weekdays = Table(
     Column("weekday_id", Integer, ForeignKey("weekdays.id"), primary_key=True),
 )
 
+faculty_attribute_assignments = Table(
+    "faculty_attribute_assignments",
+    Base.metadata,
+    Column("faculty_id", Integer, ForeignKey("faculty.id"), primary_key=True),
+    Column("attribute_id", Integer, ForeignKey("faculty_attributes.id"), primary_key=True),
+)
+
+
+class FacultyAttribute(Base):
+    """A configurable tag faculty can carry, e.g. "FLIGHT certified" — name
+    plus an optional icon (stored on disk, see faculty_attribute_assets.py)."""
+    __tablename__ = "faculty_attributes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, unique=True)
+
+    faculty = relationship("Faculty", secondary=faculty_attribute_assignments, back_populates="attributes")
 
 
 class Faculty(Base):
@@ -69,6 +86,7 @@ class Faculty(Base):
     tags = Column(JSON, default=list)
     office = Column(String, nullable=True)
     is_department_owned = Column(Boolean, nullable=False, default=False)
+    attributes = relationship("FacultyAttribute", secondary=faculty_attribute_assignments, back_populates="faculty")
     # Academic rank (feedback_60) — purely informational, doesn't affect any
     # scheduling/load/conflict logic, just needs to be settable and printed.
     rank = Column(Enum(FacultyRankEnum), nullable=True)
