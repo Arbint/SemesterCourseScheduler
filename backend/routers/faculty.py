@@ -130,6 +130,7 @@ def faculty_schedule_pdf(
     time_font_color: str = "#333333", weekday_font_color: str = "#222222",
     weekday_offset_y_in: float = 0.0,
     entry_name_padding_in: float = 0.0, entry_instructor_padding_in: float = 0.0, entry_time_padding_in: float = 0.0,
+    show_rank: bool = True, show_office: bool = True, show_tags: bool = True, show_attributes: bool = True,
     inline: bool = False,
     db: Session = Depends(get_db),
 ):
@@ -181,6 +182,7 @@ def faculty_schedule_pdf(
         entry_time_font_scale, entry_time_font_color,
         time_font_color, weekday_font_color, weekday_offset_y_in,
         entry_name_padding_in, entry_instructor_padding_in, entry_time_padding_in,
+        show_rank, show_office, show_tags, show_attributes,
     )
     filename = f"faculty_schedule_{faculty.last_name}_{faculty.first_name}_{term.year}.pdf".replace(" ", "_")
     disposition = "inline" if inline else "attachment"

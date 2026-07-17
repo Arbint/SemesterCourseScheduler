@@ -168,9 +168,12 @@ def _attribute_flowable(attribute, pill_style, icon_size: float):
 def _build_faculty_info_area(
     faculty: Faculty, term: Term, info_layout: str, width: float, gap: float,
     name_font_scale: float = 1.0, info_font_scale: float = 1.0, semester_font_scale: float = 1.0,
+    show_rank: bool = True, show_office: bool = True, show_tags: bool = True,
 ):
-    """The faculty export's info area — name / rank-office / term lines,
-    arranged per the Info Text Area Layout option. Returns (flowable, height, width)."""
+    """The faculty export's info area — name / rank-office-tags / term lines,
+    arranged per the Info Text Area Layout option. Rank/Office/Tags are each
+    independently toggleable (Export Configuration checkboxes). Returns
+    (flowable, height, width)."""
     axis, align = parse_layout(info_layout)
     ta = _ALIGN_TA[align]
     styles = getSampleStyleSheet()
@@ -190,10 +193,12 @@ def _build_faculty_info_area(
     lines_data = [(f"{faculty.first_name} {faculty.last_name}", title_style, TITLE_LINE_HEIGHT * name_font_scale)]
 
     info_bits = []
-    if faculty.rank:
+    if show_rank and faculty.rank:
         info_bits.append(RANK_LABELS.get(faculty.rank.value, faculty.rank.value))
-    if faculty.office:
+    if show_office and faculty.office:
         info_bits.append(f"Office: {faculty.office}")
+    if show_tags and faculty.tags:
+        info_bits.append(", ".join(faculty.tags))
     if info_bits:
         lines_data.append(("  |  ".join(info_bits), info_style, SUBLINE_HEIGHT * info_font_scale))
 
@@ -261,6 +266,7 @@ def generate_faculty_schedule_pdf(
     time_font_color: str = "#333333", weekday_font_color: str = "#222222",
     weekday_offset_y_in: float = 0.0,
     entry_name_padding_in: float = 0.0, entry_instructor_padding_in: float = 0.0, entry_time_padding_in: float = 0.0,
+    show_rank: bool = True, show_office: bool = True, show_tags: bool = True, show_attributes: bool = True,
 ) -> bytes:
     weekdays, ticks, grid = build_faculty_schedule_grid(db, term, faculty)
     page_width, page_height = resolve_page_size(page_size, orientation, custom_width_in, custom_height_in)
@@ -304,7 +310,7 @@ def generate_faculty_schedule_pdf(
         footer_band = _OffsetFlowable(footer_band, footer_offset_x_in * inch, footer_offset_y_in * inch)
         footer_band.hAlign = "CENTER"
 
-    icon_flowable, icon_height, icon_width = _build_attribute_icon_area(faculty, icon_scale)
+    icon_flowable, icon_height, icon_width = _build_attribute_icon_area(faculty, icon_scale) if show_attributes else (None, 0, 0)
     if icon_flowable is not None:
         icon_flowable = _OffsetFlowable(icon_flowable, icon_offset_x_in * inch, icon_offset_y_in * inch)
 
@@ -318,6 +324,7 @@ def generate_faculty_schedule_pdf(
     info_width = item_width(header_layout, content_width, num_header_items)
     info_area, info_height, info_block_width = _build_faculty_info_area(
         faculty, term, info_layout, info_width, info_gap, name_font_scale, info_font_scale, semester_font_scale,
+        show_rank, show_office, show_tags,
     )
 
     header_items = [

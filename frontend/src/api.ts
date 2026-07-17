@@ -240,6 +240,10 @@ export function printConfigParams(config: PrintConfig): Record<string, string> {
     entry_name_padding_in: String(config.entry_name_padding_in),
     entry_instructor_padding_in: String(config.entry_instructor_padding_in),
     entry_time_padding_in: String(config.entry_time_padding_in),
+    show_rank: String(config.show_rank),
+    show_office: String(config.show_office),
+    show_tags: String(config.show_tags),
+    show_attributes: String(config.show_attributes),
   }
 }
 
@@ -506,6 +510,13 @@ export interface PrintConfig {
   entry_name_padding_in: number
   entry_instructor_padding_in: number
   entry_time_padding_in: number
+  // Independent visibility toggles for the Faculty Schedule export's info
+  // line and attribute icons (feedback_72) — all default true (unchanged
+  // behavior). No-ops on the Room Schedule export (rooms have none of these).
+  show_rank: boolean
+  show_office: boolean
+  show_tags: boolean
+  show_attributes: boolean
   // Image nudge (feedback_67, extended to footer + attribute icons in
   // feedback_69) — dx/dy (inches) sent to the backend; the per-arrow step
   // sizes are UI-only (how far one click moves it) and never leave the
@@ -567,6 +578,10 @@ export const DEFAULT_PRINT_CONFIG: PrintConfig = {
   entry_name_padding_in: 0,
   entry_instructor_padding_in: 0,
   entry_time_padding_in: 0,
+  show_rank: true,
+  show_office: true,
+  show_tags: true,
+  show_attributes: true,
   header_offset_x_in: 0,
   header_offset_y_in: 0,
   header_offset_step_up_in: 0.1,

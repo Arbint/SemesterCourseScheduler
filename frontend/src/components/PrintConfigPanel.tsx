@@ -445,6 +445,21 @@ export function PrintConfigPanel({
 
           <CollapsibleGroup title="Header" open={headerOpen} onToggle={() => setHeaderOpen(o => !o)}>
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-bright)', marginBottom: 8 }}>Header Text Info Settings</div>
+            {showIconSize && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 16 }}>
+                {([
+                  { key: 'show_rank' as const, label: 'Rank' },
+                  { key: 'show_office' as const, label: 'Office' },
+                  { key: 'show_tags' as const, label: 'Tags' },
+                  { key: 'show_attributes' as const, label: 'Attributes' },
+                ]).map(({ key, label }) => (
+                  <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', userSelect: 'none', fontSize: 13, color: 'var(--text-primary)' }}>
+                    <input type="checkbox" checked={config[key]} onChange={e => set(key, e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            )}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 16 }}>
               <div>
                 <div style={labelStyle}>Header Section Layout</div>
