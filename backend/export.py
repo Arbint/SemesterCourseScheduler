@@ -178,7 +178,7 @@ def generate_excel(db, term_id: int) -> bytes:
     parttime_load = settings.parttime_load if settings else 2
 
     def _full_load(f) -> int:
-        return fulltime_load if f.rank.value == "full_time" else parttime_load
+        return fulltime_load if f.full_time_or_part_time.value == "full_time" else parttime_load
 
     load_rows: list[dict] = []
     for fid, fentries in by_faculty.items():
@@ -217,7 +217,7 @@ def generate_excel(db, term_id: int) -> bytes:
         courses_data.sort(key=lambda x: x[0])
         load_rows.append({
             "name": f"{faculty.last_name}, {faculty.first_name}",
-            "rank": faculty.rank.value.replace("_", " ").title(),
+            "full_time_or_part_time": faculty.full_time_or_part_time.value.replace("_", " ").title(),
             "full_load": _full_load(faculty),
             "courses": courses_data,
             "total_sections": total_sections,
@@ -235,7 +235,7 @@ def generate_excel(db, term_id: int) -> bytes:
         # Faculty name header
         ws_load.merge_cells(start_row=load_row, start_column=1, end_row=load_row, end_column=4)
         name_cell = ws_load.cell(row=load_row, column=1,
-                                  value=f"{faculty_data['name']}  ({faculty_data['rank']} — load {faculty_data['full_load']})")
+                                  value=f"{faculty_data['name']}  ({faculty_data['full_time_or_part_time']} — load {faculty_data['full_load']})")
         name_cell.font = Font(bold=True, size=12)
         name_cell.fill = PatternFill(fill_type="solid", fgColor="C8D8E8")
         load_row += 1

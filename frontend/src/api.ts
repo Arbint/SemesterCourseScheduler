@@ -31,7 +31,8 @@ export default api
 
 // --- Types ---
 
-export type Rank = 'full_time' | 'part_time'
+export type FullTimeOrPartTime = 'full_time' | 'part_time'
+export type FacultyRank = 'instructor' | 'senior_instructor' | 'assistant_professor' | 'associate_professor' | 'professor_of_practice' | 'professor'
 export type SemesterName = 'fall' | 'spring' | 'summer'
 export type WeekdayName = 'mon' | 'tue' | 'wed' | 'thu' | 'fri'
 
@@ -39,10 +40,11 @@ export interface Faculty {
   id: number
   first_name: string
   last_name: string
-  rank: Rank
+  full_time_or_part_time: FullTimeOrPartTime
   tags: string[]
   office: string | null
   is_department_owned: boolean
+  rank: FacultyRank | null
 }
 
 export interface LoadSettings {
@@ -345,7 +347,7 @@ export interface FacultyCourseLoad {
 export interface FacultyLoad {
   faculty_id: number
   name: string
-  rank: string
+  full_time_or_part_time: string
   full_load: number
   courses: FacultyCourseLoad[]
   total_sections: number

@@ -7,9 +7,18 @@ import enum
 from database import Base
 
 
-class RankEnum(str, enum.Enum):
+class FullTimeOrPartTimeEnum(str, enum.Enum):
     full_time = "full_time"
     part_time = "part_time"
+
+
+class FacultyRankEnum(str, enum.Enum):
+    instructor = "instructor"
+    senior_instructor = "senior_instructor"
+    assistant_professor = "assistant_professor"
+    associate_professor = "associate_professor"
+    professor_of_practice = "professor_of_practice"
+    professor = "professor"
 
 
 class SemesterEnum(str, enum.Enum):
@@ -56,10 +65,13 @@ class Faculty(Base):
     id = Column(Integer, primary_key=True, index=True)
     first_name = Column(String, nullable=False)
     last_name = Column(String, nullable=False)
-    rank = Column(Enum(RankEnum), nullable=False)
+    full_time_or_part_time = Column(Enum(FullTimeOrPartTimeEnum), nullable=False)
     tags = Column(JSON, default=list)
     office = Column(String, nullable=True)
     is_department_owned = Column(Boolean, nullable=False, default=False)
+    # Academic rank (feedback_60) — purely informational, doesn't affect any
+    # scheduling/load/conflict logic, just needs to be settable and printed.
+    rank = Column(Enum(FacultyRankEnum), nullable=True)
 
     teaching_capabilities = relationship("FacultyTeaching", back_populates="faculty", cascade="all, delete-orphan")
     schedule_entries = relationship("ScheduleEntry", back_populates="faculty")

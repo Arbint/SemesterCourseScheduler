@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict
 from typing import Literal, Optional, Union
-from models import RankEnum, SemesterEnum, WeekdayEnum
+from models import FullTimeOrPartTimeEnum, FacultyRankEnum, SemesterEnum, WeekdayEnum
 
 
 # --- Faculty ---
@@ -8,10 +8,11 @@ from models import RankEnum, SemesterEnum, WeekdayEnum
 class FacultyBase(BaseModel):
     first_name: str
     last_name: str
-    rank: RankEnum
+    full_time_or_part_time: FullTimeOrPartTimeEnum
     tags: list[str] = []
     office: Optional[str] = None
     is_department_owned: bool = False
+    rank: Optional[FacultyRankEnum] = None
 
 class FacultyCreate(FacultyBase):
     pass

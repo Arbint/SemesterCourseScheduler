@@ -37,7 +37,7 @@ def _office_hour_conflict(db: Session, faculty: Faculty, term_id: int, weekday_i
     # department-wide, but department meetings only bind faculty who are both
     # department-owned and full-time (feedback_59); everyone else is free to
     # schedule office hours over them.
-    requires_department_meeting = faculty.is_department_owned and faculty.rank.value == "full_time"
+    requires_department_meeting = faculty.is_department_owned and faculty.full_time_or_part_time.value == "full_time"
     entry_filter = ScheduleEntry.faculty_id == faculty_id
     if requires_department_meeting:
         entry_filter = or_(entry_filter, ScheduleEntry.meeting_id.isnot(None))

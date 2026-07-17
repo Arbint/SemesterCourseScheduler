@@ -9,7 +9,7 @@ import models
 from models import (
     Semester, Weekday, SemesterEnum, WeekdayEnum,
     TimeSlot, Room, Faculty, Course, CourseOffering,
-    FacultyTeaching, RankEnum,
+    FacultyTeaching, FullTimeOrPartTimeEnum,
     TaughtWithGroup, TaughtWithMember, CoReqGroup, CoReqMember,
     ScheduleEntry, ScheduleTable,
     schedule_table_weekdays, schedule_entry_timeslots,
@@ -99,30 +99,30 @@ db.commit()
 # ── Faculty ───────────────────────────────────────────────────────────────────
 # (first_name, last_name, rank, tags)
 FACULTY_DATA = [
-    ("Kassandra", "Arevalo",   RankEnum.full_time,  ["Animation"]),
-    ("Adam",      "Blair",     RankEnum.full_time,  ["Modeling", "Environment"]),
-    ("Brendan",   "Casey",     RankEnum.part_time,  ["Production"]),
-    ("Michael",   "Choi",      RankEnum.part_time,  ["Art"]),
-    ("Alessandro","Dady",      RankEnum.part_time,  ["Modeling"]),
-    ("Anna",      "Faryniarz", RankEnum.part_time,  ["Animation"]),
-    ("Justin",    "Gallardo",  RankEnum.full_time,  ["Programming", "Animation"]),
-    ("Carlos",    "Garcia",    RankEnum.full_time,  ["Animation", "Modeling"]),
-    ("Devin",     "Gee",       RankEnum.part_time,  ["Modeling"]),
-    ("Isaac",     "Herrera",   RankEnum.part_time,  ["Modeling"]),
-    ("Jingtian",  "Li",        RankEnum.full_time,  ["Programming"]),
-    ("David",     "Riddle",    RankEnum.part_time,  ["Modeling"]),
-    ("Randall",   "Rudd",      RankEnum.full_time,  ["Production"]),
-    ("Giovanni",  "Sabella",   RankEnum.part_time,  ["Programming"]),
-    ("Jacob",     "Salazar",   RankEnum.full_time,  ["Modeling", "Environment"]),
-    ("Emily",     "Sidler",    RankEnum.full_time,  ["Animation"]),
-    ("Joshua",    "Starrett",  RankEnum.part_time,  ["Programming"]),
-    ("Nathan",    "Sumsion",   RankEnum.part_time,  ["Programming"]),
-    ("Adam",      "Watkins",   RankEnum.part_time,  ["Animation", "History"]),
-    ("William",   "Watkins",   RankEnum.part_time,  ["Math", "Core"]),
+    ("Kassandra", "Arevalo",   FullTimeOrPartTimeEnum.full_time,  ["Animation"]),
+    ("Adam",      "Blair",     FullTimeOrPartTimeEnum.full_time,  ["Modeling", "Environment"]),
+    ("Brendan",   "Casey",     FullTimeOrPartTimeEnum.part_time,  ["Production"]),
+    ("Michael",   "Choi",      FullTimeOrPartTimeEnum.part_time,  ["Art"]),
+    ("Alessandro","Dady",      FullTimeOrPartTimeEnum.part_time,  ["Modeling"]),
+    ("Anna",      "Faryniarz", FullTimeOrPartTimeEnum.part_time,  ["Animation"]),
+    ("Justin",    "Gallardo",  FullTimeOrPartTimeEnum.full_time,  ["Programming", "Animation"]),
+    ("Carlos",    "Garcia",    FullTimeOrPartTimeEnum.full_time,  ["Animation", "Modeling"]),
+    ("Devin",     "Gee",       FullTimeOrPartTimeEnum.part_time,  ["Modeling"]),
+    ("Isaac",     "Herrera",   FullTimeOrPartTimeEnum.part_time,  ["Modeling"]),
+    ("Jingtian",  "Li",        FullTimeOrPartTimeEnum.full_time,  ["Programming"]),
+    ("David",     "Riddle",    FullTimeOrPartTimeEnum.part_time,  ["Modeling"]),
+    ("Randall",   "Rudd",      FullTimeOrPartTimeEnum.full_time,  ["Production"]),
+    ("Giovanni",  "Sabella",   FullTimeOrPartTimeEnum.part_time,  ["Programming"]),
+    ("Jacob",     "Salazar",   FullTimeOrPartTimeEnum.full_time,  ["Modeling", "Environment"]),
+    ("Emily",     "Sidler",    FullTimeOrPartTimeEnum.full_time,  ["Animation"]),
+    ("Joshua",    "Starrett",  FullTimeOrPartTimeEnum.part_time,  ["Programming"]),
+    ("Nathan",    "Sumsion",   FullTimeOrPartTimeEnum.part_time,  ["Programming"]),
+    ("Adam",      "Watkins",   FullTimeOrPartTimeEnum.part_time,  ["Animation", "History"]),
+    ("William",   "Watkins",   FullTimeOrPartTimeEnum.part_time,  ["Math", "Core"]),
 ]
 faculty_map = {}  # last_name → Faculty (works because last names are unique)
 for fn, ln, rank, tags in FACULTY_DATA:
-    f = Faculty(first_name=fn, last_name=ln, rank=rank, tags=tags)
+    f = Faculty(first_name=fn, last_name=ln, full_time_or_part_time=rank, tags=tags)
     db.add(f)
     db.flush()
     faculty_map[ln] = f

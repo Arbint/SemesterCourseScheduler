@@ -111,7 +111,7 @@ export function LoadTab() {
                   {faculty.name}
                 </span>
                 <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                  {faculty.rank.replace('_', ' ')}
+                  {faculty.full_time_or_part_time.replace('_', ' ')}
                 </span>
                 <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                   · load limit: <strong style={{ color: 'var(--text-primary)' }}>{faculty.full_load}</strong>

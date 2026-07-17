@@ -1,12 +1,21 @@
 import { useState, useEffect } from 'react'
-import { facultyApi, coursesApi, type Faculty, type Course } from '../api'
+import { facultyApi, coursesApi, type Faculty, type Course, type FacultyRank } from '../api'
 import { FormModal } from '../components/FormModal'
 import { TagInput } from '../components/TagInput'
 import { MultiSelect } from '../components/MultiSelect'
 import { showToast } from '../components/Toast'
 import { useAuth } from '../contexts/AuthContext'
 
-const EMPTY: Omit<Faculty, 'id'> = { first_name: '', last_name: '', rank: 'full_time', tags: [], office: '', is_department_owned: false }
+const EMPTY: Omit<Faculty, 'id'> = { first_name: '', last_name: '', full_time_or_part_time: 'full_time', tags: [], office: '', is_department_owned: false, rank: null }
+
+const RANK_LABELS: Record<FacultyRank, string> = {
+  instructor: 'Instructor',
+  senior_instructor: 'Senior Instructor',
+  assistant_professor: 'Assistant Professor',
+  associate_professor: 'Associate Professor',
+  professor_of_practice: 'Professor of Practice',
+  professor: 'Professor',
+}
 
 export function FacultyTab() {
   const { isLoggedIn } = useAuth()
@@ -35,7 +44,7 @@ export function FacultyTab() {
 
   const openEdit = async (f: Faculty) => {
     setEditing(f)
-    setForm({ first_name: f.first_name, last_name: f.last_name, rank: f.rank, tags: f.tags, office: f.office ?? '', is_department_owned: f.is_department_owned })
+    setForm({ first_name: f.first_name, last_name: f.last_name, full_time_or_part_time: f.full_time_or_part_time, tags: f.tags, office: f.office ?? '', is_department_owned: f.is_department_owned, rank: f.rank })
     const taught = await facultyApi.getCourses(f.id)
     setTeachingIds(taught.map(c => c.id))
     setShowModal(true)
@@ -94,6 +103,7 @@ export function FacultyTab() {
               <tr>
                 <th>Name</th>
                 <th>Rank</th>
+                <th>Full-Time/Part-Time</th>
                 <th>Office</th>
                 <th>Ownership</th>
                 <th>Tags</th>
@@ -104,9 +114,10 @@ export function FacultyTab() {
               {faculty.map(f => (
                 <tr key={f.id}>
                   <td style={{ color: 'var(--text-bright)' }}>{f.last_name}, {f.first_name}</td>
+                  <td style={{ color: 'var(--text-secondary)' }}>{f.rank ? RANK_LABELS[f.rank] : '—'}</td>
                   <td>
-                    <span className={`badge ${f.rank === 'full_time' ? 'badge-fall' : 'badge-spring'}`}>
-                      {f.rank === 'full_time' ? 'Full Time' : 'Part Time'}
+                    <span className={`badge ${f.full_time_or_part_time === 'full_time' ? 'badge-fall' : 'badge-spring'}`}>
+                      {f.full_time_or_part_time === 'full_time' ? 'Full Time' : 'Part Time'}
                     </span>
                   </td>
                   <td style={{ color: 'var(--text-secondary)' }}>{f.office || '—'}</td>
@@ -139,7 +150,19 @@ export function FacultyTab() {
           </div>
           <div className="form-group">
             <label>Rank</label>
-            <select value={form.rank} onChange={e => setForm(f => ({ ...f, rank: e.target.value as Faculty['rank'] }))}>
+            <select
+              value={form.rank ?? ''}
+              onChange={e => setForm(f => ({ ...f, rank: e.target.value ? e.target.value as FacultyRank : null }))}
+            >
+              <option value="">Not set</option>
+              {(Object.keys(RANK_LABELS) as FacultyRank[]).map(r => (
+                <option key={r} value={r}>{RANK_LABELS[r]}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Full-Time/Part-Time</label>
+            <select value={form.full_time_or_part_time} onChange={e => setForm(f => ({ ...f, full_time_or_part_time: e.target.value as Faculty['full_time_or_part_time'] }))}>
               <option value="full_time">Full Time</option>
               <option value="part_time">Part Time</option>
             </select>

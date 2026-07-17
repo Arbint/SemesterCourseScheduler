@@ -248,7 +248,7 @@ SCHEDULING RULES:
                     "room": entry.room.display_label if entry.room else None,
                     "faculty": f"{entry.faculty.first_name} {entry.faculty.last_name}" if entry.faculty else None,
                     "faculty_id": entry.faculty_id,
-                    "faculty_rank": entry.faculty.rank.value if entry.faculty else None,
+                    "faculty_full_time_or_part_time": entry.faculty.full_time_or_part_time.value if entry.faculty else None,
                     "time_slots": [ts.label for ts in sorted(entry.time_slots, key=lambda ts: ts.display_order)],
                     "taught_with_group": tw_map.get(entry.course_id),
                 })
@@ -279,7 +279,7 @@ SCHEDULING RULES:
         parttime_load = settings.parttime_load if settings else 2
 
         def _full_load(f) -> int:
-            return fulltime_load if f.rank.value == "full_time" else parttime_load
+            return fulltime_load if f.full_time_or_part_time.value == "full_time" else parttime_load
 
         # Build TaughtWith map so pairs are counted as 1 load unit
         tw_map = _build_combined_tw_map(self.db, self.term_id)
@@ -318,12 +318,12 @@ SCHEDULING RULES:
             result.append({
                 "faculty_id": fid,
                 "name": f"{f.first_name} {f.last_name}",
-                "rank": f.rank.value,
+                "full_time_or_part_time": f.full_time_or_part_time.value,
                 "raw_section_count": raw_map.get(fid, 0),
                 "effective_load": eff_count,
                 "full_load": limit,
                 "overloaded": eff_count > limit,
-                "underloaded": f.rank.value == "full_time" and eff_count < limit,
+                "underloaded": f.full_time_or_part_time.value == "full_time" and eff_count < limit,
                 "courses": courses_by_faculty.get(fid, []),
             })
         return result
@@ -356,7 +356,7 @@ SCHEDULING RULES:
         parttime_load = settings.parttime_load if settings else 2
 
         def _full_load(f) -> int:
-            return fulltime_load if f.rank.value == "full_time" else parttime_load
+            return fulltime_load if f.full_time_or_part_time.value == "full_time" else parttime_load
 
         # Build current load map from this term's entries
         load_map: dict[int, int] = {}
@@ -371,11 +371,11 @@ SCHEDULING RULES:
             result.append({
                 "faculty_id": f.id,
                 "name": f"{f.first_name} {f.last_name}",
-                "rank": f.rank.value,
+                "full_time_or_part_time": f.full_time_or_part_time.value,
                 "full_load": limit,
                 "current_sections": current_load,
                 "overloaded": current_load > limit,
-                "underloaded": f.rank.value == "full_time" and current_load < limit,
+                "underloaded": f.full_time_or_part_time.value == "full_time" and current_load < limit,
                 "can_teach": [
                     f"{cap.course.dept_code}{cap.course.course_number} {cap.course.course_name}"
                     for cap in f.teaching_capabilities
@@ -658,7 +658,7 @@ SCHEDULING RULES:
         _parttime_load = _settings.parttime_load if _settings else 2
 
         def _full_load(f) -> int:
-            return _fulltime_load if f.rank.value == "full_time" else _parttime_load
+            return _fulltime_load if f.full_time_or_part_time.value == "full_time" else _parttime_load
 
         # Build faculty capability map: course_id -> list of Faculty
         fac_caps: dict[int, list] = {}

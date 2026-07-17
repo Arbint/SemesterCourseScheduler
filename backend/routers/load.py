@@ -24,7 +24,7 @@ def get_term_load(term_id: int, db: Session = Depends(get_db)):
     parttime_load = settings.parttime_load if settings else 2
 
     def _full_load(faculty) -> int:
-        return fulltime_load if faculty.rank.value == "full_time" else parttime_load
+        return fulltime_load if faculty.full_time_or_part_time.value == "full_time" else parttime_load
 
     # Only scheduled entries with a faculty assigned
     entries = [
@@ -103,7 +103,7 @@ def get_term_load(term_id: int, db: Session = Depends(get_db)):
         result.append({
             "faculty_id": fid,
             "name": f"{faculty.last_name}, {faculty.first_name}",
-            "rank": faculty.rank.value,
+            "full_time_or_part_time": faculty.full_time_or_part_time.value,
             "full_load": _full_load(faculty),
             "courses": courses_data,
             "total_sections": total_sections,

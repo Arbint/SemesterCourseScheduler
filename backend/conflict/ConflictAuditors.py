@@ -283,7 +283,7 @@ class FacultyLoad(ConflictAuditor):
         parttime_load = settings.parttime_load if settings else 2
 
         def _full_load(f) -> int:
-            return fulltime_load if f.rank.value == "full_time" else parttime_load
+            return fulltime_load if f.full_time_or_part_time.value == "full_time" else parttime_load
 
         tw_map = _build_combined_tw_map(self.db, term.id)
         load_map: dict[int, int] = {}
@@ -349,7 +349,7 @@ class OfficeHourConflict(ConflictAuditor):
                     # Department meetings only bind faculty who are both
                     # department-owned and full-time (feedback_59) — others
                     # are free to schedule office hours over it.
-                    if not (oh.faculty.is_department_owned and oh.faculty.rank.value == "full_time"):
+                    if not (oh.faculty.is_department_owned and oh.faculty.full_time_or_part_time.value == "full_time"):
                         continue
                 elif e.faculty_id != oh.faculty_id:
                     continue
@@ -387,7 +387,7 @@ class MinOfficeHours(ConflictAuditor):
             f = next((e.faculty for e in term.schedule_entries if e.faculty_id == fid), None)
             if not f:
                 continue
-            min_minutes = fulltime_min_minutes if f.rank.value == "full_time" else parttime_min_minutes
+            min_minutes = fulltime_min_minutes if f.full_time_or_part_time.value == "full_time" else parttime_min_minutes
             if total < min_minutes:
                 reports.append(ConflictReport(
                     courses=[],

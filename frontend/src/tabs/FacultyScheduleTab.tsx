@@ -308,10 +308,13 @@ export function FacultyScheduleTab() {
   const numSlots = sortedTimeSlots.length
 
   // grid[weekdayId][slotIndex] — rows=time slots, columns=weekdays, scoped to
-  // one faculty's own courses + office hours, plus every scheduled meeting
-  // (meetings have no faculty_id of their own — they're department-wide, so
-  // the same meeting shows up on every faculty's table).
-  const buildFacultyGrid = (facultyId: number): Map<number, GridCell[]> => {
+  // one faculty's own courses + office hours, plus scheduled meetings — but
+  // only for faculty who are actually required to attend (full-time AND
+  // department-owned, feedback_59); everyone else's table omits the meeting
+  // block entirely.
+  const buildFacultyGrid = (faculty: Faculty): Map<number, GridCell[]> => {
+    const facultyId = faculty.id
+    const requiresDepartmentMeeting = faculty.is_department_owned && faculty.full_time_or_part_time === 'full_time'
     const grid = new Map<number, GridCell[]>()
     for (const w of sortedWeekdays) grid.set(w.id, new Array(numSlots).fill(null).map(() => ({ kind: 'empty' } as GridCell)))
 
@@ -336,7 +339,7 @@ export function FacultyScheduleTab() {
       }
     }
 
-    for (const table of tables) {
+    if (requiresDepartmentMeeting) for (const table of tables) {
       for (const entry of entries) {
         if (entry.schedule_table_id !== table.id || !entry.meeting_id) continue
         const meeting = meetingMap.get(entry.meeting_id)
@@ -390,8 +393,8 @@ export function FacultyScheduleTab() {
     // Full-Time/Part-Time are two checkboxes on the same dimension (rank) —
     // checking either narrows to that rank; checking neither shows both.
     const rankOk = (!filterFullTime && !filterPartTime) ||
-      (filterFullTime && f.rank === 'full_time') ||
-      (filterPartTime && f.rank === 'part_time')
+      (filterFullTime && f.full_time_or_part_time === 'full_time') ||
+      (filterPartTime && f.full_time_or_part_time === 'part_time')
     if (!rankOk) return false
     if (filterDeptOnly && !f.is_department_owned) return false
     return true
@@ -511,9 +514,9 @@ export function FacultyScheduleTab() {
           <div className="empty-state"><div className="icon">👤</div>No faculty match the current filters.</div>
         ) : (
           visibleFaculty.map(faculty => {
-            const grid = buildFacultyGrid(faculty.id)
+            const grid = buildFacultyGrid(faculty)
             const minutes = officeHourMinutes(faculty.id)
-            const minHours = faculty.rank === 'full_time' ? loadSettings.min_office_hours_fulltime : loadSettings.min_office_hours_parttime
+            const minHours = faculty.full_time_or_part_time === 'full_time' ? loadSettings.min_office_hours_fulltime : loadSettings.min_office_hours_parttime
             const minMinutes = minHours * 60
             const underMin = minutes < minMinutes
             return (
