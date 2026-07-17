@@ -167,7 +167,9 @@ class CoReqGroupOut(BaseModel):
 # --- ScheduleEntry ---
 
 class ScheduleEntryCreate(BaseModel):
-    course_id: int
+    # Exactly one of course_id / meeting_id must be provided.
+    course_id: Optional[int] = None
+    meeting_id: Optional[int] = None
     room_id: Optional[int] = None
     time_slot_ids: list[int] = []
     faculty_id: Optional[int] = None
@@ -188,7 +190,8 @@ class ScheduleEntryOut(BaseModel):
     id: int
     term_id: int
     schedule_table_id: Optional[int]
-    course_id: int
+    course_id: Optional[int]
+    meeting_id: Optional[int]
     section: int
     room_id: Optional[int]
     faculty_id: Optional[int]
@@ -202,12 +205,32 @@ class ScheduleEntryOut(BaseModel):
             term_id=entry.term_id,
             schedule_table_id=entry.schedule_table_id,
             course_id=entry.course_id,
+            meeting_id=entry.meeting_id,
             section=entry.section,
             room_id=entry.room_id,
             faculty_id=entry.faculty_id,
             time_slot_ids=[ts.id for ts in entry.time_slots],
             active_weekday_ids=[w.id for w in entry.active_weekdays],
         )
+
+
+# --- Meeting ---
+
+class MeetingBase(BaseModel):
+    name: str
+    duration_minutes: int = 75
+    frequency: int = 2
+
+class MeetingCreate(MeetingBase):
+    pass
+
+class MeetingUpdate(MeetingBase):
+    pass
+
+class MeetingOut(MeetingBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    term_id: int
 
 
 class IssueItem(BaseModel):

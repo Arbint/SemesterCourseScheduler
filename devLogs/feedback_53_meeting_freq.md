@@ -1,0 +1,2 @@
+for the meetings scheduled for each term, add a freq/week attribute, the same as the courses, and allow the user define that when creating.
+add an edit button on each of the meeting in the meetings list so the user can click on to edit the name, duration, and freq/week.

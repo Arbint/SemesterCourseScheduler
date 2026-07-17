@@ -1,6 +1,10 @@
 import { Fragment, useState, useMemo, useRef } from 'react'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
-import type { Course, Faculty, Room, ScheduleEntry, ScheduleTable, TimeSlot, Weekday } from '../api'
+import type { Course, Faculty, Meeting, Room, ScheduleEntry, ScheduleTable, TimeSlot, Weekday } from '../api'
+
+// Meetings get a distinctive striped look (no faculty color applies to
+// them) so they read as a different kind of block from course cards.
+const MEETING_BG = 'repeating-linear-gradient(135deg, rgba(97,175,239,0.22), rgba(97,175,239,0.22) 8px, rgba(97,175,239,0.34) 8px, rgba(97,175,239,0.34) 16px)'
 
 export const PASTEL = [
   '#4a3060', '#2e4a35', '#2e3a4a', '#4a3a25', '#3a2e4a',
@@ -12,6 +16,17 @@ export function facultyColor(facultyId: number | null): string {
   if (facultyId === null) return 'var(--bg-elevated)'
   return PASTEL[facultyId % PASTEL.length]
 }
+
+// Same palette, keyed by course instead of faculty — used by views that
+// color-code by course rather than by instructor (e.g. Room Schedule).
+export function courseColor(courseId: number | null): string {
+  if (courseId === null) return 'var(--bg-elevated)'
+  return PASTEL[courseId % PASTEL.length]
+}
+
+// Flat fallback for meeting cells in contexts that can't render the striped
+// MEETING_BG gradient (e.g. a plain table cell background in Room Schedule).
+export const MEETING_SOLID_COLOR = '#1d3b52'
 
 export const DAY_ABBR: Record<string, string> = { mon: 'M', tue: 'T', wed: 'W', thu: 'Th', fri: 'F' }
 const DAY_FULL: Record<string, string> = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri' }
@@ -363,6 +378,120 @@ export function TaughtWithSectionCard({
   )
 }
 
+// --- Meeting card (edit mode) — no instructor, just a name, optional day
+// toggles (when the meeting's freq/week is less than the table's day
+// count), and a delete button. Dragged/dropped exactly like a course card.
+export function MeetingSectionCard({
+  entry, meeting, tableWeekdays, dimmed, isLoggedIn, issueHighlightSeverity, onDelete, onActiveWeekdaysChange,
+}: {
+  entry: ScheduleEntry
+  meeting: Meeting
+  tableWeekdays: Weekday[]
+  dimmed: boolean
+  isLoggedIn: boolean
+  issueHighlightSeverity?: 'error' | 'warning' | null
+  onDelete: () => void
+  onActiveWeekdaysChange: (ids: number[]) => void
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `entry-${entry.id}`,
+    data: { type: 'entry', entry_id: entry.id },
+    disabled: !isLoggedIn,
+  })
+
+  const showToggles = tableWeekdays.length > meeting.frequency
+
+  const toggleDay = (dayId: number) => {
+    const active = entry.active_weekday_ids.includes(dayId)
+    const newIds = active
+      ? entry.active_weekday_ids.filter(id => id !== dayId)
+      : [...entry.active_weekday_ids, dayId]
+    onActiveWeekdaysChange(newIds)
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...(isLoggedIn ? listeners : {})}
+      {...attributes}
+      style={{
+        background: MEETING_BG,
+        border: issueHighlightSeverity === 'error'
+          ? '2px solid var(--error)'
+          : issueHighlightSeverity === 'warning'
+          ? '2px solid var(--warning)'
+          : '1px solid var(--accent)',
+        borderRadius: 'var(--border-radius)',
+        padding: '6px 8px',
+        fontSize: fs(11),
+        cursor: isLoggedIn ? 'grab' : 'default',
+        opacity: isDragging ? 0.4 : dimmed ? 0.25 : 1,
+        userSelect: 'none',
+        position: 'relative',
+        transition: 'opacity 0.15s',
+        overflow: 'hidden',
+        height: '100%',
+        boxSizing: 'border-box',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        boxShadow: issueHighlightSeverity === 'error'
+          ? '0 0 8px var(--error)'
+          : issueHighlightSeverity === 'warning'
+          ? '0 0 8px var(--warning)'
+          : undefined,
+      }}
+    >
+      <div style={{ fontWeight: 700, color: '#fff', fontSize: fs(9), letterSpacing: '0.05em', textTransform: 'uppercase', opacity: 0.7 }}>
+        Meeting
+      </div>
+      <div style={{ fontWeight: 600, color: '#fff', marginTop: 2 }}>{meeting.name}</div>
+      {showToggles && (
+        <div
+          onPointerDown={e => e.stopPropagation()}
+          onClick={e => e.stopPropagation()}
+          style={{ display: 'flex', gap: 2, marginTop: 4, justifyContent: 'center' }}
+        >
+          {tableWeekdays.map(w => {
+            const isActive = entry.active_weekday_ids.includes(w.id)
+            return (
+              <button
+                key={w.id}
+                onClick={() => isLoggedIn && toggleDay(w.id)}
+                disabled={!isLoggedIn}
+                style={{
+                  padding: '1px 4px',
+                  fontSize: fs(9),
+                  fontWeight: 600,
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  borderRadius: 3,
+                  background: isActive ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)',
+                  color: isActive ? '#fff' : '#ccc',
+                  cursor: isLoggedIn ? 'pointer' : 'default',
+                  lineHeight: '14px',
+                }}
+              >
+                {DAY_ABBR[w.name] ?? w.name}
+              </button>
+            )
+          })}
+        </div>
+      )}
+      {isLoggedIn && (
+        <button
+          onPointerDown={e => e.stopPropagation()}
+          onClick={e => { e.stopPropagation(); onDelete() }}
+          style={{
+            position: 'absolute', top: 3, right: 3, background: 'rgba(0,0,0,0.4)',
+            color: '#ff8080', border: 'none', borderRadius: 3, padding: '0 4px',
+            fontSize: fs(11), cursor: 'pointer', lineHeight: '16px'
+          }}
+        >×</button>
+      )}
+    </div>
+  )
+}
+
 // Anchors a floating hover panel to a card. Positioned with the card's
 // live bounding rect and rendered as position: fixed *outside* the card
 // (a sibling, not a child) so the card's own overflow: hidden — needed to
@@ -591,6 +720,93 @@ export function ViewTaughtWithSectionCard({
   )
 }
 
+// --- View-tab meeting card: same centered/uniform-font/hover treatment as
+// ViewSectionCard, just simpler (no instructor, no partner line).
+export function ViewMeetingCard({
+  entry, meeting, tableWeekdays, dimmed, issueHighlightSeverity, fontPx, timeSlots,
+}: {
+  entry: ScheduleEntry
+  meeting: Meeting
+  tableWeekdays: Weekday[]
+  dimmed: boolean
+  issueHighlightSeverity?: 'error' | 'warning' | null
+  fontPx: number
+  timeSlots: TimeSlot[]
+}) {
+  const showBadges = tableWeekdays.length > meeting.frequency
+  const timeRange = formatEntryTimeRange(entry, timeSlots)
+  const days = activeDayNames(entry, tableWeekdays, showBadges)
+  const tip = useCardTooltip()
+
+  return (
+    <>
+      <div
+        ref={tip.ref}
+        onMouseEnter={tip.onMouseEnter}
+        onMouseLeave={tip.onMouseLeave}
+        style={{
+          background: MEETING_BG,
+          border: issueHighlightSeverity === 'error'
+            ? '2px solid var(--error)'
+            : issueHighlightSeverity === 'warning'
+            ? '2px solid var(--warning)'
+            : '1px solid var(--accent)',
+          borderRadius: 'var(--border-radius)',
+          padding: '6px 8px',
+          opacity: dimmed ? 0.25 : 1,
+          userSelect: 'none',
+          overflow: 'hidden',
+          height: '100%',
+          width: '100%',
+          boxSizing: 'border-box',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          textAlign: 'center',
+          boxShadow: issueHighlightSeverity === 'error'
+            ? '0 0 8px var(--error)'
+            : issueHighlightSeverity === 'warning'
+            ? '0 0 8px var(--warning)'
+            : undefined,
+        }}
+      >
+        <div style={{ fontWeight: 700, color: '#fff', fontSize: fontPx * FIT_INSTRUCTOR_RATIO, letterSpacing: '0.05em', textTransform: 'uppercase', opacity: 0.7 }}>
+          Meeting
+        </div>
+        <div style={{ fontWeight: 600, color: '#fff', marginTop: 2, fontSize: fontPx }}>{meeting.name}</div>
+        {showBadges && (
+          <div style={{ display: 'flex', gap: 2, marginTop: 4 }}>
+            {tableWeekdays.map(w => {
+              const isActive = entry.active_weekday_ids.includes(w.id)
+              return (
+                <span
+                  key={w.id}
+                  style={{
+                    padding: '1px 4px', fontSize: 9, fontWeight: 600, borderRadius: 3,
+                    border: '1px solid rgba(255,255,255,0.3)',
+                    background: isActive ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)',
+                    color: isActive ? '#fff' : '#ccc',
+                    lineHeight: '14px',
+                  }}
+                >
+                  {DAY_ABBR[w.name] ?? w.name}
+                </span>
+              )
+            })}
+          </div>
+        )}
+      </div>
+      <CardTooltip pos={tip.pos}>
+        <div style={{ fontWeight: 700, color: 'var(--text-bright)' }}>{meeting.name}</div>
+        <div style={{ color: 'var(--text-secondary)' }}>Meeting</div>
+        {timeRange && <div style={{ color: 'var(--text-secondary)' }}>{timeRange}</div>}
+        {days && <div style={{ color: 'var(--text-secondary)' }}>{days}</div>}
+      </CardTooltip>
+    </>
+  )
+}
+
 // --- Column Resizer Handle ---
 export function ColumnResizer({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => void }) {
   return (
@@ -613,7 +829,7 @@ export function ColumnResizer({ onMouseDown }: { onMouseDown: (e: React.MouseEve
 // --- Drop Cell ---
 export function TableCell({
   tableId, timeSlotId, roomId, rowSpan = 1, isOnline = false, tableWeekdays,
-  entries, courses, effectivePartnerIds, allFaculty, isEntryDimmed, isLoggedIn,
+  entries, courses, meetings = new Map(), effectivePartnerIds, allFaculty, isEntryDimmed, isLoggedIn,
   issueHighlightEntryIds, issueHighlightSeverity, cellWidth, cellHeight = DEFAULT_CELL_HEIGHT,
   viewMode = false, fontPx = 14, timeSlots = [],
   onFacultyChange, onDeleteEntry, onActiveWeekdaysChange
@@ -626,6 +842,7 @@ export function TableCell({
   tableWeekdays: Weekday[]
   entries: ScheduleEntry[]
   courses: Map<number, Course>
+  meetings?: Map<number, Meeting>
   effectivePartnerIds: Map<number, number[]>
   allFaculty: Faculty[]
   isEntryDimmed: (e: ScheduleEntry) => boolean
@@ -661,7 +878,8 @@ export function TableCell({
   const usedIds = new Set<number>()
   for (const e of cellEntries) {
     if (usedIds.has(e.id)) continue
-    const partnerIds = effectivePartnerIds.get(e.course_id) ?? []
+    // Meetings have no course_id and never participate in TaughtWith pairing.
+    const partnerIds = e.course_id ? (effectivePartnerIds.get(e.course_id) ?? []) : []
     const partnerEntry = partnerIds
       .map(pid => cellEntries.find(ce => ce.course_id === pid && !usedIds.has(ce.id)))
       .find(Boolean)
@@ -698,8 +916,9 @@ export function TableCell({
         overflowX: isOnline ? 'auto' : undefined,
       }}>
         {entryGroups.map(group => {
-          const course = courses.get(group.primary.course_id)
-          if (!course) return null
+          const course = group.primary.course_id ? courses.get(group.primary.course_id) : undefined
+          const meeting = group.primary.meeting_id ? meetings.get(group.primary.meeting_id) : undefined
+          if (!course && !meeting) return null
           const cardWidth = isOnline ? Math.max(60, cellWidth - 8) : cellWidth - 8
           // minHeight/minWidth: 0 override the flex default of "auto", which
           // otherwise lets an oversized card (e.g. from a large fontScale)
@@ -710,8 +929,8 @@ export function TableCell({
           const wrapperStyle = isOnline
             ? { minWidth: cardWidth, flexShrink: 0, height: '100%', overflow: 'hidden' as const }
             : { flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden' as const }
-          if (group.partner) {
-            const partnerCourse = courses.get(group.partner.course_id)
+          if (group.partner && course) {
+            const partnerCourse = group.partner.course_id ? courses.get(group.partner.course_id) : undefined
             if (!partnerCourse) return null
             const highlight = issueHighlightEntryIds?.has(group.primary.id) || issueHighlightEntryIds?.has(group.partner.id)
               ? issueHighlightSeverity : null
@@ -751,10 +970,33 @@ export function TableCell({
           const highlight = issueHighlightEntryIds?.has(group.primary.id) ? issueHighlightSeverity : null
           return (
             <div key={group.primary.id} style={wrapperStyle}>
-              {viewMode ? (
+              {meeting ? (
+                viewMode ? (
+                  <ViewMeetingCard
+                    entry={group.primary}
+                    meeting={meeting}
+                    tableWeekdays={tableWeekdays}
+                    dimmed={isEntryDimmed(group.primary)}
+                    issueHighlightSeverity={highlight}
+                    fontPx={fontPx}
+                    timeSlots={timeSlots}
+                  />
+                ) : (
+                  <MeetingSectionCard
+                    entry={group.primary}
+                    meeting={meeting}
+                    tableWeekdays={tableWeekdays}
+                    dimmed={isEntryDimmed(group.primary)}
+                    isLoggedIn={isLoggedIn}
+                    issueHighlightSeverity={highlight}
+                    onDelete={() => onDeleteEntry(group.primary.id)}
+                    onActiveWeekdaysChange={ids => onActiveWeekdaysChange(group.primary.id, ids)}
+                  />
+                )
+              ) : viewMode ? (
                 <ViewSectionCard
                   entry={group.primary}
-                  course={course}
+                  course={course!}
                   allFaculty={allFaculty}
                   tableWeekdays={tableWeekdays}
                   dimmed={isEntryDimmed(group.primary)}
@@ -765,7 +1007,7 @@ export function TableCell({
               ) : (
                 <ScheduledSectionCard
                   entry={group.primary}
-                  course={course}
+                  course={course!}
                   allFaculty={allFaculty}
                   tableWeekdays={tableWeekdays}
                   dimmed={isEntryDimmed(group.primary)}
@@ -786,7 +1028,7 @@ export function TableCell({
 
 // --- Schedule Table Component ---
 export function ScheduleTableView({
-  table, weekdays, timeSlots, rooms, entries, courses, effectivePartnerIds, allFaculty,
+  table, weekdays, timeSlots, rooms, entries, courses, meetings = new Map(), effectivePartnerIds, allFaculty,
   isEntryDimmed, isLoggedIn, issueHighlightEntryIds, issueHighlightSeverity,
   onWeekdaysChange, onDeleteTable, onFacultyChange, onDeleteEntry, onActiveWeekdaysChange,
   forceHideUnused = false, cellWidth = DEFAULT_CELL_WIDTH, cellHeight = DEFAULT_CELL_HEIGHT,
@@ -798,6 +1040,7 @@ export function ScheduleTableView({
   rooms: Room[]
   entries: ScheduleEntry[]
   courses: Map<number, Course>
+  meetings?: Map<number, Meeting>
   effectivePartnerIds: Map<number, number[]>
   allFaculty: Faculty[]
   isEntryDimmed: (e: ScheduleEntry) => boolean
@@ -974,6 +1217,7 @@ export function ScheduleTableView({
                       isLoggedIn={isLoggedIn}
                       entries={entries}
                       courses={courses}
+                      meetings={meetings}
                       effectivePartnerIds={effectivePartnerIds}
                       allFaculty={allFaculty}
                       isEntryDimmed={isEntryDimmed}

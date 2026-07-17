@@ -17,6 +17,42 @@ TIME_COL_WIDTH = 1.1 * inch
 PAGE_WIDTH = landscape(TABLOID)[0]
 MARGIN = 0.5 * inch
 
+# Same palette as the frontend's ScheduleGrid PASTEL array, keyed by
+# course id, so a course's color matches between the web view and the PDF.
+PASTEL = [
+    "#4a3060", "#2e4a35", "#2e3a4a", "#4a3a25", "#3a2e4a",
+    "#254a3a", "#4a2a2e", "#253a4a", "#4a4225", "#2e4a44",
+    "#4a2e3a", "#354a25",
+]
+MEETING_COLOR = "#1d3b52"
+
+
+def _entry_color(course_id: int | None) -> colors.HexColor:
+    if course_id is None:
+        return colors.HexColor(MEETING_COLOR)
+    return colors.HexColor(PASTEL[course_id % len(PASTEL)])
+
+
+def _merge_empty_runs(column: list) -> list:
+    """Collapses consecutive empty (None) cells in a weekday column into one
+    merged block: the first cell becomes {"empty_span": run_length} and the
+    rest become "COVERED", mirroring how a multi-slot entry already occupies
+    one cell with its continuation slots marked COVERED."""
+    result = list(column)
+    i, n = 0, len(result)
+    while i < n:
+        if result[i] is None:
+            j = i
+            while j < n and result[j] is None:
+                j += 1
+            result[i] = {"empty_span": j - i}
+            for k in range(i + 1, j):
+                result[k] = "COVERED"
+            i = j
+        else:
+            i += 1
+    return result
+
 
 def _term_label(term: Term) -> str:
     label = f"{term.semester.name.value.capitalize()} {term.year}"
@@ -48,13 +84,22 @@ def build_door_tag_grid(db: Session, term: Term, room: Room):
             slot_ids = sorted((ts.id for ts in entry.time_slots), key=lambda sid: slot_index[sid])
             start_idx = slot_index[slot_ids[0]]
             span = len(slot_ids)
-            course = entry.course
             faculty = entry.faculty
-            display = {
-                "title": f"{course.dept_code} {course.course_number} §{entry.section}",
-                "name": course.course_name,
-                "instructor": f"{faculty.last_name}, {faculty.first_name}" if faculty else "No instructor",
-            }
+            if entry.course_id:
+                course = entry.course
+                display = {
+                    "title": f"{course.dept_code} {course.course_number} Sec {entry.section}",
+                    "name": course.course_name,
+                    "instructor": f"{faculty.last_name}, {faculty.first_name}" if faculty else "No instructor",
+                    "course_id": course.id,
+                }
+            else:
+                display = {
+                    "title": entry.meeting.name,
+                    "name": "Meeting",
+                    "instructor": f"{faculty.last_name}, {faculty.first_name}" if faculty else "No instructor",
+                    "course_id": None,
+                }
             for wid in table_weekday_ids:
                 if wid not in grid:
                     continue
@@ -62,6 +107,9 @@ def build_door_tag_grid(db: Session, term: Term, room: Room):
                 for i in range(start_idx + 1, start_idx + span):
                     if i < len(grid[wid]):
                         grid[wid][i] = "COVERED"
+
+    for wid in grid:
+        grid[wid] = _merge_empty_runs(grid[wid])
 
     return weekdays, time_slots, grid
 
@@ -86,7 +134,10 @@ def generate_door_tag_pdf(db: Session, term: Term, room: Room, empty_label: str)
         textColor=colors.white, fontName="Helvetica-Bold",
     )
     time_style = ParagraphStyle("TimeCell", parent=styles["Normal"], fontSize=10, alignment=TA_CENTER, fontName="Helvetica-Bold")
-    cell_body_style = ParagraphStyle("CellBody", parent=styles["Normal"], fontSize=9.5, alignment=TA_CENTER, leading=13)
+    cell_body_style = ParagraphStyle(
+        "CellBody", parent=styles["Normal"], fontSize=9.5, alignment=TA_CENTER, leading=13,
+        textColor=colors.HexColor("#eeeeee"),
+    )
     empty_style = ParagraphStyle("EmptyCell", parent=styles["Normal"], fontSize=11, alignment=TA_CENTER, textColor=colors.HexColor("#999999"))
 
     elements = [
@@ -104,6 +155,7 @@ def generate_door_tag_pdf(db: Session, term: Term, room: Room, empty_label: str)
     ]
     data = [header_row]
     span_commands = []
+    background_commands = []
     for r, ts in enumerate(time_slots):
         row = [Paragraph(escape(ts.label), time_style)]
         for c, w in enumerate(weekdays):
@@ -111,8 +163,11 @@ def generate_door_tag_pdf(db: Session, term: Term, room: Room, empty_label: str)
             if cell == "COVERED":
                 row.append("")
                 continue
-            if cell is None:
+            if "empty_span" in cell:
                 row.append(Paragraph(escape(empty_label), empty_style))
+                span = cell["empty_span"]
+                if span > 1:
+                    span_commands.append(("SPAN", (c + 1, r + 1), (c + 1, r + span)))
                 continue
             entry = cell["entry"]
             span = cell["span"]
@@ -121,8 +176,10 @@ def generate_door_tag_pdf(db: Session, term: Term, room: Room, empty_label: str)
             instructor = escape(entry["instructor"])
             text = f"<b>{title}</b><br/>{name}<br/>{instructor}"
             row.append(Paragraph(text, cell_body_style))
+            end_row = r + span if span > 1 else r + 1
             if span > 1:
-                span_commands.append(("SPAN", (c + 1, r + 1), (c + 1, r + span)))
+                span_commands.append(("SPAN", (c + 1, r + 1), (c + 1, end_row)))
+            background_commands.append(("BACKGROUND", (c + 1, r + 1), (c + 1, end_row), _entry_color(entry["course_id"])))
         data.append(row)
 
     day_col_width = (PAGE_WIDTH - 2 * MARGIN - TIME_COL_WIDTH) / len(weekdays)
@@ -136,7 +193,7 @@ def generate_door_tag_pdf(db: Session, term: Term, room: Room, empty_label: str)
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("TOPPADDING", (0, 0), (-1, -1), 8),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-    ] + span_commands
+    ] + span_commands + background_commands
     table.setStyle(TableStyle(style_commands))
 
     elements.append(table)

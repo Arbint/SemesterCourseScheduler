@@ -234,6 +234,12 @@ SCHEDULING RULES:
             weekdays = [w.name.value for w in sorted(table.weekdays, key=lambda w: w.display_order)]
             entries_data = []
             for entry in table.entries:
+                # Faculty meetings aren't managed by the agent (no auto-scheduling,
+                # no proposals) — they're excluded here so the agent never tries
+                # to reason about or move them. They're still enforced against
+                # by the Room Conflict auditor regardless.
+                if not entry.course_id:
+                    continue
                 entries_data.append({
                     "entry_id": entry.id,
                     "course": f"{entry.course.dept_code}{entry.course.course_number} {entry.course.course_name}",
@@ -249,6 +255,8 @@ SCHEDULING RULES:
             result["tables"].append({"weekdays": weekdays, "entries": entries_data})
 
         for entry in term.schedule_entries:
+            if not entry.course_id:
+                continue
             if not entry.schedule_table_id:
                 result["unscheduled_entries"].append({
                     "entry_id": entry.id,
@@ -614,9 +622,13 @@ SCHEDULING RULES:
         if restored or clear_existing:
             self.db.commit()
 
+        # Meetings are excluded — the agent doesn't auto-schedule them (the
+        # chair places them manually); Room Conflict still enforces against
+        # them regardless of what the agent proposes.
         unscheduled = self.db.query(ScheduleEntry).filter(
             ScheduleEntry.term_id == self.term_id,
             ScheduleEntry.schedule_table_id.is_(None),
+            ScheduleEntry.course_id.isnot(None),
         ).all()
 
         if not unscheduled:

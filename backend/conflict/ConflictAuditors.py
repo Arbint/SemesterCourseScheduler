@@ -26,6 +26,25 @@ def _get_effective_weekdays(entry) -> set:
     return {w.id for w in entry.schedule_table.weekdays}
 
 
+def _entry_label(entry) -> str:
+    """Course code or meeting name, for conflict-report descriptions —
+    entries have exactly one of course_id / meeting_id set."""
+    if entry.course_id:
+        return f"{entry.course.dept_code}{entry.course.course_number}"
+    if entry.meeting_id:
+        return entry.meeting.name
+    return "?"
+
+
+def _entry_frequency(entry):
+    """Days/week the entry needs — course.frequency or meeting.frequency."""
+    if entry.course_id:
+        return entry.course.frequency
+    if entry.meeting_id:
+        return entry.meeting.frequency
+    return None
+
+
 class FacultyTimeConflict(ConflictAuditor):
     def __init__(self, db):
         super().__init__(db, isCritical=True)
@@ -151,9 +170,9 @@ class RoomConflict(ConflictAuditor):
                 if gk_a and gk_a == gk_b:
                     continue
                 reports.append(ConflictReport(
-                    courses=[a.course_id, b.course_id],
+                    courses=[cid for cid in (a.course_id, b.course_id) if cid is not None],
                     entries=[a.id, b.id],
-                    description=f"Room conflict: {a.room.display_label} is double-booked at overlapping times"
+                    description=f"Room conflict: {a.room.display_label} is double-booked ({_entry_label(a)} vs {_entry_label(b)})"
                 ))
         return reports
 
@@ -165,6 +184,8 @@ class RoomCapacity(ConflictAuditor):
     def Audit(self, term) -> list[ConflictReport]:
         reports = []
         for entry in term.schedule_entries:
+            if not entry.course_id:
+                continue  # meetings have no capacity concept
             if entry.room_id and not entry.room.is_online and entry.course.capacity > entry.room.capacity:
                 reports.append(ConflictReport(
                     courses=[entry.course_id],
@@ -175,22 +196,24 @@ class RoomCapacity(ConflictAuditor):
 
 
 class FrequencyConflict(ConflictAuditor):
-    """Critical: fires when a table has fewer days than the course requires."""
+    """Critical: fires when a table has fewer days than the course/meeting requires."""
     def __init__(self, db):
         super().__init__(db, isCritical=True)
 
     def Audit(self, term) -> list[ConflictReport]:
         reports = []
         for entry in term.schedule_entries:
+            freq = _entry_frequency(entry)
+            if freq is None:
+                continue
             if not entry.schedule_table_id or not entry.schedule_table:
                 continue
             table_days = len(entry.schedule_table.weekdays)
-            course_freq = entry.course.frequency
-            if table_days < course_freq:
+            if table_days < freq:
                 reports.append(ConflictReport(
-                    courses=[entry.course_id],
+                    courses=[entry.course_id] if entry.course_id else [],
                     entries=[entry.id],
-                    description=f"Frequency conflict: {entry.course.dept_code}{entry.course.course_number} requires {course_freq} day(s)/week but table only has {table_days} day(s)"
+                    description=f"Frequency conflict: {_entry_label(entry)} requires {freq} day(s)/week but table only has {table_days} day(s)"
                 ))
         return reports
 
@@ -203,17 +226,19 @@ class FrequencyToggleWarning(ConflictAuditor):
     def Audit(self, term) -> list[ConflictReport]:
         reports = []
         for entry in term.schedule_entries:
+            freq = _entry_frequency(entry)
+            if freq is None:
+                continue
             if not entry.schedule_table_id or not entry.schedule_table:
                 continue
             table_days = len(entry.schedule_table.weekdays)
-            course_freq = entry.course.frequency
-            if table_days > course_freq:
+            if table_days > freq:
                 active = len(entry.active_weekdays)
-                if active != course_freq:
+                if active != freq:
                     reports.append(ConflictReport(
-                        courses=[entry.course_id],
+                        courses=[entry.course_id] if entry.course_id else [],
                         entries=[entry.id],
-                        description=f"Day selection: {entry.course.dept_code}{entry.course.course_number} §{entry.section} needs exactly {course_freq} day(s) toggled on ({active} currently selected)"
+                        description=f"Day selection: {_entry_label(entry)} §{entry.section} needs exactly {freq} day(s) toggled on ({active} currently selected)"
                     ))
         return reports
 

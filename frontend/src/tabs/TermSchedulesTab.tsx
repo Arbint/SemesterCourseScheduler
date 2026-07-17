@@ -4,9 +4,9 @@ import remarkGfm from 'remark-gfm'
 import { DndContext, type DragEndEvent, useDraggable } from '@dnd-kit/core'
 import {
   termsApi, tablesApi, entriesApi, coursesApi, roomsApi, timeSlotsApi,
-  weekdaysApi, semestersApi, facultyApi, chatApi, termTaughtWithApi, auditApi,
+  weekdaysApi, semestersApi, facultyApi, chatApi, termTaughtWithApi, auditApi, meetingsApi,
   termLabel,
-  type Term, type ScheduleTable, type ScheduleEntry, type Course,
+  type Term, type ScheduleTable, type ScheduleEntry, type Course, type Meeting,
   type Room, type TimeSlot, type Weekday, type Semester, type Faculty,
   type IssueItem, type TermTaughtWithGroup, type ChatTraceStep
 } from '../api'
@@ -95,6 +95,71 @@ function DraggableCourseCard({
           {scheduled.length}/{neededSections} scheduled
         </span>
       </div>
+    </div>
+  )
+}
+
+// --- Draggable Meeting Card (from Meetings List) ---
+function DraggableMeetingCard({
+  meeting, isScheduled, isLoggedIn, onDeleteMeeting, onEditMeeting,
+}: {
+  meeting: Meeting
+  isScheduled: boolean
+  isLoggedIn: boolean
+  onDeleteMeeting: () => void
+  onEditMeeting: () => void
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `meeting-${meeting.id}`,
+    data: { type: 'meeting', meeting_id: meeting.id },
+    disabled: !isLoggedIn || isScheduled,
+  })
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...(isLoggedIn && !isScheduled ? listeners : {})}
+      {...attributes}
+      style={{
+        background: 'var(--bg-surface)',
+        border: isScheduled ? '1px solid var(--success)' : '2px solid var(--accent)',
+        borderRadius: 'var(--border-radius)',
+        padding: '10px 12px',
+        marginBottom: 8,
+        cursor: isLoggedIn && !isScheduled ? 'grab' : 'default',
+        opacity: isDragging ? 0.5 : 1,
+        transition: 'opacity 0.15s',
+        userSelect: 'none',
+        position: 'relative',
+      }}
+    >
+      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Meeting</div>
+      <div style={{ color: 'var(--text-bright)', fontSize: 13, marginTop: 2 }}>{meeting.name}</div>
+      <div style={{ fontSize: 11, marginTop: 4, color: isScheduled ? 'var(--success)' : 'var(--text-secondary)' }}>
+        {isScheduled ? 'Scheduled' : 'Not scheduled'}
+      </div>
+      {isLoggedIn && (
+        <div style={{ position: 'absolute', top: 6, right: 6, display: 'flex', gap: 6, alignItems: 'center' }}>
+          <button
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); onEditMeeting() }}
+            title="Edit meeting"
+            style={{
+              background: 'transparent', color: 'var(--text-secondary)',
+              border: 'none', cursor: 'pointer', fontSize: 11, lineHeight: 1
+            }}
+          >Edit</button>
+          <button
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); onDeleteMeeting() }}
+            title="Delete meeting"
+            style={{
+              background: 'transparent', color: 'var(--text-secondary)',
+              border: 'none', cursor: 'pointer', fontSize: 13, lineHeight: 1
+            }}
+          >×</button>
+        </div>
+      )}
     </div>
   )
 }
@@ -318,8 +383,14 @@ export function TermSchedulesTab() {
   const [termTaughtWith, setTermTaughtWith] = useState<TermTaughtWithGroup[]>([])
   const [showTermTWModal, setShowTermTWModal] = useState(false)
   const [termTWForm, setTermTWForm] = useState<number[]>([0, 0])
+  const [meetings, setMeetings] = useState<Meeting[]>([])
+  const [showMeetingModal, setShowMeetingModal] = useState(false)
+  const [editingMeeting, setEditingMeeting] = useState<Meeting | null>(null)
+  const [meetingForm, setMeetingForm] = useState({ name: '', duration_minutes: 75, frequency: 2 })
+  const [savingMeeting, setSavingMeeting] = useState(false)
   const undoStack = useUndoStack()
   const courseMap = new Map(courses.map(c => [c.id, c]))
+  const meetingMap = new Map(meetings.map(m => [m.id, m]))
 
   // Combined partner map: global (from course.taught_with_partner_ids) + per-term
   const effectivePartnerIds = new Map<number, number[]>()
@@ -416,16 +487,18 @@ export function TermSchedulesTab() {
     const termData = term ?? terms.find(t => t.id === termId)
     if (!termData) return
 
-    const [tbs, ents, cs, ttw] = await Promise.all([
+    const [tbs, ents, cs, ttw, mts] = await Promise.all([
       tablesApi.list(termId),
       entriesApi.listByTerm(termId),
       coursesApi.list(termData.semester_name),
       termTaughtWithApi.list(termId),
+      meetingsApi.list(termId),
     ])
     setTables(tbs)
     setEntries(ents)
     setCourses(cs)
     setTermTaughtWith(ttw)
+    setMeetings(mts)
 
     // Init needed sections map
     const map = new Map<number, number>()
@@ -511,6 +584,7 @@ export function TermSchedulesTab() {
           setTables([])
           setEntries([])
           setCourses([])
+          setMeetings([])
           setErrors([])
           setWarnings([])
           setIssueHighlight(null)
@@ -594,26 +668,87 @@ export function TermSchedulesTab() {
     const termId = selectedTermId
     const tableSnapshot = tables.find(t => t.id === tableId)
     const entrySnapshots = entries.filter(e => e.schedule_table_id === tableId)
+    const meetingSnapshots = entrySnapshots.filter(e => e.meeting_id != null)
+    const courseSnapshots = entrySnapshots.filter(e => e.meeting_id == null)
+
+    // Deleting a table cascades and permanently destroys its entries — fine
+    // for courses (a blank placeholder is auto-restored), but a meeting's
+    // single entry must survive so the meeting stays re-schedulable, so
+    // unschedule those in place *before* the table (and its cascade) goes.
+    for (const me of meetingSnapshots) {
+      await entriesApi.delete(me.id)
+    }
     await tablesApi.delete(tableId)
     setTables(prev => prev.filter(t => t.id !== tableId))
-    setEntries(prev => prev.filter(e => e.schedule_table_id !== tableId))
+    setEntries(prev => prev
+      .filter(e => !(e.schedule_table_id === tableId && e.meeting_id == null))
+      .map(e => e.schedule_table_id === tableId && e.meeting_id != null
+        ? { ...e, schedule_table_id: null, room_id: null, faculty_id: null, time_slot_ids: [], active_weekday_ids: [] }
+        : e
+      )
+    )
 
     if (tableSnapshot && termId) {
       undoStack.push({
         label: 'Delete table',
         undo: async () => {
           const newTable = await tablesApi.create(termId, tableSnapshot.weekday_ids)
-          for (const es of entrySnapshots) {
+          for (const es of courseSnapshots) {
             await entriesApi.create(newTable.id, {
-              course_id: es.course_id,
+              course_id: es.course_id ?? undefined,
               room_id: es.room_id ?? undefined,
               time_slot_ids: es.time_slot_ids,
               faculty_id: es.faculty_id ?? undefined,
               active_weekday_ids: es.active_weekday_ids,
             })
           }
+          for (const es of meetingSnapshots) {
+            await entriesApi.update(es.id, {
+              schedule_table_id: newTable.id,
+              room_id: es.room_id ?? undefined,
+              time_slot_ids: es.time_slot_ids,
+            })
+          }
         },
       })
+    }
+  }
+
+  const saveMeeting = async () => {
+    if (!selectedTermId || !meetingForm.name.trim()) return
+    setSavingMeeting(true)
+    try {
+      if (editingMeeting) {
+        await meetingsApi.update(editingMeeting.id, {
+          name: meetingForm.name.trim(),
+          duration_minutes: meetingForm.duration_minutes,
+          frequency: meetingForm.frequency,
+        })
+      } else {
+        await meetingsApi.create(selectedTermId, {
+          name: meetingForm.name.trim(),
+          duration_minutes: meetingForm.duration_minutes,
+          frequency: meetingForm.frequency,
+        })
+      }
+      await loadTerm(selectedTermId)
+      setShowMeetingModal(false)
+      setEditingMeeting(null)
+      setMeetingForm({ name: '', duration_minutes: 75, frequency: 2 })
+    } catch (e: any) {
+      showToast(e.response?.data?.detail || 'Failed to save meeting')
+    } finally { setSavingMeeting(false) }
+  }
+
+  // No undo — this deletes the meeting definition itself, not a drag/drop.
+  const deleteMeetingDefinition = async (meetingId: number) => {
+    if (!confirm('Delete this meeting for the term?')) return
+    try {
+      await meetingsApi.delete(meetingId)
+      setMeetings(prev => prev.filter(m => m.id !== meetingId))
+      setEntries(prev => prev.filter(e => e.meeting_id !== meetingId))
+    } catch (e: any) {
+      showToast(e.response?.data?.detail || 'Failed to delete meeting')
     }
   }
 
@@ -635,8 +770,40 @@ export function TermSchedulesTab() {
     }
   }
 
+  // A meeting has exactly one entry, no sections — the backend unschedules
+  // it in place (the row survives) rather than deleting it, so it stays in
+  // the Meetings List instead of vanishing. Mirror that locally.
+  const unscheduleMeetingEntry = async (entryId: number) => {
+    await entriesApi.delete(entryId)
+    setEntries(prev => prev.map(e => e.id === entryId
+      ? { ...e, schedule_table_id: null, room_id: null, faculty_id: null, time_slot_ids: [], active_weekday_ids: [] }
+      : e
+    ))
+  }
+
   const handleDeleteEntry = async (entryId: number) => {
     const snapshot = entries.find(e => e.id === entryId)
+
+    if (snapshot?.meeting_id != null) {
+      const priorTableId = snapshot.schedule_table_id
+      const priorRoomId = snapshot.room_id
+      const priorSlotIds = snapshot.time_slot_ids
+      await unscheduleMeetingEntry(entryId)
+      if (priorTableId !== null) {
+        undoStack.push({
+          label: 'Remove meeting',
+          undo: async () => {
+            await entriesApi.update(entryId, {
+              schedule_table_id: priorTableId,
+              room_id: priorRoomId ?? undefined,
+              time_slot_ids: priorSlotIds,
+            })
+          },
+        })
+      }
+      return
+    }
+
     await entriesApi.delete(entryId)
     setEntries(prev => prev.filter(e => e.id !== entryId))
 
@@ -646,7 +813,7 @@ export function TermSchedulesTab() {
         label: 'Remove course',
         undo: async () => {
           await entriesApi.create(tableId, {
-            course_id: snapshot.course_id,
+            course_id: snapshot.course_id ?? undefined,
             room_id: snapshot.room_id ?? undefined,
             time_slot_ids: snapshot.time_slot_ids,
             faculty_id: snapshot.faculty_id ?? undefined,
@@ -687,7 +854,12 @@ export function TermSchedulesTab() {
   }
 
   const isEntryDimmed = (entry: ScheduleEntry): boolean =>
-    entryMatchesFilters(entry, courseMap.get(entry.course_id), tables.find(t => t.id === entry.schedule_table_id), activeFilters)
+    entryMatchesFilters(
+      entry,
+      entry.course_id != null ? courseMap.get(entry.course_id) : undefined,
+      tables.find(t => t.id === entry.schedule_table_id),
+      activeFilters
+    )
 
   const handleActiveWeekdaysChange = async (entryId: number, activeWeekdayIds: number[]) => {
     setEntries(prev => prev.map(e => e.id === entryId ? { ...e, active_weekday_ids: activeWeekdayIds } : e))
@@ -727,7 +899,7 @@ export function TermSchedulesTab() {
           for (const e of priorEntries) {
             if (currentIds.has(e.id) || e.schedule_table_id === null) continue
             await entriesApi.create(e.schedule_table_id, {
-              course_id: e.course_id,
+              course_id: e.course_id ?? undefined,
               room_id: e.room_id ?? undefined,
               time_slot_ids: e.time_slot_ids,
               faculty_id: e.faculty_id ?? undefined,
@@ -767,7 +939,7 @@ export function TermSchedulesTab() {
         // Snapshot possible TaughtWith partners' prior placement before the
         // create call, since the backend may co-schedule/move them too.
         const partnerCourseIds = effectivePartnerIds.get(activeData.course_id) ?? []
-        const partnerSnapshots = entries.filter(e => partnerCourseIds.includes(e.course_id))
+        const partnerSnapshots = entries.filter(e => e.course_id != null && partnerCourseIds.includes(e.course_id))
 
         const result = await entriesApi.create(table_id, {
           course_id: activeData.course_id,
@@ -804,6 +976,30 @@ export function TermSchedulesTab() {
             }
           },
         })
+      } else if (activeData?.type === 'meeting') {
+        const meeting = meetingMap.get(activeData.meeting_id)
+        if (!meeting) return
+
+        const slotsNeeded = Math.max(1, Math.round(meeting.duration_minutes / 75))
+        const sortedSlots = [...timeSlots].sort((a, b) => a.display_order - b.display_order)
+        const startIdx = sortedSlots.findIndex(ts => ts.id === time_slot_id)
+        if (startIdx === -1) return
+        const slotIds = sortedSlots.slice(startIdx, startIdx + slotsNeeded).map(ts => ts.id)
+
+        const result = await entriesApi.create(table_id, {
+          meeting_id: activeData.meeting_id,
+          room_id,
+          time_slot_ids: slotIds,
+        })
+        const newEntryId = result.entry.id
+        setEntries(prev => prev.map(e => e.id === newEntryId ? result.entry : e))
+        setErrors(result.errors)
+        setWarnings(result.warnings)
+
+        undoStack.push({
+          label: `Schedule meeting: ${meeting.name}`,
+          undo: async () => { await unscheduleMeetingEntry(newEntryId) },
+        })
       } else if (activeData?.type === 'entry') {
         const entryId = activeData.entry_id
         const existing = entries.find(e => e.id === entryId)
@@ -827,8 +1023,9 @@ export function TermSchedulesTab() {
           time_slot_ids: existing.time_slot_ids,
           active_weekday_ids: existing.active_weekday_ids,
         }
-        const partnerCourseIds = effectivePartnerIds.get(existing.course_id) ?? []
-        const partnerSnapshots = entries.filter(e => partnerCourseIds.includes(e.course_id))
+        // Meetings have no course_id and never participate in TaughtWith pairing.
+        const partnerCourseIds = existing.course_id ? (effectivePartnerIds.get(existing.course_id) ?? []) : []
+        const partnerSnapshots = entries.filter(e => e.course_id != null && partnerCourseIds.includes(e.course_id))
 
         const result = await entriesApi.update(entryId, {
           schedule_table_id: table_id,
@@ -847,7 +1044,7 @@ export function TermSchedulesTab() {
         if (!noOpMove) {
           const partnerResults = result.additional_entries
           undoStack.push({
-            label: 'Move course',
+            label: existing.meeting_id != null ? 'Move meeting' : 'Move course',
             undo: async () => {
               await entriesApi.update(entryId, {
                 schedule_table_id: priorSelf.schedule_table_id!,
@@ -935,6 +1132,14 @@ export function TermSchedulesTab() {
                   Term TW
                 </button>
               )}
+              {isLoggedIn && (
+                <button
+                  className="btn-secondary"
+                  onClick={() => { setEditingMeeting(null); setMeetingForm({ name: '', duration_minutes: 75, frequency: 2 }); setShowMeetingModal(true) }}
+                >
+                  Term Meetings
+                </button>
+              )}
             </>
           )}
         </div>
@@ -971,6 +1176,28 @@ export function TermSchedulesTab() {
                 taughtWithPartners={(effectivePartnerIds.get(c.id) ?? []).map(pid => courseMap.get(pid)).filter(Boolean) as Course[]}
               />
             ))}
+
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '16px 0 10px' }}>Meetings List</div>
+            {meetings.length === 0 && (
+              <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>No meetings for this term.</div>
+            )}
+            {meetings.map(m => {
+              const meetingEntry = entries.find(e => e.meeting_id === m.id)
+              return (
+                <DraggableMeetingCard
+                  key={m.id}
+                  meeting={m}
+                  isScheduled={meetingEntry?.schedule_table_id != null}
+                  isLoggedIn={isLoggedIn}
+                  onDeleteMeeting={() => deleteMeetingDefinition(m.id)}
+                  onEditMeeting={() => {
+                    setEditingMeeting(m)
+                    setMeetingForm({ name: m.name, duration_minutes: m.duration_minutes, frequency: m.frequency })
+                    setShowMeetingModal(true)
+                  }}
+                />
+              )
+            })}
           </div>
 
           <ColumnResizer onMouseDown={startResize(0)} />
@@ -987,6 +1214,7 @@ export function TermSchedulesTab() {
                 rooms={rooms}
                 entries={entries}
                 courses={courseMap}
+                meetings={meetingMap}
                 effectivePartnerIds={effectivePartnerIds}
                 allFaculty={allFaculty}
                 isEntryDimmed={isEntryDimmed}
@@ -1189,6 +1417,48 @@ export function TermSchedulesTab() {
               value={renameForm}
               onChange={e => setRenameForm(e.target.value)}
             />
+          </div>
+        </FormModal>
+      )}
+
+      {showMeetingModal && selectedTermId && (
+        <FormModal
+          title={editingMeeting ? 'Edit Term Meeting' : 'New Term Meeting'}
+          onClose={() => { setShowMeetingModal(false); setEditingMeeting(null) }}
+          onSave={saveMeeting}
+          saving={savingMeeting}
+        >
+          <div className="form-group">
+            <label>Name</label>
+            <input
+              type="text"
+              autoFocus
+              placeholder="e.g. Faculty Senate"
+              value={meetingForm.name}
+              onChange={e => setMeetingForm(f => ({ ...f, name: e.target.value }))}
+            />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="form-group">
+              <label>Duration (minutes)</label>
+              <input
+                type="number"
+                min={75}
+                step={75}
+                value={meetingForm.duration_minutes}
+                onChange={e => setMeetingForm(f => ({ ...f, duration_minutes: +e.target.value }))}
+              />
+            </div>
+            <div className="form-group">
+              <label>Freq / week</label>
+              <input
+                type="number"
+                min={1}
+                max={5}
+                value={meetingForm.frequency}
+                onChange={e => setMeetingForm(f => ({ ...f, frequency: +e.target.value }))}
+              />
+            </div>
           </div>
         </FormModal>
       )}

@@ -235,6 +235,20 @@ class Term(Base):
     schedule_tables = relationship("ScheduleTable", back_populates="term", cascade="all, delete-orphan")
     schedule_entries = relationship("ScheduleEntry", back_populates="term", cascade="all, delete-orphan")
     term_taught_with_groups = relationship("TermTaughtWithGroup", back_populates="term", cascade="all, delete-orphan")
+    meetings = relationship("Meeting", back_populates="term", cascade="all, delete-orphan")
+
+
+class Meeting(Base):
+    __tablename__ = "meetings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    term_id = Column(Integer, ForeignKey("terms.id"), nullable=False)
+    name = Column(String, nullable=False)
+    duration_minutes = Column(Integer, nullable=False, default=75)
+    frequency = Column(Integer, nullable=False, default=2)
+
+    term = relationship("Term", back_populates="meetings")
+    schedule_entries = relationship("ScheduleEntry", back_populates="meeting", cascade="all, delete-orphan")
 
 
 class ScheduleTable(Base):
@@ -254,7 +268,9 @@ class ScheduleEntry(Base):
     id = Column(Integer, primary_key=True, index=True)
     term_id = Column(Integer, ForeignKey("terms.id"), nullable=False)
     schedule_table_id = Column(Integer, ForeignKey("schedule_tables.id"), nullable=True)
-    course_id = Column(Integer, ForeignKey("courses.id"), nullable=False)
+    # Exactly one of course_id / meeting_id is set on any row.
+    course_id = Column(Integer, ForeignKey("courses.id"), nullable=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=True)
     section = Column(Integer, nullable=False, default=1)
     room_id = Column(Integer, ForeignKey("rooms.id"), nullable=True)
     faculty_id = Column(Integer, ForeignKey("faculty.id"), nullable=True)
@@ -262,6 +278,7 @@ class ScheduleEntry(Base):
     term = relationship("Term", back_populates="schedule_entries")
     schedule_table = relationship("ScheduleTable", back_populates="entries")
     course = relationship("Course", back_populates="schedule_entries")
+    meeting = relationship("Meeting", back_populates="schedule_entries")
     room = relationship("Room", back_populates="schedule_entries")
     faculty = relationship("Faculty", back_populates="schedule_entries")
     time_slots = relationship("TimeSlot", secondary=schedule_entry_timeslots, back_populates="schedule_entries")

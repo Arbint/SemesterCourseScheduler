@@ -111,8 +111,11 @@ def generate_excel(db, term_id: int) -> bytes:
             if start_r is None or end_r is None:
                 continue
 
-            course = entry.course
-            text = f"{course.dept_code} {course.course_number}\n{course.course_name}"
+            if entry.course_id:
+                course = entry.course
+                text = f"{course.dept_code} {course.course_number}\n{course.course_name}"
+            else:
+                text = entry.meeting.name
             if entry.faculty:
                 text += f"\n{entry.faculty.last_name}, {entry.faculty.first_name}"
 

@@ -133,46 +133,72 @@ def create_entry(table_id: int, data: ScheduleEntryCreate, db: Session = Depends
     table = db.query(ScheduleTable).filter(ScheduleTable.id == table_id).first()
     if not table:
         raise HTTPException(404, "Table not found")
+    if bool(data.course_id) == bool(data.meeting_id):
+        raise HTTPException(400, "Provide exactly one of course_id or meeting_id")
 
-    # Determine next section number for this course in this term
-    existing = db.query(ScheduleEntry).filter(
-        ScheduleEntry.term_id == table.term_id,
-        ScheduleEntry.course_id == data.course_id,
-        ScheduleEntry.schedule_table_id.isnot(None)
-    ).all()
+    partner_entries: list[ScheduleEntry] = []
 
-    # Find existing unscheduled entry for this course in this term to reuse
-    unscheduled = db.query(ScheduleEntry).filter(
-        ScheduleEntry.term_id == table.term_id,
-        ScheduleEntry.course_id == data.course_id,
-        ScheduleEntry.schedule_table_id.is_(None)
-    ).first()
-
-    if unscheduled:
-        entry = unscheduled
+    if data.meeting_id:
+        # A meeting has exactly one entry (no sections) — always reuse it,
+        # never create a second row for the same meeting.
+        entry = db.query(ScheduleEntry).filter(
+            ScheduleEntry.term_id == table.term_id,
+            ScheduleEntry.meeting_id == data.meeting_id,
+        ).first()
+        if not entry:
+            raise HTTPException(404, "Meeting entry not found for this term")
         entry.schedule_table_id = table_id
-        entry.section = len(existing) + 1
+        entry.room_id = data.room_id
+        # Meetings don't carry a faculty assignment in this simplified scope
+        # (their whole point is just to block room/time — no per-faculty
+        # conflict checking yet), so faculty_id is deliberately left alone.
+        if data.time_slot_ids:
+            slots = db.query(TimeSlot).filter(TimeSlot.id.in_(data.time_slot_ids)).all()
+            entry.time_slots = slots
+        if data.active_weekday_ids is not None:
+            active_days = db.query(Weekday).filter(Weekday.id.in_(data.active_weekday_ids)).all()
+            entry.active_weekdays = active_days
     else:
-        entry = ScheduleEntry(
-            term_id=table.term_id,
-            schedule_table_id=table_id,
-            course_id=data.course_id,
-            section=len(existing) + 1,
-        )
-        db.add(entry)
+        # Determine next section number for this course in this term
+        existing = db.query(ScheduleEntry).filter(
+            ScheduleEntry.term_id == table.term_id,
+            ScheduleEntry.course_id == data.course_id,
+            ScheduleEntry.schedule_table_id.isnot(None)
+        ).all()
 
-    entry.room_id = data.room_id
-    entry.faculty_id = data.faculty_id
+        # Find existing unscheduled entry for this course in this term to reuse
+        unscheduled = db.query(ScheduleEntry).filter(
+            ScheduleEntry.term_id == table.term_id,
+            ScheduleEntry.course_id == data.course_id,
+            ScheduleEntry.schedule_table_id.is_(None)
+        ).first()
 
-    if data.time_slot_ids:
-        slots = db.query(TimeSlot).filter(TimeSlot.id.in_(data.time_slot_ids)).all()
-        entry.time_slots = slots
+        if unscheduled:
+            entry = unscheduled
+            entry.schedule_table_id = table_id
+            entry.section = len(existing) + 1
+        else:
+            entry = ScheduleEntry(
+                term_id=table.term_id,
+                schedule_table_id=table_id,
+                course_id=data.course_id,
+                section=len(existing) + 1,
+            )
+            db.add(entry)
 
-    if data.active_weekday_ids is not None:
-        active_days = db.query(Weekday).filter(Weekday.id.in_(data.active_weekday_ids)).all()
-        entry.active_weekdays = active_days
+        entry.room_id = data.room_id
+        entry.faculty_id = data.faculty_id
 
-    partner_entries = _place_taught_with_partners(db, entry, table_id, data.room_id, data.time_slot_ids)
+        if data.time_slot_ids:
+            slots = db.query(TimeSlot).filter(TimeSlot.id.in_(data.time_slot_ids)).all()
+            entry.time_slots = slots
+
+        if data.active_weekday_ids is not None:
+            active_days = db.query(Weekday).filter(Weekday.id.in_(data.active_weekday_ids)).all()
+            entry.active_weekdays = active_days
+
+        partner_entries = _place_taught_with_partners(db, entry, table_id, data.room_id, data.time_slot_ids)
+
     db.flush()
 
     term = _refresh_term(db, table.term_id)
@@ -215,8 +241,11 @@ def update_entry(entry_id: int, data: ScheduleEntryUpdate, db: Session = Depends
         entry.active_weekdays = active_days
 
     # Co-move TaughtWith partners only when the slot/table actually changed
+    # (meetings have no TaughtWith concept, so this is course-entries only).
     partner_entries: list[ScheduleEntry] = []
-    if data.schedule_table_id is not None or data.room_id is not None or data.time_slot_ids is not None:
+    if entry.course_id is not None and (
+        data.schedule_table_id is not None or data.room_id is not None or data.time_slot_ids is not None
+    ):
         final_slot_ids = data.time_slot_ids if data.time_slot_ids is not None else [ts.id for ts in entry.time_slots]
         partner_entries = _place_taught_with_partners(
             db, entry, entry.schedule_table_id, entry.room_id, final_slot_ids
@@ -267,6 +296,19 @@ def delete_entry(entry_id: int, db: Session = Depends(get_db)):
     entry = db.query(ScheduleEntry).filter(ScheduleEntry.id == entry_id).first()
     if not entry:
         raise HTTPException(404, "Entry not found")
+
+    # A meeting has exactly one entry, no sections — "removing" it from the
+    # table just unschedules that same row in place so it reappears in the
+    # Meetings List. The meeting definition itself is deleted separately
+    # (DELETE /api/meetings/{id}).
+    if entry.meeting_id is not None:
+        entry.schedule_table_id = None
+        entry.room_id = None
+        entry.faculty_id = None
+        entry.time_slots = []
+        entry.active_weekdays = []
+        db.commit()
+        return
 
     term_id = entry.term_id
     course_id = entry.course_id

@@ -1,15 +1,115 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
-  termsApi, roomsApi, weekdaysApi, timeSlotsApi, tablesApi, entriesApi, coursesApi, facultyApi,
+  termsApi, roomsApi, weekdaysApi, timeSlotsApi, tablesApi, entriesApi, coursesApi, facultyApi, meetingsApi,
   termLabel,
   type Term, type Room, type Weekday, type TimeSlot, type ScheduleTable, type ScheduleEntry,
-  type Course, type Faculty,
+  type Course, type Faculty, type Meeting,
 } from '../api'
 import { SearchableSelect } from '../components/SearchableSelect'
+import { courseColor, MEETING_SOLID_COLOR } from '../components/ScheduleGrid'
 
 const DEFAULT_EMPTY_LABEL = 'OPEN'
 
-type CellData = { entry: ScheduleEntry; course: Course; faculty: Faculty | null; span: number }
+type CellData = { entry: ScheduleEntry; course: Course | null; meeting: Meeting | null; faculty: Faculty | null; span: number }
+
+interface RoomFilter {
+  id: string
+  value: string
+  negated: boolean
+}
+
+function roomMatchesValue(room: Room, value: string): boolean {
+  return room.display_label.toLowerCase().includes(value.toLowerCase())
+}
+
+function roomVisible(room: Room, filters: RoomFilter[]): boolean {
+  const positive = filters.filter(f => !f.negated)
+  const negative = filters.filter(f => f.negated)
+  if (negative.some(f => roomMatchesValue(room, f.value))) return false
+  if (positive.length > 0 && !positive.some(f => roomMatchesValue(room, f.value))) return false
+  return true
+}
+
+// Filter bar for the Room Schedule tab — same chip/NOT-toggle interaction as
+// the Term Schedules FilterBar, but scoped to filtering which room tables
+// are shown rather than dimming entries within one table. Room Number is
+// the only filter type this currently supports.
+function RoomFilterBar({ filters, onAdd, onRemove, onToggleNot }: {
+  filters: RoomFilter[]
+  onAdd: (value: string) => void
+  onRemove: (id: string) => void
+  onToggleNot: (id: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [pending, setPending] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setPending('') }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const submit = () => {
+    if (!pending.trim()) return
+    onAdd(pending.trim())
+    setPending('')
+    setOpen(false)
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+      <span style={{ fontSize: 11, color: 'var(--text-secondary)', flexShrink: 0 }}>Filter:</span>
+
+      {filters.map(f => (
+        <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 3, background: 'var(--bg-elevated)', border: '1px solid var(--border-color)', borderRadius: 12, padding: '2px 6px 2px 4px', fontSize: 12, flexShrink: 0 }}>
+          <button
+            onClick={() => onToggleNot(f.id)}
+            title="Toggle NOT"
+            style={{
+              padding: '0 5px', fontSize: 10, fontWeight: 700, lineHeight: '16px',
+              background: f.negated ? 'var(--error)' : 'var(--bg-surface)',
+              color: f.negated ? '#fff' : 'var(--text-secondary)',
+              border: '1px solid var(--border-color)', borderRadius: 3, cursor: 'pointer',
+            }}
+          >NOT</button>
+          <span style={{ color: 'var(--text-secondary)', fontSize: 10, marginLeft: 3 }}>room:</span>
+          <span style={{ color: 'var(--text-bright)', marginLeft: 2 }}>{f.value}</span>
+          <button onClick={() => onRemove(f.id)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '0 0 0 4px', marginLeft: 2 }}>×</button>
+        </div>
+      ))}
+
+      <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+        <button
+          onClick={() => setOpen(o => !o)}
+          style={{ padding: '2px 10px', fontSize: 12, background: 'var(--bg-elevated)', border: '1px solid var(--border-color)', borderRadius: 12, cursor: 'pointer', color: 'var(--accent)' }}
+        >+ Add Filter</button>
+
+        {open && (
+          <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, background: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 6, boxShadow: '0 4px 14px rgba(0,0,0,0.4)', zIndex: 2000, minWidth: 200, padding: 8 }}>
+            <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Room Number</div>
+            <input
+              autoFocus
+              placeholder="e.g. JB 123"
+              value={pending}
+              onChange={e => setPending(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') submit() }}
+              style={{ width: '100%', padding: '4px 8px', fontSize: 12, boxSizing: 'border-box' }}
+            />
+            <button
+              onClick={submit}
+              disabled={!pending.trim()}
+              style={{ marginTop: 6, width: '100%', padding: '4px 8px', fontSize: 12 }}
+              className="btn-secondary btn-sm"
+            >Add</button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export function DoorTagsTab() {
   const [terms, setTerms] = useState<Term[]>([])
@@ -19,12 +119,13 @@ export function DoorTagsTab() {
   const [allFaculty, setAllFaculty] = useState<Faculty[]>([])
 
   const [selectedTermId, setSelectedTermId] = useState<number | null>(null)
-  const [selectedRoomId, setSelectedRoomId] = useState<number | null>(null)
   const [emptyLabel, setEmptyLabel] = useState(DEFAULT_EMPTY_LABEL)
+  const [roomFilters, setRoomFilters] = useState<RoomFilter[]>([])
 
   const [tables, setTables] = useState<ScheduleTable[]>([])
   const [entries, setEntries] = useState<ScheduleEntry[]>([])
   const [courses, setCourses] = useState<Course[]>([])
+  const [meetings, setMeetings] = useState<Meeting[]>([])
 
   useEffect(() => {
     Promise.all([
@@ -36,26 +137,28 @@ export function DoorTagsTab() {
       setTimeSlots(ts)
       setAllFaculty(f)
       if (t.length) setSelectedTermId(t[0].id)
-      if (r.length) setSelectedRoomId(r[0].id)
     })
   }, [])
 
   useEffect(() => {
-    if (!selectedTermId) { setTables([]); setEntries([]); setCourses([]); return }
+    if (!selectedTermId) { setTables([]); setEntries([]); setCourses([]); setMeetings([]); return }
     const term = terms.find(t => t.id === selectedTermId)
     if (!term) return
     Promise.all([
       tablesApi.list(selectedTermId),
       entriesApi.listByTerm(selectedTermId),
       coursesApi.list(term.semester_name),
-    ]).then(([tbs, ents, cs]) => {
+      meetingsApi.list(selectedTermId),
+    ]).then(([tbs, ents, cs, mts]) => {
       setTables(tbs)
       setEntries(ents)
       setCourses(cs)
+      setMeetings(mts)
     })
   }, [selectedTermId, terms])
 
   const courseMap = new Map(courses.map(c => [c.id, c]))
+  const meetingMap = new Map(meetings.map(m => [m.id, m]))
   const facultyMap = new Map(allFaculty.map(f => [f.id, f]))
 
   const sortedWeekdays = [...weekdays].sort((a, b) => a.display_order - b.display_order)
@@ -64,16 +167,17 @@ export function DoorTagsTab() {
 
   // grid[weekdayId][slotIndex] = CellData | 'covered' | null — mirrors the
   // rowSpan handling used by the Term Schedules / View tab grids, projected
-  // by weekday instead of by room since this view is scoped to one room.
-  const grid = new Map<number, (CellData | 'covered' | null)[]>()
-  for (const w of sortedWeekdays) grid.set(w.id, new Array(sortedTimeSlots.length).fill(null))
+  // by weekday instead of by room since each call here is scoped to one room.
+  const buildRoomGrid = (roomId: number): Map<number, (CellData | 'covered' | null)[]> => {
+    const grid = new Map<number, (CellData | 'covered' | null)[]>()
+    for (const w of sortedWeekdays) grid.set(w.id, new Array(sortedTimeSlots.length).fill(null))
 
-  if (selectedRoomId) {
     for (const table of tables) {
       for (const entry of entries) {
-        if (entry.schedule_table_id !== table.id || entry.room_id !== selectedRoomId) continue
-        const course = courseMap.get(entry.course_id)
-        if (!course || entry.time_slot_ids.length === 0) continue
+        if (entry.schedule_table_id !== table.id || entry.room_id !== roomId) continue
+        const course = entry.course_id != null ? courseMap.get(entry.course_id) ?? null : null
+        const meeting = entry.meeting_id != null ? meetingMap.get(entry.meeting_id) ?? null : null
+        if ((!course && !meeting) || entry.time_slot_ids.length === 0) continue
         const slotIds = [...entry.time_slot_ids].sort((a, b) => (slotOrder.get(a) ?? 0) - (slotOrder.get(b) ?? 0))
         const startIdx = slotOrder.get(slotIds[0])
         if (startIdx === undefined) continue
@@ -82,21 +186,30 @@ export function DoorTagsTab() {
         for (const wid of table.weekday_ids) {
           const col = grid.get(wid)
           if (!col) continue
-          col[startIdx] = { entry, course, faculty, span }
+          col[startIdx] = { entry, course, meeting, faculty, span }
           for (let i = startIdx + 1; i < startIdx + span && i < col.length; i++) col[i] = 'covered'
         }
       }
     }
+    return grid
   }
 
   const selectedTerm = terms.find(t => t.id === selectedTermId)
-  const selectedRoom = rooms.find(r => r.id === selectedRoomId)
 
-  const exportPdf = () => {
-    if (!selectedTermId || !selectedRoomId) return
+  const sortedRooms = [...rooms].sort((a, b) => a.display_label.localeCompare(b.display_label))
+  const visibleRooms = sortedRooms.filter(r => roomVisible(r, roomFilters))
+
+  const addRoomFilter = (value: string) => {
+    setRoomFilters(prev => [...prev, { id: `${Date.now()}-${Math.random()}`, value, negated: false }])
+  }
+  const removeRoomFilter = (id: string) => setRoomFilters(prev => prev.filter(f => f.id !== id))
+  const toggleRoomFilterNot = (id: string) => setRoomFilters(prev => prev.map(f => f.id === id ? { ...f, negated: !f.negated } : f))
+
+  const exportPdf = (roomId: number) => {
+    if (!selectedTermId) return
     const params = new URLSearchParams({
       term_id: String(selectedTermId),
-      room_id: String(selectedRoomId),
+      room_id: String(roomId),
       empty_label: emptyLabel || DEFAULT_EMPTY_LABEL,
     })
     window.open(`/api/door-tags/pdf?${params.toString()}`, '_blank')
@@ -105,104 +218,122 @@ export function DoorTagsTab() {
   return (
     <div>
       <div className="page-header">
-        <h1>Door Tags</h1>
+        <h1>Room Schedule</h1>
       </div>
       <div style={{ padding: 20 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
-        <div>
-          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>Term</div>
-          <SearchableSelect
-            options={terms.map(t => ({ id: t.id, label: termLabel(t) }))}
-            selectedId={selectedTermId}
-            onSelect={setSelectedTermId}
-            placeholder="Select term..."
-            searchPlaceholder="Search terms..."
-          />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>Term</div>
+            <SearchableSelect
+              options={terms.map(t => ({ id: t.id, label: termLabel(t) }))}
+              selectedId={selectedTermId}
+              onSelect={setSelectedTermId}
+              placeholder="Select term..."
+              searchPlaceholder="Search terms..."
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>Empty Slot Label</div>
+            <input
+              value={emptyLabel}
+              onChange={e => setEmptyLabel(e.target.value)}
+              placeholder={DEFAULT_EMPTY_LABEL}
+              style={{ padding: '5px 10px', fontSize: 13, width: 160 }}
+            />
+          </div>
         </div>
-        <div>
-          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>Room</div>
-          <SearchableSelect
-            options={rooms.map(r => ({ id: r.id, label: r.display_label }))}
-            selectedId={selectedRoomId}
-            onSelect={setSelectedRoomId}
-            placeholder="Select room..."
-            searchPlaceholder="Search rooms..."
-          />
-        </div>
-        <div>
-          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>Empty Slot Label</div>
-          <input
-            value={emptyLabel}
-            onChange={e => setEmptyLabel(e.target.value)}
-            placeholder={DEFAULT_EMPTY_LABEL}
-            style={{ padding: '5px 10px', fontSize: 13, width: 160 }}
-          />
-        </div>
-        <div style={{ alignSelf: 'flex-end' }}>
-          <button className="btn-primary" onClick={exportPdf} disabled={!selectedTermId || !selectedRoomId}>
-            Export
-          </button>
-        </div>
-      </div>
 
-      {!selectedRoom || !selectedTerm ? (
-        <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Select a term and room.</div>
-      ) : (
-        <div className="card">
-          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-bright)', marginBottom: 2 }}>
-            {selectedRoom.display_label}
-          </div>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>
-            {termLabel(selectedTerm)} Schedule
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-              <thead>
-                <tr>
-                  <th style={{ padding: '6px 10px', textAlign: 'left', background: 'var(--bg-elevated)', fontSize: 11, border: '1px solid var(--border-color)', minWidth: 120 }}>Time Slot</th>
-                  {sortedWeekdays.map(w => (
-                    <th key={w.id} style={{ padding: '6px 10px', textAlign: 'center', background: 'var(--bg-elevated)', fontSize: 11, border: '1px solid var(--border-color)', minWidth: 150 }}>
-                      {w.name.charAt(0).toUpperCase() + w.name.slice(1)}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {sortedTimeSlots.map((ts, r) => (
-                  <tr key={ts.id}>
-                    <td style={{ padding: '6px 10px', fontSize: 11, color: 'var(--text-secondary)', border: '1px solid var(--border-color)', whiteSpace: 'nowrap', background: 'var(--bg-elevated)' }}>
-                      {ts.label}
-                    </td>
-                    {sortedWeekdays.map(w => {
-                      const cell = grid.get(w.id)?.[r] ?? null
-                      if (cell === 'covered') return null
-                      if (cell === null) {
-                        return (
-                          <td key={w.id} style={{ padding: '8px 10px', border: '1px solid var(--border-color)', textAlign: 'center', fontSize: 12, color: 'var(--text-secondary)', opacity: 0.6 }}>
-                            {emptyLabel || DEFAULT_EMPTY_LABEL}
-                          </td>
-                        )
-                      }
-                      const rowSpan = cell.span
-                      return (
-                        <td key={w.id} rowSpan={rowSpan} style={{ padding: '8px 10px', border: '1px solid var(--border-color)', textAlign: 'center', verticalAlign: 'middle' }}>
-                          <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-bright)' }}>
-                            {cell.course.dept_code} {cell.course.course_number} §{cell.entry.section}
-                          </div>
-                          <div style={{ fontSize: 12, color: 'var(--text-primary)', marginTop: 2 }}>{cell.course.course_name}</div>
-                          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
-                            {cell.faculty ? `${cell.faculty.last_name}, ${cell.faculty.first_name}` : 'No instructor'}
-                          </div>
-                        </td>
-                      )
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <div style={{ marginBottom: 20 }}>
+          <RoomFilterBar
+            filters={roomFilters}
+            onAdd={addRoomFilter}
+            onRemove={removeRoomFilter}
+            onToggleNot={toggleRoomFilterNot}
+          />
         </div>
-      )}
+
+        {!selectedTerm ? (
+          <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Select a term.</div>
+        ) : visibleRooms.length === 0 ? (
+          <div className="empty-state"><div className="icon">🏫</div>No rooms match the current filters.</div>
+        ) : (
+          visibleRooms.map(room => {
+            const grid = buildRoomGrid(room.id)
+            return (
+              <div key={room.id} className="card" style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-bright)', marginBottom: 2 }}>
+                      {room.display_label}
+                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                      {termLabel(selectedTerm)} Schedule
+                    </div>
+                  </div>
+                  <button className="btn-secondary btn-sm" onClick={() => exportPdf(room.id)}>Export</button>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ padding: '6px 10px', textAlign: 'left', background: 'var(--bg-elevated)', fontSize: 11, border: '1px solid var(--border-color)', minWidth: 120 }}>Time Slot</th>
+                        {sortedWeekdays.map(w => (
+                          <th key={w.id} style={{ padding: '6px 10px', textAlign: 'center', background: 'var(--bg-elevated)', fontSize: 11, border: '1px solid var(--border-color)', minWidth: 150 }}>
+                            {w.name.charAt(0).toUpperCase() + w.name.slice(1)}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedTimeSlots.map((ts, r) => (
+                        <tr key={ts.id}>
+                          <td style={{ padding: '6px 10px', fontSize: 11, color: 'var(--text-secondary)', border: '1px solid var(--border-color)', whiteSpace: 'nowrap', background: 'var(--bg-elevated)' }}>
+                            {ts.label}
+                          </td>
+                          {sortedWeekdays.map(w => {
+                            const cell = grid.get(w.id)?.[r] ?? null
+                            if (cell === 'covered') return null
+                            if (cell === null) {
+                              return (
+                                <td key={w.id} style={{ padding: '8px 10px', border: '1px solid var(--border-color)', textAlign: 'center', fontSize: 12, color: 'var(--text-secondary)', opacity: 0.6 }}>
+                                  {emptyLabel || DEFAULT_EMPTY_LABEL}
+                                </td>
+                              )
+                            }
+                            const rowSpan = cell.span
+                            const bg = cell.course ? courseColor(cell.course.id) : MEETING_SOLID_COLOR
+                            return (
+                              <td key={w.id} rowSpan={rowSpan} style={{ padding: '8px 10px', border: '1px solid var(--border-color)', textAlign: 'center', verticalAlign: 'middle', background: bg }}>
+                                {cell.course ? (
+                                  <>
+                                    <div style={{ fontWeight: 700, fontSize: 13, color: '#eee' }}>
+                                      {cell.course.dept_code} {cell.course.course_number} Sec {cell.entry.section}
+                                    </div>
+                                    <div style={{ fontSize: 12, color: '#ddd', marginTop: 2 }}>{cell.course.course_name}</div>
+                                    <div style={{ fontSize: 11, color: '#bbb', marginTop: 2 }}>
+                                      {cell.faculty ? `${cell.faculty.last_name}, ${cell.faculty.first_name}` : 'No instructor'}
+                                    </div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <div style={{ fontWeight: 700, fontSize: 13, color: '#eee' }}>
+                                      {cell.meeting?.name}
+                                    </div>
+                                    <div style={{ fontSize: 11, color: '#bbb', marginTop: 2 }}>Meeting</div>
+                                  </>
+                                )}
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )
+          })
+        )}
       </div>
     </div>
   )

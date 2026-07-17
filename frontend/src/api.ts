@@ -130,12 +130,22 @@ export interface ScheduleEntry {
   id: number
   term_id: number
   schedule_table_id: number | null
-  course_id: number
+  // Exactly one of course_id / meeting_id is set.
+  course_id: number | null
+  meeting_id: number | null
   section: number
   room_id: number | null
   faculty_id: number | null
   time_slot_ids: number[]
   active_weekday_ids: number[]
+}
+
+export interface Meeting {
+  id: number
+  term_id: number
+  name: string
+  duration_minutes: number
+  frequency: number
 }
 
 export interface IssueItem {
@@ -258,7 +268,8 @@ export const tablesApi = {
 export const entriesApi = {
   listByTerm: (termId: number) => api.get<ScheduleEntry[]>(`/terms/${termId}/entries`).then(r => r.data),
   listByTable: (tableId: number) => api.get<ScheduleEntry[]>(`/tables/${tableId}/entries`).then(r => r.data),
-  create: (tableId: number, d: { course_id: number; room_id?: number; time_slot_ids: number[]; faculty_id?: number; active_weekday_ids?: number[] }) =>
+  // Provide exactly one of course_id / meeting_id.
+  create: (tableId: number, d: { course_id?: number; meeting_id?: number; room_id?: number; time_slot_ids: number[]; faculty_id?: number; active_weekday_ids?: number[] }) =>
     api.post<EntryWithWarnings>(`/tables/${tableId}/entries`, d).then(r => r.data),
   update: (id: number, d: { room_id?: number; time_slot_ids?: number[]; schedule_table_id?: number; faculty_id?: number; active_weekday_ids?: number[] }) =>
     api.put<EntryWithWarnings>(`/entries/${id}`, d).then(r => r.data),
@@ -267,6 +278,15 @@ export const entriesApi = {
   delete: (id: number) => api.delete(`/entries/${id}`),
   patchSectionCount: (termId: number, courseId: number, count: number) =>
     api.patch(`/terms/${termId}/courses/${courseId}/section-count`, { count }),
+}
+
+export const meetingsApi = {
+  list: (termId: number) => api.get<Meeting[]>(`/terms/${termId}/meetings`).then(r => r.data),
+  create: (termId: number, d: { name: string; duration_minutes: number; frequency: number }) =>
+    api.post<Meeting>(`/terms/${termId}/meetings`, d).then(r => r.data),
+  update: (id: number, d: { name: string; duration_minutes: number; frequency: number }) =>
+    api.put<Meeting>(`/meetings/${id}`, d).then(r => r.data),
+  delete: (id: number) => api.delete(`/meetings/${id}`),
 }
 
 export interface FacultyCourseLoad {

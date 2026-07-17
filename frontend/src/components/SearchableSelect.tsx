@@ -6,8 +6,8 @@ export interface SearchableOption {
 }
 
 // Generic dropdown-with-search picker — used wherever a list is long enough
-// that a plain <select> becomes hard to scan (e.g. Door Tags' term/room
-// pickers).
+// that a plain <select> becomes hard to scan (e.g. the Room Schedule tab's
+// term picker).
 export function SearchableSelect({
   options, selectedId, onSelect, placeholder = 'Select...', searchPlaceholder = 'Search...',
 }: {

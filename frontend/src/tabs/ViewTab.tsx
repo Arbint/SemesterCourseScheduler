@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import {
   termsApi, tablesApi, entriesApi, coursesApi, roomsApi, timeSlotsApi,
-  weekdaysApi, termTaughtWithApi, facultyApi,
+  weekdaysApi, termTaughtWithApi, facultyApi, meetingsApi,
   type Term, type ScheduleTable, type ScheduleEntry, type Course,
-  type Room, type TimeSlot, type Weekday, type Faculty, type TermTaughtWithGroup,
+  type Room, type TimeSlot, type Weekday, type Faculty, type TermTaughtWithGroup, type Meeting,
 } from '../api'
 import { showToast } from '../components/Toast'
 import { TermSelector } from '../components/TermSelector'
@@ -62,6 +62,7 @@ export function ViewTab() {
   const [tables, setTables] = useState<ScheduleTable[]>([])
   const [entries, setEntries] = useState<ScheduleEntry[]>([])
   const [courses, setCourses] = useState<Course[]>([])
+  const [meetings, setMeetings] = useState<Meeting[]>([])
   const [rooms, setRooms] = useState<Room[]>([])
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([])
   const [allFaculty, setAllFaculty] = useState<Faculty[]>([])
@@ -80,16 +81,18 @@ export function ViewTab() {
   const loadTerm = async (termId: number, term?: Term, allTerms?: Term[]) => {
     const termData = term ?? (allTerms ?? terms).find(t => t.id === termId)
     if (!termData) return
-    const [tbs, ents, cs, ttw] = await Promise.all([
+    const [tbs, ents, cs, ttw, mts] = await Promise.all([
       tablesApi.list(termId),
       entriesApi.listByTerm(termId),
       coursesApi.list(termData.semester_name),
       termTaughtWithApi.list(termId),
+      meetingsApi.list(termId),
     ])
     setTables(tbs)
     setEntries(ents)
     setCourses(cs)
     setTermTaughtWith(ttw)
+    setMeetings(mts)
   }
 
   useEffect(() => {
@@ -144,6 +147,7 @@ export function ViewTab() {
     setActiveFilters(prev => prev.map(f => f.id === id ? { ...f, negated: !f.negated } : f))
 
   const courseMap = new Map(courses.map(c => [c.id, c]))
+  const meetingMap = new Map(meetings.map(m => [m.id, m]))
 
   const effectivePartnerIds = new Map<number, number[]>()
   for (const c of courses) {
@@ -159,7 +163,7 @@ export function ViewTab() {
   }
 
   const isEntryDimmed = (entry: ScheduleEntry): boolean =>
-    entryMatchesFilters(entry, courseMap.get(entry.course_id), tables.find(t => t.id === entry.schedule_table_id), activeFilters)
+    entryMatchesFilters(entry, entry.course_id != null ? courseMap.get(entry.course_id) : undefined, tables.find(t => t.id === entry.schedule_table_id), activeFilters)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -205,6 +209,7 @@ export function ViewTab() {
             rooms={rooms}
             entries={entries}
             courses={courseMap}
+            meetings={meetingMap}
             effectivePartnerIds={effectivePartnerIds}
             allFaculty={allFaculty}
             isEntryDimmed={isEntryDimmed}
