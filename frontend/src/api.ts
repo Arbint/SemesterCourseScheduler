@@ -209,6 +209,7 @@ export const facultyApi = {
   removeCourse: (fid: number, cid: number) => api.delete(`/faculty/${fid}/courses/${cid}`),
   addAttribute: (fid: number, attributeId: number) => api.post(`/faculty/${fid}/attributes/${attributeId}`),
   removeAttribute: (fid: number, attributeId: number) => api.delete(`/faculty/${fid}/attributes/${attributeId}`),
+  schedulePdfUrl: (facultyId: number, termId: number) => `/api/faculty/${facultyId}/schedule-pdf?term_id=${termId}`,
 }
 
 export interface FacultyAttribute {

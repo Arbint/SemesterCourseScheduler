@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from database import get_db
-from models import Faculty, FacultyTeaching, FacultyAttribute, Course
+from models import Faculty, FacultyTeaching, FacultyAttribute, Course, Term
 from schemas import FacultyCreate, FacultyUpdate, FacultyOut, CourseOut
+from faculty_schedule_pdf import generate_faculty_schedule_pdf
 
 router = APIRouter(prefix="/api/faculty", tags=["faculty"])
 
@@ -101,3 +103,21 @@ def remove_faculty_attribute(faculty_id: int, attribute_id: int, db: Session = D
     if attribute and attribute in f.attributes:
         f.attributes.remove(attribute)
         db.commit()
+
+
+@router.get("/{faculty_id}/schedule-pdf")
+def faculty_schedule_pdf(faculty_id: int, term_id: int, db: Session = Depends(get_db)):
+    faculty = db.query(Faculty).filter(Faculty.id == faculty_id).first()
+    if not faculty:
+        raise HTTPException(404, "Faculty not found")
+    term = db.query(Term).filter(Term.id == term_id).first()
+    if not term:
+        raise HTTPException(404, "Term not found")
+
+    content = generate_faculty_schedule_pdf(db, term, faculty)
+    filename = f"faculty_schedule_{faculty.last_name}_{faculty.first_name}_{term.year}.pdf".replace(" ", "_")
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )

@@ -571,8 +571,16 @@ export function FacultyScheduleTab() {
                       {faculty.office && <span>Office: {faculty.office}</span>}
                     </div>
                   </div>
-                  <div style={{ fontSize: 12, color: underMin ? 'var(--warning)' : 'var(--text-secondary)', fontWeight: underMin ? 700 : 400 }}>
-                    Office Hours: {(minutes / 60).toFixed(1)} / {minHours} hrs/week
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+                    <div style={{ fontSize: 12, color: underMin ? 'var(--warning)' : 'var(--text-secondary)', fontWeight: underMin ? 700 : 400 }}>
+                      Office Hours: {(minutes / 60).toFixed(1)} / {minHours} hrs/week
+                    </div>
+                    <button
+                      className="btn-secondary btn-sm"
+                      onClick={() => selectedTermId != null && window.open(facultyApi.schedulePdfUrl(faculty.id, selectedTermId), '_blank')}
+                    >
+                      Export
+                    </button>
                   </div>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
