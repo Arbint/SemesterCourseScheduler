@@ -17,6 +17,7 @@ from door_tag_pdf import (
     GRID_LINE_COLOR, ENTRY_EDGE_COLOR, CELL_INSET, MEETING_COLOR,
     WEEKDAY_FULL, _entry_color, _merge_empty_runs, _term_label, _parse_hhmm, _format_clock,
     _fit_image_band, _make_card, _text_item, wrap_as_single_flowable, _natural_width, _ALIGN_TA, _OffsetFlowable,
+    _entry_cell_content,
     DEFAULT_LAYOUT, DEFAULT_PAGE_SIZE, DEFAULT_ORIENTATION, resolve_page_size,
     DEFAULT_HEADER_PADDING_IN, DEFAULT_INFO_PADDING_IN,
     parse_layout, compose_items, item_width, TITLE_LINE_HEIGHT, SUBLINE_HEIGHT,
@@ -33,10 +34,8 @@ RANK_LABELS = {
 }
 
 # Light, welcoming green for office hours — distinct from course pastels and
-# the meeting blue. Empty cells are plain white (feedback_63), unlike the
-# room export's dark-gray empty cells.
+# the meeting blue.
 OFFICE_HOURS_COLOR = "#c3ecc3"
-FACULTY_EMPTY_BG_COLOR = colors.white
 
 ICON_SIZE = 0.32 * inch
 ICON_GAP = 4
@@ -113,7 +112,7 @@ def build_faculty_schedule_grid(db: Session, term: Term, faculty: Faculty):
             else:
                 display = {
                     "title": entry.meeting.name,
-                    "name": "Meeting",
+                    "name": "",
                     "instructor": "",
                     "time_range": time_range,
                     "color": colors.HexColor(MEETING_COLOR),
@@ -242,11 +241,17 @@ def generate_faculty_schedule_pdf(
     custom_width_in: float | None = None, custom_height_in: float | None = None,
     header_padding_in: float = DEFAULT_HEADER_PADDING_IN, info_padding_in: float = DEFAULT_INFO_PADDING_IN,
     name_font_scale: float = 1.0, info_font_scale: float = 1.0, semester_font_scale: float = 1.0,
-    table_font_scale: float = 1.0, icon_scale: float = 1.0,
+    icon_scale: float = 1.0,
     time_font_scale: float = 1.0, weekday_font_scale: float = 1.0,
     header_offset_x_in: float = 0.0, header_offset_y_in: float = 0.0,
     footer_offset_x_in: float = 0.0, footer_offset_y_in: float = 0.0,
     icon_offset_x_in: float = 0.0, icon_offset_y_in: float = 0.0,
+    empty_bg_color: str = "#ffffff",
+    entry_name_font_scale: float = 1.0, entry_name_font_color: str = "#000000",
+    entry_instructor_font_scale: float = 1.0, entry_instructor_font_color: str = "#000000",
+    entry_time_font_scale: float = 1.0, entry_time_font_color: str = "#333333",
+    time_font_color: str = "#333333", weekday_font_color: str = "#222222",
+    weekday_offset_y_in: float = 0.0,
 ) -> bytes:
     weekdays, ticks, grid = build_faculty_schedule_grid(db, term, faculty)
     page_width, page_height = resolve_page_size(page_size, orientation, custom_width_in, custom_height_in)
@@ -258,25 +263,29 @@ def generate_faculty_schedule_pdf(
     )
     content_width = page_width - 2 * MARGIN
 
-    tfs = table_font_scale
     styles = getSampleStyleSheet()
     header_style = ParagraphStyle(
         "CellHeader", parent=styles["Normal"], fontSize=12 * weekday_font_scale, alignment=TA_CENTER,
-        textColor=colors.HexColor("#222222"), fontName="Helvetica-Bold",
+        textColor=colors.HexColor(weekday_font_color), fontName="Helvetica-Bold",
     )
     time_style = ParagraphStyle(
         "TimeCell", parent=styles["Normal"], fontSize=7 * time_font_scale, alignment=TA_CENTER,
-        fontName="Helvetica-Bold", textColor=colors.HexColor("#333333"), leading=8 * time_font_scale,
+        fontName="Helvetica-Bold", textColor=colors.HexColor(time_font_color), leading=8 * time_font_scale,
     )
     cell_body_style = ParagraphStyle(
-        "CellBody", parent=styles["Normal"], fontSize=9.5 * tfs, alignment=TA_LEFT, leading=12 * tfs,
-        textColor=colors.black, fontName="Helvetica-Bold",
+        "CellBody", parent=styles["Normal"], fontSize=9.5 * entry_name_font_scale, alignment=TA_LEFT, leading=12 * entry_name_font_scale,
+        textColor=colors.HexColor(entry_name_font_color), fontName="Helvetica-Bold",
+    )
+    instructor_style = ParagraphStyle(
+        "CellInstructor", parent=styles["Normal"], fontSize=9.5 * entry_instructor_font_scale, alignment=TA_LEFT, leading=12 * entry_instructor_font_scale,
+        textColor=colors.HexColor(entry_instructor_font_color), fontName="Helvetica-Bold",
     )
     cell_time_style = ParagraphStyle(
-        "CellTime", parent=styles["Normal"], fontSize=8 * tfs, alignment=TA_LEFT, leading=10 * tfs,
-        textColor=colors.HexColor("#333333"),
+        "CellTime", parent=styles["Normal"], fontSize=8 * entry_time_font_scale, alignment=TA_LEFT, leading=10 * entry_time_font_scale,
+        textColor=colors.HexColor(entry_time_font_color),
     )
     EMPTY_PAD = (2, 2, 3, 3)
+    empty_bg = colors.HexColor(empty_bg_color)
 
     header_flowable, header_height, header_width = _fit_image_band("header", "faculty", content_width, HEADER_IMAGE_MAX_HEIGHT * header_scale)
     if header_flowable is not None:
@@ -329,7 +338,8 @@ def generate_faculty_schedule_pdf(
     day_col_width = (content_width - TIME_COL_WIDTH) / len(weekdays)
 
     header_row = [""] + [
-        Paragraph(WEEKDAY_FULL.get(w.name.value, w.name.value), header_style) for w in weekdays
+        _OffsetFlowable(Paragraph(WEEKDAY_FULL.get(w.name.value, w.name.value), header_style), 0, weekday_offset_y_in * inch)
+        for w in weekdays
     ]
     data = [header_row]
     span_commands = []
@@ -343,7 +353,7 @@ def generate_faculty_schedule_pdf(
             if "empty_span" in cell:
                 span = cell["empty_span"]
                 block_height = span * tick_height
-                row.append(_make_card("", day_col_width, block_height, FACULTY_EMPTY_BG_COLOR, None, "MIDDLE", "CENTER", pad=EMPTY_PAD))
+                row.append(_make_card("", day_col_width, block_height, empty_bg, None, "MIDDLE", "CENTER", pad=EMPTY_PAD))
                 if span > 1:
                     span_commands.append(("SPAN", (c + 1, r + 1), (c + 1, r + span)))
                 continue
@@ -354,8 +364,7 @@ def generate_faculty_schedule_pdf(
             name = escape(entry["name"])
             instructor = escape(entry["instructor"])
             time_range = escape(entry["time_range"])
-            lines = "<br/>".join(x for x in [f"<b>{title}</b>", name, instructor] if x)
-            cell_content = [Paragraph(lines, cell_body_style), Paragraph(time_range, cell_time_style)]
+            cell_content = _entry_cell_content(title, name, instructor, time_range, cell_body_style, instructor_style, cell_time_style)
             card = _make_card(cell_content, day_col_width, block_height, entry["color"], ENTRY_EDGE_COLOR, "TOP", "LEFT")
             row.append(card)
             if span > 1:

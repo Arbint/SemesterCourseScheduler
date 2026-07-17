@@ -216,7 +216,6 @@ export function printConfigParams(config: PrintConfig): Record<string, string> {
     name_font_scale: String(config.name_font_scale),
     info_font_scale: String(config.info_font_scale),
     semester_font_scale: String(config.semester_font_scale),
-    table_font_scale: String(config.table_font_scale),
     icon_scale: String(config.icon_scale),
     time_font_scale: String(config.time_font_scale),
     weekday_font_scale: String(config.weekday_font_scale),
@@ -226,6 +225,18 @@ export function printConfigParams(config: PrintConfig): Record<string, string> {
     footer_offset_y_in: String(config.footer_offset_y_in),
     icon_offset_x_in: String(config.icon_offset_x_in),
     icon_offset_y_in: String(config.icon_offset_y_in),
+    empty_bg_color: config.empty_bg_color,
+    empty_font_scale: String(config.empty_font_scale),
+    empty_font_color: config.empty_font_color,
+    entry_name_font_scale: String(config.entry_name_font_scale),
+    entry_name_font_color: config.entry_name_font_color,
+    entry_instructor_font_scale: String(config.entry_instructor_font_scale),
+    entry_instructor_font_color: config.entry_instructor_font_color,
+    entry_time_font_scale: String(config.entry_time_font_scale),
+    entry_time_font_color: config.entry_time_font_color,
+    time_font_color: config.time_font_color,
+    weekday_font_color: config.weekday_font_color,
+    weekday_offset_y_in: String(config.weekday_offset_y_in),
   }
 }
 
@@ -456,17 +467,35 @@ export interface PrintConfig {
   // Scale multipliers (feedback_66) on top of each element's base point
   // size, same convention as header_scale/footer_scale above. icon_scale
   // only affects the Faculty Schedule export (rooms have no attribute icons).
-  // table_font_scale/time_font_scale/weekday_font_scale (feedback_69) split
-  // what used to be one "Table Font Size" knob into the 3 pieces of the grid
-  // it always implicitly controlled — the entry/course cell body, the time
-  // column, and the weekday header row.
   name_font_scale: number
   info_font_scale: number
   semester_font_scale: number
-  table_font_scale: number
   time_font_scale: number
   weekday_font_scale: number
   icon_scale: number
+  // Granular Table Body font/color settings (feedback_70) — replaces the old
+  // single table_font_scale knob. entry_* covers the course/meeting/office-
+  // hours cell content: entry_name (bold title line + course name / meeting
+  // name / "Office Hours" label), entry_instructor (Room export only — the
+  // Faculty export's cells never have an instructor line), entry_time (the
+  // small time-range line, shared by course/meeting/office-hours *and*
+  // empty-slot cells). empty_font_* is the empty-slot label itself (e.g.
+  // "OPEN") — a no-op on the Faculty export, which never renders one.
+  // empty_bg_color differs by default between the two tabs (dark vs white,
+  // matching each export's pre-existing look) — see DoorTagsTab/
+  // FacultyScheduleTab's initial state, not DEFAULT_PRINT_CONFIG.
+  empty_bg_color: string
+  empty_font_scale: number
+  empty_font_color: string
+  entry_name_font_scale: number
+  entry_name_font_color: string
+  entry_instructor_font_scale: number
+  entry_instructor_font_color: string
+  entry_time_font_scale: number
+  entry_time_font_color: string
+  time_font_color: string
+  weekday_font_color: string
+  weekday_offset_y_in: number
   // Image nudge (feedback_67, extended to footer + attribute icons in
   // feedback_69) — dx/dy (inches) sent to the backend; the per-arrow step
   // sizes are UI-only (how far one click moves it) and never leave the
@@ -510,10 +539,21 @@ export const DEFAULT_PRINT_CONFIG: PrintConfig = {
   name_font_scale: 1,
   info_font_scale: 1,
   semester_font_scale: 1,
-  table_font_scale: 1,
   time_font_scale: 1,
   weekday_font_scale: 1,
   icon_scale: 1,
+  empty_bg_color: '#3a3a3a',
+  empty_font_scale: 1,
+  empty_font_color: '#ffffff',
+  entry_name_font_scale: 1,
+  entry_name_font_color: '#000000',
+  entry_instructor_font_scale: 1,
+  entry_instructor_font_color: '#000000',
+  entry_time_font_scale: 1,
+  entry_time_font_color: '#333333',
+  time_font_color: '#333333',
+  weekday_font_color: '#222222',
+  weekday_offset_y_in: 0,
   header_offset_x_in: 0,
   header_offset_y_in: 0,
   header_offset_step_up_in: 0.1,

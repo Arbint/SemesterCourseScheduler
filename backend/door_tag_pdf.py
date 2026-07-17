@@ -1,4 +1,5 @@
 import io
+import re
 from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
@@ -55,7 +56,6 @@ SECTION_GAP = 0.12 * inch
 
 GRID_LINE_COLOR = colors.HexColor("#aaaaaa")
 ENTRY_EDGE_COLOR = colors.HexColor("#888888")
-EMPTY_BG_COLOR = colors.HexColor("#3a3a3a")
 
 # White gutter kept around every colored block (course/meeting or merged
 # empty run) so adjacent blocks never touch — the background, edge, and text
@@ -123,6 +123,32 @@ def _natural_width(text: str, style: ParagraphStyle, cap: float) -> float:
     `style`, capped so it never exceeds the available area — long text still
     falls back to wrapping within `cap` rather than overflowing the page."""
     return min(stringWidth(text, style.fontName, style.fontSize) + 6, cap)
+
+
+_HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
+
+def _safe_hex_color(value: str, fallback: str) -> str:
+    """Validates a user-supplied `#rrggbb` query param (feedback_70) before it
+    ever reaches colors.HexColor() — a malformed value falls back instead of
+    500ing the export."""
+    return value if value and _HEX_COLOR_RE.match(value) else fallback
+
+
+def _entry_cell_content(title: str, name: str, instructor: str, time_range: str, name_style, instructor_style, time_style) -> list:
+    """Builds the paragraph list for one course/meeting grid cell (feedback_70):
+    a combined bold-title + name line ("Name Font" — title alone for meetings/
+    office hours, title+name for courses), an optional instructor line (only
+    present when non-empty — the Faculty export's cells never have one), and
+    the time range line. Shared by both generate_door_tag_pdf and
+    generate_faculty_schedule_pdf so the two exports can't drift apart.
+    Callers must already have escape()d every argument."""
+    name_lines = "<br/>".join(x for x in [f"<b>{title}</b>", name] if x)
+    content = [Paragraph(name_lines, name_style)]
+    if instructor:
+        content.append(Paragraph(instructor, instructor_style))
+    content.append(Paragraph(time_range, time_style))
+    return content
 
 
 def compose_items(items: list[dict], layout: str, available_width: float, gap: float):
@@ -449,10 +475,16 @@ def generate_door_tag_pdf(
     page_size: str = DEFAULT_PAGE_SIZE, orientation: str = DEFAULT_ORIENTATION,
     custom_width_in: float | None = None, custom_height_in: float | None = None,
     header_padding_in: float = DEFAULT_HEADER_PADDING_IN, info_padding_in: float = DEFAULT_INFO_PADDING_IN,
-    name_font_scale: float = 1.0, semester_font_scale: float = 1.0, table_font_scale: float = 1.0,
+    name_font_scale: float = 1.0, semester_font_scale: float = 1.0,
     time_font_scale: float = 1.0, weekday_font_scale: float = 1.0,
     header_offset_x_in: float = 0.0, header_offset_y_in: float = 0.0,
     footer_offset_x_in: float = 0.0, footer_offset_y_in: float = 0.0,
+    empty_bg_color: str = "#3a3a3a", empty_font_scale: float = 1.0, empty_font_color: str = "#ffffff",
+    entry_name_font_scale: float = 1.0, entry_name_font_color: str = "#000000",
+    entry_instructor_font_scale: float = 1.0, entry_instructor_font_color: str = "#000000",
+    entry_time_font_scale: float = 1.0, entry_time_font_color: str = "#333333",
+    time_font_color: str = "#333333", weekday_font_color: str = "#222222",
+    weekday_offset_y_in: float = 0.0,
 ) -> bytes:
     weekdays, ticks, grid = build_door_tag_grid(db, term, room)
     page_width, page_height = resolve_page_size(page_size, orientation, custom_width_in, custom_height_in)
@@ -464,33 +496,33 @@ def generate_door_tag_pdf(
     )
     content_width = page_width - 2 * MARGIN
 
-    tfs = table_font_scale
     styles = getSampleStyleSheet()
     header_style = ParagraphStyle(
         "CellHeader", parent=styles["Normal"], fontSize=12 * weekday_font_scale, alignment=TA_CENTER,
-        textColor=colors.HexColor("#222222"), fontName="Helvetica-Bold",
+        textColor=colors.HexColor(weekday_font_color), fontName="Helvetica-Bold",
     )
     time_style = ParagraphStyle(
         "TimeCell", parent=styles["Normal"], fontSize=7 * time_font_scale, alignment=TA_CENTER,
-        fontName="Helvetica-Bold", textColor=colors.HexColor("#333333"), leading=8 * time_font_scale,
+        fontName="Helvetica-Bold", textColor=colors.HexColor(time_font_color), leading=8 * time_font_scale,
     )
     cell_body_style = ParagraphStyle(
-        "CellBody", parent=styles["Normal"], fontSize=9.5 * tfs, alignment=TA_LEFT, leading=12 * tfs,
-        textColor=colors.black, fontName="Helvetica-Bold",
+        "CellBody", parent=styles["Normal"], fontSize=9.5 * entry_name_font_scale, alignment=TA_LEFT, leading=12 * entry_name_font_scale,
+        textColor=colors.HexColor(entry_name_font_color), fontName="Helvetica-Bold",
+    )
+    instructor_style = ParagraphStyle(
+        "CellInstructor", parent=styles["Normal"], fontSize=9.5 * entry_instructor_font_scale, alignment=TA_LEFT, leading=12 * entry_instructor_font_scale,
+        textColor=colors.HexColor(entry_instructor_font_color), fontName="Helvetica-Bold",
     )
     cell_time_style = ParagraphStyle(
-        "CellTime", parent=styles["Normal"], fontSize=8 * tfs, alignment=TA_LEFT, leading=10 * tfs,
-        textColor=colors.HexColor("#333333"),
+        "CellTime", parent=styles["Normal"], fontSize=8 * entry_time_font_scale, alignment=TA_LEFT, leading=10 * entry_time_font_scale,
+        textColor=colors.HexColor(entry_time_font_color),
     )
     empty_style = ParagraphStyle(
-        "EmptyCell", parent=styles["Normal"], fontSize=8 * tfs, leading=9 * tfs, alignment=TA_CENTER,
-        textColor=colors.white, fontName="Helvetica-Bold",
-    )
-    empty_time_style = ParagraphStyle(
-        "EmptyCellTime", parent=styles["Normal"], fontSize=6.5 * tfs, leading=7.5 * tfs, alignment=TA_CENTER,
-        textColor=colors.HexColor("#dddddd"),
+        "EmptyCell", parent=styles["Normal"], fontSize=8 * empty_font_scale, leading=9 * empty_font_scale, alignment=TA_CENTER,
+        textColor=colors.HexColor(empty_font_color), fontName="Helvetica-Bold",
     )
     EMPTY_PAD = (2, 2, 3, 3)  # top, bottom, left, right — tighter than the course card's
+    empty_bg = colors.HexColor(empty_bg_color)
 
     header_flowable, header_height, header_width = _fit_image_band("header", "room", content_width, HEADER_IMAGE_MAX_HEIGHT * header_scale)
     if header_flowable is not None:
@@ -543,7 +575,8 @@ def generate_door_tag_pdf(
     day_col_width = (content_width - TIME_COL_WIDTH) / len(weekdays)
 
     header_row = [""] + [
-        Paragraph(WEEKDAY_FULL.get(w.name.value, w.name.value), header_style) for w in weekdays
+        _OffsetFlowable(Paragraph(WEEKDAY_FULL.get(w.name.value, w.name.value), header_style), 0, weekday_offset_y_in * inch)
+        for w in weekdays
     ]
     data = [header_row]
     span_commands = []
@@ -565,13 +598,13 @@ def generate_door_tag_pdf(
                 content = ""
                 if span > 1 and empty_label.strip():
                     avail = block_height - 2 * CELL_INSET - EMPTY_PAD[0] - EMPTY_PAD[1]
-                    if avail >= empty_style.leading + empty_time_style.leading:
+                    if avail >= empty_style.leading + cell_time_style.leading:
                         end_min = tick_min + span * TICK_MINUTES
                         time_range = f"{_format_clock(tick_min)} to {_format_clock(end_min)}"
-                        content = [Paragraph(escape(empty_label), empty_style), Paragraph(time_range, empty_time_style)]
+                        content = [Paragraph(escape(empty_label), empty_style), Paragraph(time_range, cell_time_style)]
                     elif avail >= empty_style.leading:
                         content = Paragraph(escape(empty_label), empty_style)
-                row.append(_make_card(content, day_col_width, block_height, EMPTY_BG_COLOR, None, "MIDDLE", "CENTER", pad=EMPTY_PAD))
+                row.append(_make_card(content, day_col_width, block_height, empty_bg, None, "MIDDLE", "CENTER", pad=EMPTY_PAD))
                 if span > 1:
                     span_commands.append(("SPAN", (c + 1, r + 1), (c + 1, end_row)))
                 continue
@@ -583,8 +616,7 @@ def generate_door_tag_pdf(
             name = escape(entry["name"])
             instructor = escape(entry["instructor"])
             time_range = escape(entry["time_range"])
-            text = f"<b>{title}</b><br/>{name}<br/>{instructor}"
-            cell_content = [Paragraph(text, cell_body_style), Paragraph(time_range, cell_time_style)]
+            cell_content = _entry_cell_content(title, name, instructor, time_range, cell_body_style, instructor_style, cell_time_style)
             card = _make_card(cell_content, day_col_width, block_height, _entry_color(entry["course_id"]), ENTRY_EDGE_COLOR, "TOP", "LEFT")
             row.append(card)
             if span > 1:

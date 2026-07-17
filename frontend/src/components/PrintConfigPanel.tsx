@@ -11,6 +11,22 @@ import { SearchableSelect, type SearchableOption } from './SearchableSelect'
 
 const labelStyle = { fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 } as const
 const numberInputStyle = { padding: '5px 8px', fontSize: 13, width: 70 } as const
+const colorInputStyle = { width: 44, height: 32, padding: 2, border: '1px solid var(--border-color)', borderRadius: 4, background: 'transparent', cursor: 'pointer' } as const
+
+// One "Table Body" row (feedback_70) — a font-size multiplier next to a
+// native color swatch. Takes plain value/setter pairs rather than PrintConfig
+// keys so it stays fully type-safe without generic key-narrowing machinery.
+function sizeColorField(label: string, sizeValue: number, onSize: (v: number) => void, colorValue: string, onColor: (v: string) => void) {
+  return (
+    <div key={label}>
+      <div style={labelStyle}>{label}</div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <input type="number" min={0.25} max={3} step={0.1} value={sizeValue} onChange={e => onSize(+e.target.value)} style={numberInputStyle} />
+        <input type="color" value={colorValue} onChange={e => onColor(e.target.value)} style={colorInputStyle} />
+      </div>
+    </div>
+  )
+}
 
 // Every numeric PrintConfig field — used to keep OffsetDPad (below) fully
 // type-safe without repeating its ~70 lines of JSX for header/footer/icon.
@@ -509,21 +525,25 @@ export function PrintConfigPanel({
           <div style={{ marginTop: 16 }}>
             <h4 style={{ margin: 0, fontSize: 13, color: 'var(--text-bright)' }}>Table Body</h4>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 12 }}>
-              {([
-                { key: 'table_font_scale' as const, label: 'Table Font Size' },
-                { key: 'time_font_scale' as const, label: 'Time Label Font Size' },
-                { key: 'weekday_font_scale' as const, label: 'Weekday Font Size' },
-              ]).map(({ key, label }) => (
-                <div key={key}>
-                  <div style={labelStyle}>{label}</div>
-                  <input
-                    type="number" min={0.25} max={3} step={0.1}
-                    value={config[key]}
-                    onChange={e => set(key, +e.target.value)}
-                    style={numberInputStyle}
-                  />
-                </div>
-              ))}
+              <div>
+                <div style={labelStyle}>Empty Slot Background Color</div>
+                <input type="color" value={config.empty_bg_color} onChange={e => set('empty_bg_color', e.target.value)} style={colorInputStyle} />
+              </div>
+              {sizeColorField('Empty Slot Font', config.empty_font_scale, v => set('empty_font_scale', v), config.empty_font_color, v => set('empty_font_color', v))}
+              {sizeColorField('Name Font', config.entry_name_font_scale, v => set('entry_name_font_scale', v), config.entry_name_font_color, v => set('entry_name_font_color', v))}
+              {sizeColorField('Instructor Name Font', config.entry_instructor_font_scale, v => set('entry_instructor_font_scale', v), config.entry_instructor_font_color, v => set('entry_instructor_font_color', v))}
+              {sizeColorField('Time Range Font', config.entry_time_font_scale, v => set('entry_time_font_scale', v), config.entry_time_font_color, v => set('entry_time_font_color', v))}
+              {sizeColorField('Time Label Font', config.time_font_scale, v => set('time_font_scale', v), config.time_font_color, v => set('time_font_color', v))}
+              {sizeColorField('Weekday Font', config.weekday_font_scale, v => set('weekday_font_scale', v), config.weekday_font_color, v => set('weekday_font_color', v))}
+              <div>
+                <div style={labelStyle}>Weekday Offset (in)</div>
+                <input
+                  type="number" step={0.05}
+                  value={config.weekday_offset_y_in}
+                  onChange={e => set('weekday_offset_y_in', +e.target.value)}
+                  style={numberInputStyle}
+                />
+              </div>
             </div>
           </div>
 

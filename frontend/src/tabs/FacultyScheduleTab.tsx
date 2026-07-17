@@ -245,7 +245,9 @@ export function FacultyScheduleTab() {
   const [filterFullTime, setFilterFullTime] = useState(false)
   const [filterPartTime, setFilterPartTime] = useState(false)
   const [filterDeptOnly, setFilterDeptOnly] = useState(false)
-  const [printConfig, setPrintConfig] = useState<PrintConfig>(DEFAULT_PRINT_CONFIG)
+  // Faculty's empty cells are plain white by default (unlike the Room
+  // export's dark gray) — see PrintConfig.empty_bg_color (feedback_70).
+  const [printConfig, setPrintConfig] = useState<PrintConfig>({ ...DEFAULT_PRINT_CONFIG, empty_bg_color: '#ffffff' })
 
   const [tables, setTables] = useState<ScheduleTable[]>([])
   const [entries, setEntries] = useState<ScheduleEntry[]>([])
