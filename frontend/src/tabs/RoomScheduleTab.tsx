@@ -7,7 +7,7 @@ import {
 } from '../api'
 import { SearchableSelect } from '../components/SearchableSelect'
 import { courseColor, MEETING_SOLID_COLOR } from '../components/ScheduleGrid'
-import { PrintConfigPanel } from '../components/PrintConfigPanel'
+import { ExportConfigurationPanel } from '../components/ExportConfigurationPanel'
 import { showToast } from '../components/Toast'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -139,7 +139,7 @@ function RoomFilterBar({ filters, onAdd, onRemove, onToggleNot }: {
   )
 }
 
-export function DoorTagsTab() {
+export function RoomScheduleTab() {
   const { isLoggedIn } = useAuth()
   const [terms, setTerms] = useState<Term[]>([])
   const [rooms, setRooms] = useState<Room[]>([])
@@ -330,7 +330,7 @@ export function DoorTagsTab() {
           )}
         </div>
 
-        <PrintConfigPanel
+        <ExportConfigurationPanel
           config={printConfig}
           onChange={setPrintConfig}
           previewOptions={sortedRooms.map(r => ({ id: r.id, label: r.display_label }))}

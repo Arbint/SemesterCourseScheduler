@@ -8,7 +8,7 @@ import {
 } from '../api'
 import { SearchableSelect } from '../components/SearchableSelect'
 import { courseColor, OFFICE_HOUR_SOLID_COLOR, MEETING_SOLID_COLOR } from '../components/ScheduleGrid'
-import { PrintConfigPanel } from '../components/PrintConfigPanel'
+import { ExportConfigurationPanel } from '../components/ExportConfigurationPanel'
 import { showToast } from '../components/Toast'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -531,7 +531,7 @@ export function FacultyScheduleTab() {
           </label>
         </div>
 
-        <PrintConfigPanel
+        <ExportConfigurationPanel
           config={printConfig}
           onChange={setPrintConfig}
           previewOptions={sortedFaculty.map(f => ({ id: f.id, label: facultyDisplayName(f) }))}

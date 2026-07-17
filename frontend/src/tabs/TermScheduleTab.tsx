@@ -55,7 +55,7 @@ function getNumberParam(name: string, fallback: number, min: number, max: number
   return Number.isFinite(val) ? Math.max(min, Math.min(max, val)) : fallback
 }
 
-export function ViewTab() {
+export function TermScheduleTab() {
   const [terms, setTerms] = useState<Term[]>([])
   const [selectedTermId, setSelectedTermId] = useState<number | null>(null)
   const [weekdays, setWeekdays] = useState<Weekday[]>([])

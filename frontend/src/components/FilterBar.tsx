@@ -11,8 +11,8 @@ export interface ActiveFilter {
 
 export const DAY_NAMES: Record<string, string> = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri' }
 
-// Shared by TermSchedulesTab and ViewTab so a scheduled entry dims/highlights
-// consistently under the same filter set in both places.
+// Shared by TermSchedulingTab and TermScheduleTab so a scheduled entry
+// dims/highlights consistently under the same filter set in both places.
 export function entryMatchesFilters(
   entry: ScheduleEntry, course: Course | undefined, table: ScheduleTable | undefined, filters: ActiveFilter[]
 ): boolean {

@@ -7,10 +7,10 @@ import { CourseTab } from './tabs/CourseTab'
 import { RoomsTab } from './tabs/RoomsTab'
 import { TimeSlotsTab } from './tabs/TimeSlotsTab'
 import { ConstraintsTab } from './tabs/ConstraintsTab'
-import { TermSchedulesTab } from './tabs/TermSchedulesTab'
+import { TermSchedulingTab } from './tabs/TermSchedulingTab'
 import { LoadTab } from './tabs/LoadTab'
-import { ViewTab } from './tabs/ViewTab'
-import { DoorTagsTab } from './tabs/DoorTagsTab'
+import { TermScheduleTab } from './tabs/TermScheduleTab'
+import { RoomScheduleTab } from './tabs/RoomScheduleTab'
 import { FacultyScheduleTab } from './tabs/FacultyScheduleTab'
 import { ChangeListTab } from './tabs/ChangeListTab'
 
@@ -20,9 +20,9 @@ const TABS = [
   { id: 'rooms', label: 'Rooms' },
   { id: 'timeslots', label: 'Time Slots' },
   { id: 'constraints', label: 'Constraints' },
-  { id: 'schedules', label: 'Term Schedules' },
+  { id: 'schedules', label: 'Term Scheduling' },
   { id: 'load', label: 'Load' },
-  { id: 'view', label: 'View' },
+  { id: 'view', label: 'Term Schedule' },
   { id: 'doortags', label: 'Room Schedule' },
   { id: 'facultyschedule', label: 'Faculty Schedule' },
   { id: 'changelist', label: 'Change List' },
@@ -89,15 +89,15 @@ function AppShell() {
         {tab === 'constraints' && <ConstraintsTab />}
         {/* Always mounted so chat history is preserved across tab switches */}
         <div style={{ display: tab === 'schedules' ? 'flex' : 'none', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-          <TermSchedulesTab />
+          <TermSchedulingTab />
         </div>
         {tab === 'load' && <LoadTab />}
         {tab === 'view' && (
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-            <ViewTab />
+            <TermScheduleTab />
           </div>
         )}
-        {tab === 'doortags' && <DoorTagsTab />}
+        {tab === 'doortags' && <RoomScheduleTab />}
         {tab === 'facultyschedule' && <FacultyScheduleTab />}
         {tab === 'changelist' && <ChangeListTab />}
       </div>

@@ -493,7 +493,7 @@ export interface PrintConfig {
   // empty-slot cells). empty_font_* is the empty-slot label itself (e.g.
   // "OPEN") — a no-op on the Faculty export, which never renders one.
   // empty_bg_color differs by default between the two tabs (dark vs white,
-  // matching each export's pre-existing look) — see DoorTagsTab/
+  // matching each export's pre-existing look) — see RoomScheduleTab/
   // FacultyScheduleTab's initial state, not DEFAULT_PRINT_CONFIG.
   empty_bg_color: string
   empty_font_scale: number

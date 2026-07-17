@@ -115,7 +115,7 @@ function CollapsibleGroup({ title, open, onToggle, children }: {
   )
 }
 
-interface PrintConfigPanelProps {
+interface ExportConfigurationPanelProps {
   config: PrintConfig
   onChange: (config: PrintConfig) => void
   // Preview sub-section (feedback_66) — the entity list to search ("which
@@ -139,9 +139,9 @@ interface PrintConfigPanelProps {
 // to Header's), Table Body font sizes, and the Preview column. Fully
 // controlled: the caller owns `config` and threads it into its own export
 // URL builder.
-export function PrintConfigPanel({
+export function ExportConfigurationPanel({
   config, onChange, previewOptions, buildPreviewUrl, showIconSize, assetScope, presetScope,
-}: PrintConfigPanelProps) {
+}: ExportConfigurationPanelProps) {
   const { isLoggedIn } = useAuth()
   const [open, setOpen] = useState(false)
   const [presets, setPresets] = useState<PdfLayoutPreset[]>([])
@@ -169,10 +169,17 @@ export function PrintConfigPanel({
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewEntityId, setPreviewEntityId] = useState<number | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  // Bumped whenever the header/footer image is uploaded or removed — the
+  // preview URL is otherwise a pure function of (entityId, config), which
+  // doesn't change when only the underlying asset file does, so without
+  // this the iframe would keep showing a stale image (or the browser would
+  // just serve its cached response for the identical URL).
+  const [assetVersion, setAssetVersion] = useState(0)
 
   // buildPreviewUrl is a fresh closure every parent render — read it via a
   // ref so the debounce effect below only reacts to *semantic* changes
-  // (previewOpen/previewEntityId/config), not the caller re-rendering.
+  // (previewOpen/previewEntityId/config/assetVersion), not the caller
+  // re-rendering.
   const buildPreviewUrlRef = useRef(buildPreviewUrl)
   buildPreviewUrlRef.current = buildPreviewUrl
 
@@ -181,15 +188,18 @@ export function PrintConfigPanel({
   // export routes default to Content-Disposition: attachment (so the
   // Export button downloads a file); the preview needs the PDF to render
   // in-place instead, so it appends inline=true to whatever URL the caller
-  // builds rather than downloading it.
+  // builds rather than downloading it. assetVersion is appended too so a
+  // header/footer image swap forces a genuinely new URL, not just a re-set
+  // of the same one — otherwise neither React nor the browser's own GET
+  // cache would know anything changed.
   useEffect(() => {
     if (!previewOpen || previewEntityId == null) { setPreviewUrl(null); return }
     const handle = setTimeout(() => {
       const url = buildPreviewUrlRef.current(previewEntityId)
-      setPreviewUrl(url ? `${url}${url.includes('?') ? '&' : '?'}inline=true` : null)
+      setPreviewUrl(url ? `${url}${url.includes('?') ? '&' : '?'}inline=true&_av=${assetVersion}` : null)
     }, 500)
     return () => clearTimeout(handle)
-  }, [previewOpen, previewEntityId, config])
+  }, [previewOpen, previewEntityId, config, assetVersion])
 
   useEffect(() => {
     if (previewEntityId == null && previewOptions.length > 0) setPreviewEntityId(previewOptions[0].id)
@@ -214,6 +224,7 @@ export function PrintConfigPanel({
     try {
       await doorTagAssetsApi.upload(kind, assetScope, file)
       setHas(true)
+      setAssetVersion(v => v + 1)
     } catch (e: any) {
       showToast(e.response?.data?.detail || `Failed to upload ${kind} image`)
     } finally {
@@ -226,6 +237,7 @@ export function PrintConfigPanel({
     try {
       await doorTagAssetsApi.remove(kind, assetScope)
       setHas(false)
+      setAssetVersion(v => v + 1)
     } catch (e: any) {
       showToast(e.response?.data?.detail || `Failed to remove ${kind} image`)
     }

@@ -353,7 +353,7 @@ function AIChatPanel({
 }
 
 // --- Main Term Schedules Tab ---
-export function TermSchedulesTab() {
+export function TermSchedulingTab() {
   const { isLoggedIn } = useAuth()
   const [terms, setTerms] = useState<Term[]>([])
   const [semesters, setSemesters] = useState<Semester[]>([])
