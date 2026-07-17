@@ -11,14 +11,14 @@ from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Tabl
 from sqlalchemy.orm import Session
 from svglib.svglib import svg2rlg
 
-import door_tag_assets as assets
 import faculty_attribute_assets as attr_assets
 from door_tag_pdf import (
     PAGE_WIDTH, PAGE_HEIGHT, MARGIN, TIME_COL_WIDTH, TICK_MINUTES,
     WEEKDAY_ROW_HEIGHT, HEADER_IMAGE_MAX_HEIGHT, FOOTER_IMAGE_MAX_HEIGHT, SECTION_GAP,
-    GRID_LINE_COLOR, ENTRY_EDGE_COLOR, EMPTY_BG_COLOR, CELL_INSET, MEETING_COLOR,
+    GRID_LINE_COLOR, ENTRY_EDGE_COLOR, CELL_INSET, MEETING_COLOR,
     WEEKDAY_FULL, _entry_color, _merge_empty_runs, _term_label, _parse_hhmm, _format_clock,
     _fit_image_band, _make_card,
+    DEFAULT_LAYOUT, parse_layout, compose_info_section, info_area_width, _ALIGN_TA,
 )
 from models import Faculty, Term, TimeSlot, Weekday
 
@@ -31,14 +31,18 @@ RANK_LABELS = {
     "professor": "Professor",
 }
 
-OFFICE_HOURS_COLOR = "#f0c96e"
+# Light, welcoming green for office hours — distinct from course pastels and
+# the meeting blue. Empty cells are plain white (feedback_63), unlike the
+# room export's dark-gray empty cells.
+OFFICE_HOURS_COLOR = "#c3ecc3"
+FACULTY_EMPTY_BG_COLOR = colors.white
 
-# Generous fixed budget for the name/rank-office/term-label block above the
-# grid — mirrors how door_tag_pdf's TITLE_HEIGHT covers title+subtitle
-# together rather than budgeting each paragraph separately.
-INFO_BLOCK_HEIGHT = 0.95 * inch
+# Generous fixed budget for the name/rank-office/term-label text stack —
+# mirrors how door_tag_pdf's TITLE_HEIGHT covers title+subtitle together
+# rather than budgeting each paragraph separately.
+INFO_TEXT_HEIGHT = 0.95 * inch
 ICON_SIZE = 0.32 * inch
-ICON_ROW_HEIGHT = 0.5 * inch
+ICON_GAP = 4
 
 
 def _requires_department_meeting(faculty: Faculty) -> bool:
@@ -49,7 +53,9 @@ def build_faculty_schedule_grid(db: Session, term: Term, faculty: Faculty):
     """Same tick-grid approach as build_door_tag_grid, scoped to one faculty's
     own courses, their department meeting (only if actually required — see
     _requires_department_meeting), and their office hours (free-form times,
-    projected directly onto the tick grid without going through time slots)."""
+    projected directly onto the tick grid without going through time slots).
+    Ticks where every weekday is empty are dropped entirely (feedback_63) so
+    the printed table doesn't waste space on hours the faculty never uses."""
     weekdays = db.query(Weekday).order_by(Weekday.display_order).all()
     time_slots = db.query(TimeSlot).order_by(TimeSlot.display_order).all()
 
@@ -66,23 +72,23 @@ def build_faculty_schedule_grid(db: Session, term: Term, faculty: Faculty):
     if day_end % TICK_MINUTES:
         day_end += TICK_MINUTES - day_end % TICK_MINUTES
     num_ticks = (day_end - day_start) // TICK_MINUTES
-    ticks = [day_start + i * TICK_MINUTES for i in range(num_ticks)]
+    all_ticks = [day_start + i * TICK_MINUTES for i in range(num_ticks)]
 
-    grid: dict[int, list] = {w.id: [None] * num_ticks for w in weekdays}
+    raw_grid: dict[int, list] = {w.id: [None] * num_ticks for w in weekdays}
 
     def place(wid, start_min, end_min, display):
-        if wid not in grid:
+        if wid not in raw_grid:
             return
         start_idx = (start_min - day_start) // TICK_MINUTES
         span = max(1, -(-(end_min - start_min) // TICK_MINUTES))  # ceil div
         if start_idx < 0 or start_idx >= num_ticks:
             return
-        if grid[wid][start_idx] is not None:
+        if raw_grid[wid][start_idx] is not None:
             return  # already occupied — shouldn't happen given conflict validation
-        grid[wid][start_idx] = {"entry": display, "span": span}
+        raw_grid[wid][start_idx] = {"entry": display, "span": span}
         for i in range(start_idx + 1, start_idx + span):
             if i < num_ticks:
-                grid[wid][i] = "COVERED"
+                raw_grid[wid][i] = "COVERED"
 
     requires_meeting = _requires_department_meeting(faculty)
 
@@ -131,6 +137,13 @@ def build_faculty_schedule_grid(db: Session, term: Term, faculty: Faculty):
         }
         place(oh.weekday_id, start_min, end_min, display)
 
+    # Drop any tick where every weekday is empty. A multi-tick entry's own
+    # span is never split up by this — every tick it covers is non-None for
+    # at least the weekday(s) it's on, so those rows always survive intact.
+    used_idx = [i for i in range(num_ticks) if any(raw_grid[w.id][i] is not None for w in weekdays)]
+    ticks = [all_ticks[i] for i in used_idx]
+    grid = {w.id: [raw_grid[w.id][i] for i in used_idx] for w in weekdays}
+
     for wid in grid:
         grid[wid] = _merge_empty_runs(grid[wid])
 
@@ -156,8 +169,72 @@ def _attribute_flowable(attribute, pill_style):
     return Image(str(path), width=iw * scale, height=ih * scale)
 
 
-def generate_faculty_schedule_pdf(db: Session, term: Term, faculty: Faculty) -> bytes:
+def _build_faculty_info_area(faculty: Faculty, term: Term, align: str, width: float):
+    """The faculty export's info area — name/rank/office/term text stack,
+    alignment following the chosen Layout option, with attribute icons in
+    their own vertical column immediately to the right (feedback_63: this
+    icon placement is the one thing that *doesn't* follow the Layout
+    option). Returns (flowable, height)."""
+    ta = _ALIGN_TA[align]
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle("FacultyTitle", parent=styles["Title"], alignment=ta, fontSize=22, leading=25)
+    info_style = ParagraphStyle("FacultyInfo", parent=styles["Normal"], alignment=ta, fontSize=12, textColor=colors.HexColor("#444444"))
+    subtitle_style = ParagraphStyle("FacultySubtitle", parent=styles["Normal"], alignment=ta, fontSize=11, textColor=colors.HexColor("#666666"))
+    pill_style = ParagraphStyle(
+        "AttributePill", parent=styles["Normal"], alignment=TA_CENTER, fontSize=8,
+        textColor=colors.HexColor("#444444"), borderColor=colors.HexColor("#aaaaaa"),
+        borderWidth=0.5, borderPadding=3,
+    )
+
+    full_name = f"{faculty.first_name} {faculty.last_name}"
+    text_rows = [[Paragraph(escape(full_name), title_style)]]
+
+    info_bits = []
+    if faculty.rank:
+        info_bits.append(RANK_LABELS.get(faculty.rank.value, faculty.rank.value))
+    if faculty.office:
+        info_bits.append(f"Office: {faculty.office}")
+    if info_bits:
+        text_rows.append([Paragraph(escape("  |  ".join(info_bits)), info_style)])
+
+    text_rows.append([Paragraph(escape(f"{_term_label(term)} Schedule"), subtitle_style)])
+
+    attributes = sorted(faculty.attributes, key=lambda a: a.name)
+    icon_col_width = (ICON_SIZE + 10) if attributes else 0
+    text_width = max(2 * inch, width - icon_col_width)
+
+    text_table = Table(text_rows, colWidths=[text_width])
+    text_table.setStyle(TableStyle([
+        ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+    ]))
+
+    if not attributes:
+        return text_table, INFO_TEXT_HEIGHT
+
+    icon_rows = [[_attribute_flowable(a, pill_style)] for a in attributes]
+    icon_table = Table(icon_rows, colWidths=[icon_col_width])
+    icon_table.setStyle(TableStyle([
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), ICON_GAP / 2), ("BOTTOMPADDING", (0, 0), (-1, -1), ICON_GAP / 2),
+    ]))
+    icon_height = len(attributes) * (ICON_SIZE + ICON_GAP) + ICON_GAP
+
+    combined = Table([[text_table, icon_table]], colWidths=[text_width, icon_col_width])
+    combined.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    return combined, max(INFO_TEXT_HEIGHT, icon_height)
+
+
+def generate_faculty_schedule_pdf(
+    db: Session, term: Term, faculty: Faculty,
+    layout: str = DEFAULT_LAYOUT, header_scale: float = 1.0, footer_scale: float = 1.0,
+) -> bytes:
     weekdays, ticks, grid = build_faculty_schedule_grid(db, term, faculty)
+    axis, align = parse_layout(layout)
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -167,20 +244,6 @@ def generate_faculty_schedule_pdf(db: Session, term: Term, faculty: Faculty) -> 
     content_width = PAGE_WIDTH - 2 * MARGIN
 
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle("FacultyTitle", parent=styles["Title"], alignment=TA_CENTER, fontSize=22, leading=25)
-    info_style = ParagraphStyle(
-        "FacultyInfo", parent=styles["Normal"], alignment=TA_CENTER, fontSize=12,
-        textColor=colors.HexColor("#444444"),
-    )
-    subtitle_style = ParagraphStyle(
-        "FacultySubtitle", parent=styles["Normal"], alignment=TA_CENTER, fontSize=11,
-        textColor=colors.HexColor("#666666"),
-    )
-    pill_style = ParagraphStyle(
-        "AttributePill", parent=styles["Normal"], alignment=TA_CENTER, fontSize=8,
-        textColor=colors.HexColor("#444444"), borderColor=colors.HexColor("#aaaaaa"),
-        borderWidth=0.5, borderPadding=3,
-    )
     header_style = ParagraphStyle(
         "CellHeader", parent=styles["Normal"], fontSize=12, alignment=TA_CENTER,
         textColor=colors.HexColor("#222222"), fontName="Helvetica-Bold",
@@ -199,41 +262,19 @@ def generate_faculty_schedule_pdf(db: Session, term: Term, faculty: Faculty) -> 
     )
     EMPTY_PAD = (2, 2, 3, 3)
 
-    header_band, header_height = _fit_image_band("header", content_width, HEADER_IMAGE_MAX_HEIGHT)
-    footer_band, footer_height = _fit_image_band("footer", content_width, FOOTER_IMAGE_MAX_HEIGHT)
+    header_flowable, header_height, header_width = _fit_image_band("header", content_width, HEADER_IMAGE_MAX_HEIGHT * header_scale)
+    footer_band, footer_height, _ = _fit_image_band("footer", content_width, FOOTER_IMAGE_MAX_HEIGHT * footer_scale)
+    if footer_band:
+        footer_band.hAlign = "CENTER"
+
+    info_width = info_area_width(axis, header_flowable, header_width, content_width)
+    info_area, info_height = _build_faculty_info_area(faculty, term, align, info_width)
+    info_elements, info_section_height = compose_info_section(
+        header_flowable, header_height, header_width, info_area, info_height, layout, content_width
+    )
 
     elements = []
-    if header_band:
-        elements.append(header_band)
-        elements.append(Spacer(1, SECTION_GAP))
-
-    full_name = f"{faculty.first_name} {faculty.last_name}"
-    elements.append(Paragraph(escape(full_name), title_style))
-
-    info_bits = []
-    if faculty.rank:
-        info_bits.append(RANK_LABELS.get(faculty.rank.value, faculty.rank.value))
-    if faculty.office:
-        info_bits.append(f"Office: {faculty.office}")
-    if info_bits:
-        elements.append(Paragraph(escape("  |  ".join(info_bits)), info_style))
-
-    icon_row_height = 0
-    if faculty.attributes:
-        cells = [_attribute_flowable(a, pill_style) for a in sorted(faculty.attributes, key=lambda a: a.name)]
-        col_w = content_width / len(cells)
-        icon_table = Table([cells], colWidths=[col_w] * len(cells))
-        icon_table.setStyle(TableStyle([
-            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("TOPPADDING", (0, 0), (-1, -1), 2),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-        ]))
-        elements.append(Spacer(1, 3))
-        elements.append(icon_table)
-        icon_row_height = ICON_ROW_HEIGHT
-
-    elements.append(Paragraph(escape(f"{_term_label(term)} Schedule"), subtitle_style))
+    elements.extend(info_elements)
     elements.append(Spacer(1, SECTION_GAP))
 
     if not weekdays or not ticks:
@@ -245,10 +286,9 @@ def generate_faculty_schedule_pdf(db: Session, term: Term, faculty: Faculty) -> 
         return buf.getvalue()
 
     num_ticks = len(ticks)
-    header_reserved = (SECTION_GAP + header_height) if header_band else 0
     footer_reserved = (SECTION_GAP + footer_height) if footer_band else 0
     usable_height = (
-        PAGE_HEIGHT - 2 * MARGIN - header_reserved - INFO_BLOCK_HEIGHT - icon_row_height - SECTION_GAP
+        PAGE_HEIGHT - 2 * MARGIN - info_section_height - SECTION_GAP
         - WEEKDAY_ROW_HEIGHT - footer_reserved
     )
     tick_height = max(6, usable_height / num_ticks * 0.94)
@@ -270,7 +310,7 @@ def generate_faculty_schedule_pdf(db: Session, term: Term, faculty: Faculty) -> 
             if "empty_span" in cell:
                 span = cell["empty_span"]
                 block_height = span * tick_height
-                row.append(_make_card("", day_col_width, block_height, EMPTY_BG_COLOR, None, "MIDDLE", "CENTER", pad=EMPTY_PAD))
+                row.append(_make_card("", day_col_width, block_height, FACULTY_EMPTY_BG_COLOR, None, "MIDDLE", "CENTER", pad=EMPTY_PAD))
                 if span > 1:
                     span_commands.append(("SPAN", (c + 1, r + 1), (c + 1, r + span)))
                 continue

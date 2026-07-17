@@ -2,7 +2,7 @@ import io
 from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import TABLOID
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
@@ -46,6 +46,97 @@ PASTEL = [
     "#f0a6c9", "#c3e09a",
 ]
 MEETING_COLOR = "#8fb8d9"
+
+# --- Info section layout (feedback_63) ---
+# The "info section" is the header image + info area (room/faculty name,
+# term, etc) that sits above the schedule table. The Layout option only
+# changes how these two elements are positioned relative to each other —
+# never the info area's own internal structure.
+LAYOUT_OPTIONS = [
+    "vertical_center", "vertical_left", "vertical_right",
+    "horizontal_center", "horizontal_left", "horizontal_right",
+]
+DEFAULT_LAYOUT = "vertical_center"
+INFO_HEADER_GAP = 0.18 * inch
+
+_ALIGN_NAME = {"center": "CENTER", "left": "LEFT", "right": "RIGHT"}
+_ALIGN_TA = {"center": TA_CENTER, "left": TA_LEFT, "right": TA_RIGHT}
+
+
+def parse_layout(layout: str) -> tuple[str, str]:
+    """"horizontal_left" -> ("horizontal", "left"); anything unrecognized
+    falls back to vertical_center."""
+    if layout not in LAYOUT_OPTIONS:
+        layout = DEFAULT_LAYOUT
+    axis, align = layout.split("_", 1)
+    return axis, align
+
+
+def compose_info_section(header_flowable, header_height: float, header_width: float,
+                          info_area, info_area_height: float, layout: str, content_width: float):
+    """Arranges the header image and the info area (a single pre-built
+    flowable — see _build_*_info_area) per one of the 6 layout options.
+    Returns (elements: list, total_height: float)."""
+    axis, align = parse_layout(layout)
+    ra = _ALIGN_NAME[align]
+
+    if header_flowable is None:
+        info_area.hAlign = ra
+        return [info_area], info_area_height
+
+    header_flowable.hAlign = ra
+    info_area.hAlign = ra
+
+    if axis == "vertical":
+        return (
+            [header_flowable, Spacer(1, SECTION_GAP), info_area],
+            header_height + SECTION_GAP + info_area_height,
+        )
+
+    # horizontal — side by side in one row, the row itself positioned via hAlign
+    gap = Spacer(INFO_HEADER_GAP, 1)
+    row = Table([[header_flowable, gap, info_area]])
+    row.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    row.hAlign = ra
+    return [row], max(header_height, info_area_height)
+
+
+def info_area_width(axis: str, header_flowable, header_width: float, content_width: float) -> float:
+    """How wide the info area's own content should wrap to: full content
+    width when stacked vertically (or when there's no header image to share
+    the row with), otherwise whatever's left after the header image."""
+    if axis == "vertical" or header_flowable is None:
+        return content_width
+    return max(2.5 * inch, content_width - header_width - INFO_HEADER_GAP)
+
+
+def _build_room_info_area(room: Room, term: Term, align: str, width: float):
+    """The room export's info area — just a title + subtitle stack, text
+    alignment following the chosen Layout option. Returns (flowable, height)."""
+    ta = _ALIGN_TA[align]
+    title_style = ParagraphStyle("DoorTagTitle", parent=getSampleStyleSheet()["Title"], alignment=ta, fontSize=22, leading=25)
+    subtitle_style = ParagraphStyle(
+        "DoorTagSubtitle", parent=getSampleStyleSheet()["Normal"], alignment=ta, fontSize=12,
+        textColor=colors.HexColor("#444444"),
+    )
+    rows = [
+        [Paragraph(escape(room.display_label), title_style)],
+        [Paragraph(escape(f"{_term_label(term)} Schedule"), subtitle_style)],
+    ]
+    table = Table(rows, colWidths=[width])
+    table.setStyle(TableStyle([
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    return table, TITLE_HEIGHT
 
 
 def _entry_color(course_id: int | None) -> colors.HexColor:
@@ -165,40 +256,36 @@ def build_door_tag_grid(db: Session, term: Term, room: Room):
 
 def _fit_image_band(kind: str, content_width: float, max_height: float):
     """Loads the uploaded header/footer asset (if any) and returns
-    (flowable, actual_height) scaled to fit within content_width x max_height
-    while preserving aspect ratio. Returns (None, 0) if nothing is uploaded.
-    The caller needs the *actual* height (not just max_height) up front to
-    budget the rest of the page precisely enough to stay on one sheet."""
+    (flowable, actual_height, actual_width) scaled to fit within
+    content_width x max_height while preserving aspect ratio. Returns
+    (None, 0, 0) if nothing is uploaded. The flowable is returned bare (not
+    wrapped in a full-width centering Table) so callers can position it via
+    its own .hAlign — defaults to CENTER, matching the old always-centered
+    behavior, until a caller (see compose_info_section) overrides it. The
+    caller needs the *actual* height up front to budget the rest of the page
+    precisely enough to stay on one sheet."""
     path = assets.get_asset_path(kind)
     if not path:
-        return None, 0
+        return None, 0, 0
 
     if path.suffix.lower() == ".svg":
         drawing = svg2rlg(str(path))
         if not drawing or not drawing.width or not drawing.height:
-            return None, 0
+            return None, 0, 0
         scale = min(content_width / drawing.width, max_height / drawing.height)
         drawing.width *= scale
         drawing.height *= scale
         drawing.scale(scale, scale)
-        flowable, height = drawing, drawing.height
+        flowable, height, width = drawing, drawing.height, drawing.width
     else:
         reader = ImageReader(str(path))
         iw, ih = reader.getSize()
         scale = min(content_width / iw, max_height / ih)
         w, h = iw * scale, ih * scale
-        flowable, height = Image(str(path), width=w, height=h), h
+        flowable, height, width = Image(str(path), width=w, height=h), h, w
 
-    band = Table([[flowable]], colWidths=[content_width])
-    band.setStyle(TableStyle([
-        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("TOPPADDING", (0, 0), (-1, -1), 0),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-        ("LEFTPADDING", (0, 0), (-1, -1), 0),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-    ]))
-    return band, height
+    flowable.hAlign = "CENTER"
+    return flowable, height, width
 
 
 def _make_card(content, width: float, height: float, bg_color, edge_color, valign: str, halign: str, pad=(4, 3, 5, 5)):
@@ -225,8 +312,12 @@ def _make_card(content, width: float, height: float, bg_color, edge_color, valig
     return card
 
 
-def generate_door_tag_pdf(db: Session, term: Term, room: Room, empty_label: str) -> bytes:
+def generate_door_tag_pdf(
+    db: Session, term: Term, room: Room, empty_label: str,
+    layout: str = DEFAULT_LAYOUT, header_scale: float = 1.0, footer_scale: float = 1.0,
+) -> bytes:
     weekdays, ticks, grid = build_door_tag_grid(db, term, room)
+    axis, align = parse_layout(layout)
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -236,11 +327,6 @@ def generate_door_tag_pdf(db: Session, term: Term, room: Room, empty_label: str)
     content_width = PAGE_WIDTH - 2 * MARGIN
 
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle("DoorTagTitle", parent=styles["Title"], alignment=TA_CENTER, fontSize=22, leading=25)
-    subtitle_style = ParagraphStyle(
-        "DoorTagSubtitle", parent=styles["Normal"], alignment=TA_CENTER, fontSize=12,
-        textColor=colors.HexColor("#444444"),
-    )
     header_style = ParagraphStyle(
         "CellHeader", parent=styles["Normal"], fontSize=12, alignment=TA_CENTER,
         textColor=colors.HexColor("#222222"), fontName="Helvetica-Bold",
@@ -267,15 +353,19 @@ def generate_door_tag_pdf(db: Session, term: Term, room: Room, empty_label: str)
     )
     EMPTY_PAD = (2, 2, 3, 3)  # top, bottom, left, right — tighter than the course card's
 
-    header_band, header_height = _fit_image_band("header", content_width, HEADER_IMAGE_MAX_HEIGHT)
-    footer_band, footer_height = _fit_image_band("footer", content_width, FOOTER_IMAGE_MAX_HEIGHT)
+    header_flowable, header_height, header_width = _fit_image_band("header", content_width, HEADER_IMAGE_MAX_HEIGHT * header_scale)
+    footer_band, footer_height, _ = _fit_image_band("footer", content_width, FOOTER_IMAGE_MAX_HEIGHT * footer_scale)
+    if footer_band:
+        footer_band.hAlign = "CENTER"  # footer is never affected by the Layout option
+
+    info_width = info_area_width(axis, header_flowable, header_width, content_width)
+    info_area, info_height = _build_room_info_area(room, term, align, info_width)
+    info_elements, info_section_height = compose_info_section(
+        header_flowable, header_height, header_width, info_area, info_height, layout, content_width
+    )
 
     elements = []
-    if header_band:
-        elements.append(header_band)
-        elements.append(Spacer(1, SECTION_GAP))
-    elements.append(Paragraph(escape(room.display_label), title_style))
-    elements.append(Paragraph(escape(f"{_term_label(term)} Schedule"), subtitle_style))
+    elements.extend(info_elements)
     elements.append(Spacer(1, SECTION_GAP))
 
     if not weekdays or not ticks:
@@ -287,10 +377,9 @@ def generate_door_tag_pdf(db: Session, term: Term, room: Room, empty_label: str)
         return buf.getvalue()
 
     num_ticks = len(ticks)
-    header_reserved = (SECTION_GAP + header_height) if header_band else 0
     footer_reserved = (SECTION_GAP + footer_height) if footer_band else 0
     usable_height = (
-        PAGE_HEIGHT - 2 * MARGIN - header_reserved - TITLE_HEIGHT - SECTION_GAP
+        PAGE_HEIGHT - 2 * MARGIN - info_section_height - SECTION_GAP
         - WEEKDAY_ROW_HEIGHT - footer_reserved
     )
     # 0.94 safety factor: reportlab treats explicit rowHeights as targets, not

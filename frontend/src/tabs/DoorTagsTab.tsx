@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   termsApi, roomsApi, weekdaysApi, timeSlotsApi, tablesApi, entriesApi, coursesApi, facultyApi, meetingsApi,
-  termLabel, doorTagAssetsApi, doorTagSettingsApi,
+  termLabel, doorTagAssetsApi, doorTagSettingsApi, PDF_LAYOUT_OPTIONS,
   type Term, type Room, type Weekday, type TimeSlot, type ScheduleTable, type ScheduleEntry,
   type Course, type Faculty, type Meeting, type DoorTagSettings,
 } from '../api'
@@ -156,6 +156,9 @@ export function DoorTagsTab() {
   const [savingLabels, setSavingLabels] = useState(false)
   const [roomFilters, setRoomFilters] = useState<RoomFilter[]>([])
   const [deptOwnedOnly, setDeptOwnedOnly] = useState(true)
+  const [layout, setLayout] = useState('vertical_center')
+  const [headerScale, setHeaderScale] = useState(1)
+  const [footerScale, setFooterScale] = useState(1)
 
   const [tables, setTables] = useState<ScheduleTable[]>([])
   const [entries, setEntries] = useState<ScheduleEntry[]>([])
@@ -306,6 +309,9 @@ export function DoorTagsTab() {
       term_id: String(selectedTermId),
       room_id: String(roomId),
       empty_label: label,
+      layout,
+      header_scale: String(headerScale),
+      footer_scale: String(footerScale),
     })
     window.open(`/api/door-tags/pdf?${params.toString()}`, '_blank')
   }
@@ -395,6 +401,30 @@ export function DoorTagsTab() {
               </div>
             </div>
           ))}
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>Layout</div>
+            <select value={layout} onChange={e => setLayout(e.target.value)} style={{ padding: '5px 8px', fontSize: 13 }}>
+              {PDF_LAYOUT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>Header Size</div>
+            <input
+              type="number" min={0.25} max={3} step={0.1}
+              value={headerScale}
+              onChange={e => setHeaderScale(+e.target.value)}
+              style={{ padding: '5px 8px', fontSize: 13, width: 70 }}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>Footer Size</div>
+            <input
+              type="number" min={0.25} max={3} step={0.1}
+              value={footerScale}
+              onChange={e => setFooterScale(+e.target.value)}
+              style={{ padding: '5px 8px', fontSize: 13, width: 70 }}
+            />
+          </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>

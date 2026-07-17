@@ -209,7 +209,13 @@ export const facultyApi = {
   removeCourse: (fid: number, cid: number) => api.delete(`/faculty/${fid}/courses/${cid}`),
   addAttribute: (fid: number, attributeId: number) => api.post(`/faculty/${fid}/attributes/${attributeId}`),
   removeAttribute: (fid: number, attributeId: number) => api.delete(`/faculty/${fid}/attributes/${attributeId}`),
-  schedulePdfUrl: (facultyId: number, termId: number) => `/api/faculty/${facultyId}/schedule-pdf?term_id=${termId}`,
+  schedulePdfUrl: (facultyId: number, termId: number, opts?: { layout?: string; headerScale?: number; footerScale?: number }) => {
+    const params = new URLSearchParams({ term_id: String(termId) })
+    if (opts?.layout) params.set('layout', opts.layout)
+    if (opts?.headerScale != null) params.set('header_scale', String(opts.headerScale))
+    if (opts?.footerScale != null) params.set('footer_scale', String(opts.footerScale))
+    return `/api/faculty/${facultyId}/schedule-pdf?${params.toString()}`
+  },
 }
 
 export interface FacultyAttribute {
@@ -360,6 +366,18 @@ export const doorTagSettingsApi = {
   get: () => api.get<DoorTagSettings>('/door-tags/settings').then(r => r.data),
   update: (d: DoorTagSettings) => api.put<DoorTagSettings>('/door-tags/settings', d).then(r => r.data),
 }
+
+// Shared between the Room Schedule and Faculty Schedule PDF exports
+// (feedback_63) — controls how the header image and info area (name/term/
+// etc) are positioned relative to each other.
+export const PDF_LAYOUT_OPTIONS: { value: string; label: string }[] = [
+  { value: 'vertical_center', label: 'Vertical Center' },
+  { value: 'vertical_left', label: 'Vertical Left' },
+  { value: 'vertical_right', label: 'Vertical Right' },
+  { value: 'horizontal_center', label: 'Horizontal Center' },
+  { value: 'horizontal_left', label: 'Horizontal Left' },
+  { value: 'horizontal_right', label: 'Horizontal Right' },
+]
 
 export interface FacultyCourseLoad {
   display: string
