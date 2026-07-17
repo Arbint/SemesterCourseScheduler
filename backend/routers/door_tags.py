@@ -50,6 +50,7 @@ def door_tag_pdf(
     custom_width_in: float | None = None, custom_height_in: float | None = None,
     header_padding_in: float = DEFAULT_HEADER_PADDING_IN, info_padding_in: float = DEFAULT_INFO_PADDING_IN,
     name_font_scale: float = 1.0, semester_font_scale: float = 1.0, table_font_scale: float = 1.0,
+    header_offset_x_in: float = 0.0, header_offset_y_in: float = 0.0,
     inline: bool = False,
     db: Session = Depends(get_db),
 ):
@@ -67,10 +68,12 @@ def door_tag_pdf(
     name_font_scale = max(0.25, min(3.0, name_font_scale))
     semester_font_scale = max(0.25, min(3.0, semester_font_scale))
     table_font_scale = max(0.25, min(3.0, table_font_scale))
+    header_offset_x_in = max(-5.0, min(5.0, header_offset_x_in))
+    header_offset_y_in = max(-5.0, min(5.0, header_offset_y_in))
     content = generate_door_tag_pdf(
         db, term, room, empty_label, header_layout, info_layout, header_scale, footer_scale,
         page_size, orientation, custom_width_in, custom_height_in, header_padding_in, info_padding_in,
-        name_font_scale, semester_font_scale, table_font_scale,
+        name_font_scale, semester_font_scale, table_font_scale, header_offset_x_in, header_offset_y_in,
     )
     filename = f"door_tag_{room.building_code}{room.room_number}_{term.year}.pdf"
     disposition = "inline" if inline else "attachment"

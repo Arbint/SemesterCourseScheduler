@@ -16,7 +16,7 @@ from door_tag_pdf import (
     WEEKDAY_ROW_HEIGHT, HEADER_IMAGE_MAX_HEIGHT, FOOTER_IMAGE_MAX_HEIGHT, SECTION_GAP,
     GRID_LINE_COLOR, ENTRY_EDGE_COLOR, CELL_INSET, MEETING_COLOR,
     WEEKDAY_FULL, _entry_color, _merge_empty_runs, _term_label, _parse_hhmm, _format_clock,
-    _fit_image_band, _make_card, _text_item, wrap_as_single_flowable, _natural_width, _ALIGN_TA,
+    _fit_image_band, _make_card, _text_item, wrap_as_single_flowable, _natural_width, _ALIGN_TA, _OffsetFlowable,
     DEFAULT_LAYOUT, DEFAULT_PAGE_SIZE, DEFAULT_ORIENTATION, resolve_page_size,
     DEFAULT_HEADER_PADDING_IN, DEFAULT_INFO_PADDING_IN,
     parse_layout, compose_items, item_width, TITLE_LINE_HEIGHT, SUBLINE_HEIGHT,
@@ -243,6 +243,7 @@ def generate_faculty_schedule_pdf(
     header_padding_in: float = DEFAULT_HEADER_PADDING_IN, info_padding_in: float = DEFAULT_INFO_PADDING_IN,
     name_font_scale: float = 1.0, info_font_scale: float = 1.0, semester_font_scale: float = 1.0,
     table_font_scale: float = 1.0, icon_scale: float = 1.0,
+    header_offset_x_in: float = 0.0, header_offset_y_in: float = 0.0,
 ) -> bytes:
     weekdays, ticks, grid = build_faculty_schedule_grid(db, term, faculty)
     page_width, page_height = resolve_page_size(page_size, orientation, custom_width_in, custom_height_in)
@@ -275,6 +276,8 @@ def generate_faculty_schedule_pdf(
     EMPTY_PAD = (2, 2, 3, 3)
 
     header_flowable, header_height, header_width = _fit_image_band("header", content_width, HEADER_IMAGE_MAX_HEIGHT * header_scale)
+    if header_flowable is not None:
+        header_flowable = _OffsetFlowable(header_flowable, header_offset_x_in * inch, header_offset_y_in * inch)
     footer_band, footer_height, _ = _fit_image_band("footer", content_width, FOOTER_IMAGE_MAX_HEIGHT * footer_scale)
     if footer_band:
         footer_band.hAlign = "CENTER"

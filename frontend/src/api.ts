@@ -218,6 +218,8 @@ export function printConfigParams(config: PrintConfig): Record<string, string> {
     semester_font_scale: String(config.semester_font_scale),
     table_font_scale: String(config.table_font_scale),
     icon_scale: String(config.icon_scale),
+    header_offset_x_in: String(config.header_offset_x_in),
+    header_offset_y_in: String(config.header_offset_y_in),
   }
 }
 
@@ -449,6 +451,16 @@ export interface PrintConfig {
   semester_font_scale: number
   table_font_scale: number
   icon_scale: number
+  // Header image nudge (feedback_67) — dx/dy (inches) sent to the backend;
+  // the per-arrow step sizes are UI-only (how far one click moves it) and
+  // never leave the browser, but still live on PrintConfig so they're
+  // remembered by saved layout presets like everything else here.
+  header_offset_x_in: number
+  header_offset_y_in: number
+  header_offset_step_up_in: number
+  header_offset_step_down_in: number
+  header_offset_step_left_in: number
+  header_offset_step_right_in: number
 }
 
 // A layout's own "align" half controls Fill vs not; independent of axis.
@@ -470,6 +482,12 @@ export const DEFAULT_PRINT_CONFIG: PrintConfig = {
   semester_font_scale: 1,
   table_font_scale: 1,
   icon_scale: 1,
+  header_offset_x_in: 0,
+  header_offset_y_in: 0,
+  header_offset_step_up_in: 0.1,
+  header_offset_step_down_in: 0.1,
+  header_offset_step_left_in: 0.1,
+  header_offset_step_right_in: 0.1,
 }
 
 export interface PdfLayoutPreset {

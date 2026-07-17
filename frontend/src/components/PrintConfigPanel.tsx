@@ -168,6 +168,9 @@ export function PrintConfigPanel({ config, onChange, previewOptions, buildPrevie
             )}
           </div>
 
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start' }}>
+          <div style={{ flex: '1 1 480px', minWidth: 320 }}>
+
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 16 }}>
             {([
               { kind: 'header' as const, label: 'Header Image', has: hasHeaderImage, uploading: uploadingHeader, ref: headerFileRef },
@@ -218,6 +221,77 @@ export function PrintConfigPanel({ config, onChange, previewOptions, buildPrevie
                 onChange={e => set('footer_scale', +e.target.value)}
                 style={{ padding: '5px 8px', fontSize: 13, width: 70 }}
               />
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>Header Image Offset</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '44px 64px 44px', gap: 4, justifyItems: 'center' }}>
+                <div />
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                  <button
+                    type="button" className="btn-secondary btn-sm" title="Nudge up"
+                    onClick={() => set('header_offset_y_in', config.header_offset_y_in + config.header_offset_step_up_in)}
+                    style={{ padding: '2px 8px' }}
+                  >▲</button>
+                  <input
+                    type="number" min={0} step={0.05} title="Up step (in)"
+                    value={config.header_offset_step_up_in}
+                    onChange={e => set('header_offset_step_up_in', +e.target.value)}
+                    style={{ width: 44, padding: '2px 4px', fontSize: 11 }}
+                  />
+                </div>
+                <div />
+
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                  <button
+                    type="button" className="btn-secondary btn-sm" title="Nudge left"
+                    onClick={() => set('header_offset_x_in', config.header_offset_x_in - config.header_offset_step_left_in)}
+                    style={{ padding: '2px 8px' }}
+                  >◀</button>
+                  <input
+                    type="number" min={0} step={0.05} title="Left step (in)"
+                    value={config.header_offset_step_left_in}
+                    onChange={e => set('header_offset_step_left_in', +e.target.value)}
+                    style={{ width: 44, padding: '2px 4px', fontSize: 11 }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--text-secondary)', height: '100%' }}>
+                  <div>{config.header_offset_x_in.toFixed(2)}, {config.header_offset_y_in.toFixed(2)}</div>
+                  <button
+                    type="button" className="btn-secondary btn-sm" title="Reset offset"
+                    onClick={() => onChange({ ...config, header_offset_x_in: 0, header_offset_y_in: 0 })}
+                    style={{ padding: '1px 6px', fontSize: 10, marginTop: 2 }}
+                  >Reset</button>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                  <button
+                    type="button" className="btn-secondary btn-sm" title="Nudge right"
+                    onClick={() => set('header_offset_x_in', config.header_offset_x_in + config.header_offset_step_right_in)}
+                    style={{ padding: '2px 8px' }}
+                  >▶</button>
+                  <input
+                    type="number" min={0} step={0.05} title="Right step (in)"
+                    value={config.header_offset_step_right_in}
+                    onChange={e => set('header_offset_step_right_in', +e.target.value)}
+                    style={{ width: 44, padding: '2px 4px', fontSize: 11 }}
+                  />
+                </div>
+
+                <div />
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                  <button
+                    type="button" className="btn-secondary btn-sm" title="Nudge down"
+                    onClick={() => set('header_offset_y_in', config.header_offset_y_in - config.header_offset_step_down_in)}
+                    style={{ padding: '2px 8px' }}
+                  >▼</button>
+                  <input
+                    type="number" min={0} step={0.05} title="Down step (in)"
+                    value={config.header_offset_step_down_in}
+                    onChange={e => set('header_offset_step_down_in', +e.target.value)}
+                    style={{ width: 44, padding: '2px 4px', fontSize: 11 }}
+                  />
+                </div>
+                <div />
+              </div>
             </div>
           </div>
 
@@ -315,7 +389,9 @@ export function PrintConfigPanel({ config, onChange, previewOptions, buildPrevie
             </div>
           </div>
 
-          <div style={{ marginTop: 16, borderTop: '1px solid var(--border-color)', paddingTop: 12 }}>
+          </div>
+
+          <div style={{ flex: '1 1 420px', minWidth: 320, borderLeft: '1px solid var(--border-color)', paddingLeft: 24 }}>
             <div
               onClick={() => setPreviewOpen(o => !o)}
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}
@@ -349,6 +425,8 @@ export function PrintConfigPanel({ config, onChange, previewOptions, buildPrevie
                 </div>
               </div>
             )}
+          </div>
+
           </div>
         </div>
       )}

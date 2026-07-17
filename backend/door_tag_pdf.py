@@ -8,7 +8,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
-from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Flowable, Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sqlalchemy.orm import Session
 from svglib.svglib import svg2rlg
 
@@ -357,6 +357,32 @@ def build_door_tag_grid(db: Session, term: Term, room: Room):
     return weekdays, ticks, grid
 
 
+class _OffsetFlowable(Flowable):
+    """Wraps another flowable to nudge only its *drawn* position by (dx, dy)
+    points — the footprint (width/height) it reserves in the surrounding
+    layout is unchanged, so offsetting the header image (feedback_67) can't
+    disturb the header row's own spacing/alignment math. dx positive moves
+    right, dy positive moves up (reportlab's own canvas convention)."""
+    def __init__(self, inner, dx: float = 0.0, dy: float = 0.0):
+        Flowable.__init__(self)
+        self.inner = inner
+        self.dx = dx
+        self.dy = dy
+        self.width = getattr(inner, "width", 0)
+        self.height = getattr(inner, "height", 0)
+        self.hAlign = getattr(inner, "hAlign", "CENTER")
+
+    def wrap(self, availWidth, availHeight):
+        self.width, self.height = self.inner.wrap(availWidth, availHeight)
+        return self.width, self.height
+
+    def draw(self):
+        self.canv.saveState()
+        self.canv.translate(self.dx, self.dy)
+        self.inner.drawOn(self.canv, 0, 0)
+        self.canv.restoreState()
+
+
 def _fit_image_band(kind: str, content_width: float, max_height: float):
     """Loads the uploaded header/footer asset (if any) and returns
     (flowable, actual_height, actual_width) scaled to fit within
@@ -423,6 +449,7 @@ def generate_door_tag_pdf(
     custom_width_in: float | None = None, custom_height_in: float | None = None,
     header_padding_in: float = DEFAULT_HEADER_PADDING_IN, info_padding_in: float = DEFAULT_INFO_PADDING_IN,
     name_font_scale: float = 1.0, semester_font_scale: float = 1.0, table_font_scale: float = 1.0,
+    header_offset_x_in: float = 0.0, header_offset_y_in: float = 0.0,
 ) -> bytes:
     weekdays, ticks, grid = build_door_tag_grid(db, term, room)
     page_width, page_height = resolve_page_size(page_size, orientation, custom_width_in, custom_height_in)
@@ -463,6 +490,8 @@ def generate_door_tag_pdf(
     EMPTY_PAD = (2, 2, 3, 3)  # top, bottom, left, right — tighter than the course card's
 
     header_flowable, header_height, header_width = _fit_image_band("header", content_width, HEADER_IMAGE_MAX_HEIGHT * header_scale)
+    if header_flowable is not None:
+        header_flowable = _OffsetFlowable(header_flowable, header_offset_x_in * inch, header_offset_y_in * inch)
     footer_band, footer_height, _ = _fit_image_band("footer", content_width, FOOTER_IMAGE_MAX_HEIGHT * footer_scale)
     if footer_band:
         footer_band.hAlign = "CENTER"  # footer is never affected by the Layout option
