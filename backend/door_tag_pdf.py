@@ -214,19 +214,25 @@ def wrap_as_single_flowable(elements: list, width: float):
     return table
 
 
-def _build_room_info_area(room: Room, term: Term, info_layout: str, width: float, gap: float):
+def _build_room_info_area(
+    room: Room, term: Term, info_layout: str, width: float, gap: float,
+    name_font_scale: float = 1.0, semester_font_scale: float = 1.0,
+):
     """The room export's info area — a title + subtitle line, arranged per
     the Info Text Area Layout option. Returns (flowable, height, width)."""
     axis, align = parse_layout(info_layout)
     ta = _ALIGN_TA[align]
-    title_style = ParagraphStyle("DoorTagTitle", parent=getSampleStyleSheet()["Title"], alignment=ta, fontSize=22, leading=25)
+    title_style = ParagraphStyle(
+        "DoorTagTitle", parent=getSampleStyleSheet()["Title"], alignment=ta,
+        fontSize=22 * name_font_scale, leading=25 * name_font_scale,
+    )
     subtitle_style = ParagraphStyle(
-        "DoorTagSubtitle", parent=getSampleStyleSheet()["Normal"], alignment=ta, fontSize=12,
-        textColor=colors.HexColor("#444444"),
+        "DoorTagSubtitle", parent=getSampleStyleSheet()["Normal"], alignment=ta,
+        fontSize=12 * semester_font_scale, textColor=colors.HexColor("#444444"),
     )
     raw_lines = [
-        (room.display_label, title_style, TITLE_LINE_HEIGHT),
-        (f"{_term_label(term)} Schedule", subtitle_style, SUBLINE_HEIGHT),
+        (room.display_label, title_style, TITLE_LINE_HEIGHT * name_font_scale),
+        (f"{_term_label(term)} Schedule", subtitle_style, SUBLINE_HEIGHT * semester_font_scale),
     ]
     cap = item_width(info_layout, width, len(raw_lines))
     widths = [cap if align == "fill" else _natural_width(raw, style, cap) for raw, style, _h in raw_lines]
@@ -416,6 +422,7 @@ def generate_door_tag_pdf(
     page_size: str = DEFAULT_PAGE_SIZE, orientation: str = DEFAULT_ORIENTATION,
     custom_width_in: float | None = None, custom_height_in: float | None = None,
     header_padding_in: float = DEFAULT_HEADER_PADDING_IN, info_padding_in: float = DEFAULT_INFO_PADDING_IN,
+    name_font_scale: float = 1.0, semester_font_scale: float = 1.0, table_font_scale: float = 1.0,
 ) -> bytes:
     weekdays, ticks, grid = build_door_tag_grid(db, term, room)
     page_width, page_height = resolve_page_size(page_size, orientation, custom_width_in, custom_height_in)
@@ -427,29 +434,30 @@ def generate_door_tag_pdf(
     )
     content_width = page_width - 2 * MARGIN
 
+    tfs = table_font_scale
     styles = getSampleStyleSheet()
     header_style = ParagraphStyle(
-        "CellHeader", parent=styles["Normal"], fontSize=12, alignment=TA_CENTER,
+        "CellHeader", parent=styles["Normal"], fontSize=12 * tfs, alignment=TA_CENTER,
         textColor=colors.HexColor("#222222"), fontName="Helvetica-Bold",
     )
     time_style = ParagraphStyle(
-        "TimeCell", parent=styles["Normal"], fontSize=7, alignment=TA_CENTER,
-        fontName="Helvetica-Bold", textColor=colors.HexColor("#333333"), leading=8,
+        "TimeCell", parent=styles["Normal"], fontSize=7 * tfs, alignment=TA_CENTER,
+        fontName="Helvetica-Bold", textColor=colors.HexColor("#333333"), leading=8 * tfs,
     )
     cell_body_style = ParagraphStyle(
-        "CellBody", parent=styles["Normal"], fontSize=9.5, alignment=TA_LEFT, leading=12,
+        "CellBody", parent=styles["Normal"], fontSize=9.5 * tfs, alignment=TA_LEFT, leading=12 * tfs,
         textColor=colors.black, fontName="Helvetica-Bold",
     )
     cell_time_style = ParagraphStyle(
-        "CellTime", parent=styles["Normal"], fontSize=8, alignment=TA_LEFT, leading=10,
+        "CellTime", parent=styles["Normal"], fontSize=8 * tfs, alignment=TA_LEFT, leading=10 * tfs,
         textColor=colors.HexColor("#333333"),
     )
     empty_style = ParagraphStyle(
-        "EmptyCell", parent=styles["Normal"], fontSize=8, leading=9, alignment=TA_CENTER,
+        "EmptyCell", parent=styles["Normal"], fontSize=8 * tfs, leading=9 * tfs, alignment=TA_CENTER,
         textColor=colors.white, fontName="Helvetica-Bold",
     )
     empty_time_style = ParagraphStyle(
-        "EmptyCellTime", parent=styles["Normal"], fontSize=6.5, leading=7.5, alignment=TA_CENTER,
+        "EmptyCellTime", parent=styles["Normal"], fontSize=6.5 * tfs, leading=7.5 * tfs, alignment=TA_CENTER,
         textColor=colors.HexColor("#dddddd"),
     )
     EMPTY_PAD = (2, 2, 3, 3)  # top, bottom, left, right — tighter than the course card's
@@ -464,7 +472,9 @@ def generate_door_tag_pdf(
 
     num_header_items = 1 + (1 if header_flowable else 0)
     info_width = item_width(header_layout, content_width, num_header_items)
-    info_area, info_height, info_block_width = _build_room_info_area(room, term, info_layout, info_width, info_gap)
+    info_area, info_height, info_block_width = _build_room_info_area(
+        room, term, info_layout, info_width, info_gap, name_font_scale, semester_font_scale,
+    )
 
     header_items = [
         {"flowable": header_flowable, "height": header_height, "width": header_width},

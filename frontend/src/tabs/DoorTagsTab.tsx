@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   termsApi, roomsApi, weekdaysApi, timeSlotsApi, tablesApi, entriesApi, coursesApi, facultyApi, meetingsApi,
-  termLabel, doorTagSettingsApi, printConfigParams, DEFAULT_PRINT_CONFIG,
+  termLabel, doorTagSettingsApi, doorTagPdfUrl, DEFAULT_PRINT_CONFIG,
   type Term, type Room, type Weekday, type TimeSlot, type ScheduleTable, type ScheduleEntry,
   type Course, type Faculty, type Meeting, type DoorTagSettings, type PrintConfig,
 } from '../api'
@@ -265,19 +265,20 @@ export function DoorTagsTab() {
   const removeRoomFilter = (id: string) => setRoomFilters(prev => prev.filter(f => f.id !== id))
   const toggleRoomFilterNot = (id: string) => setRoomFilters(prev => prev.map(f => f.id === id ? { ...f, negated: !f.negated } : f))
 
-  const exportPdf = (roomId: number) => {
-    if (!selectedTermId) return
+  // Shared by the per-room Export button and the Export Configuration
+  // preview (feedback_66) so both build the exact same URL.
+  const buildRoomPdfUrl = (roomId: number): string | null => {
+    if (!selectedTermId) return null
     const room = rooms.find(r => r.id === roomId)
     const label = room?.is_department_owned
       ? (savedLabels.department_empty_label || DEFAULT_DEPARTMENT_EMPTY_LABEL)
       : (savedLabels.shared_empty_label || DEFAULT_SHARED_EMPTY_LABEL)
-    const params = new URLSearchParams({
-      term_id: String(selectedTermId),
-      room_id: String(roomId),
-      empty_label: label,
-      ...printConfigParams(printConfig),
-    })
-    window.open(`/api/door-tags/pdf?${params.toString()}`, '_blank')
+    return doorTagPdfUrl(selectedTermId, roomId, label, printConfig)
+  }
+
+  const exportPdf = (roomId: number) => {
+    const url = buildRoomPdfUrl(roomId)
+    if (url) window.open(url, '_blank')
   }
 
   return (
@@ -329,7 +330,12 @@ export function DoorTagsTab() {
           )}
         </div>
 
-        <PrintConfigPanel config={printConfig} onChange={setPrintConfig} />
+        <PrintConfigPanel
+          config={printConfig}
+          onChange={setPrintConfig}
+          previewOptions={sortedRooms.map(r => ({ id: r.id, label: r.display_label }))}
+          buildPreviewUrl={buildRoomPdfUrl}
+        />
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
           <RoomFilterBar

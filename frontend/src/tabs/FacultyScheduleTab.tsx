@@ -529,7 +529,13 @@ export function FacultyScheduleTab() {
           </label>
         </div>
 
-        <PrintConfigPanel config={printConfig} onChange={setPrintConfig} />
+        <PrintConfigPanel
+          config={printConfig}
+          onChange={setPrintConfig}
+          previewOptions={sortedFaculty.map(f => ({ id: f.id, label: facultyDisplayName(f) }))}
+          buildPreviewUrl={id => selectedTermId != null ? facultyApi.schedulePdfUrl(id, selectedTermId, printConfig) : null}
+          showIconSize
+        />
 
         {!selectedTerm ? (
           <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Select a term.</div>

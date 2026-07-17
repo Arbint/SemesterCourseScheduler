@@ -147,7 +147,7 @@ def build_faculty_schedule_grid(db: Session, term: Term, faculty: Faculty):
     return weekdays, ticks, grid
 
 
-def _attribute_flowable(attribute, pill_style):
+def _attribute_flowable(attribute, pill_style, icon_size: float):
     path = attr_assets.get_asset_path(attribute.id)
     if not path:
         return Paragraph(escape(attribute.name), pill_style)
@@ -155,28 +155,40 @@ def _attribute_flowable(attribute, pill_style):
         drawing = svg2rlg(str(path))
         if not drawing or not drawing.width or not drawing.height:
             return Paragraph(escape(attribute.name), pill_style)
-        scale = min(ICON_SIZE / drawing.width, ICON_SIZE / drawing.height)
+        scale = min(icon_size / drawing.width, icon_size / drawing.height)
         drawing.width *= scale
         drawing.height *= scale
         drawing.scale(scale, scale)
         return drawing
     reader = ImageReader(str(path))
     iw, ih = reader.getSize()
-    scale = min(ICON_SIZE / iw, ICON_SIZE / ih)
+    scale = min(icon_size / iw, icon_size / ih)
     return Image(str(path), width=iw * scale, height=ih * scale)
 
 
-def _build_faculty_info_area(faculty: Faculty, term: Term, info_layout: str, width: float, gap: float):
+def _build_faculty_info_area(
+    faculty: Faculty, term: Term, info_layout: str, width: float, gap: float,
+    name_font_scale: float = 1.0, info_font_scale: float = 1.0, semester_font_scale: float = 1.0,
+):
     """The faculty export's info area — name / rank-office / term lines,
     arranged per the Info Text Area Layout option. Returns (flowable, height, width)."""
     axis, align = parse_layout(info_layout)
     ta = _ALIGN_TA[align]
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle("FacultyTitle", parent=styles["Title"], alignment=ta, fontSize=22, leading=25)
-    info_style = ParagraphStyle("FacultyInfo", parent=styles["Normal"], alignment=ta, fontSize=12, textColor=colors.HexColor("#444444"))
-    subtitle_style = ParagraphStyle("FacultySubtitle", parent=styles["Normal"], alignment=ta, fontSize=11, textColor=colors.HexColor("#666666"))
+    title_style = ParagraphStyle(
+        "FacultyTitle", parent=styles["Title"], alignment=ta,
+        fontSize=22 * name_font_scale, leading=25 * name_font_scale,
+    )
+    info_style = ParagraphStyle(
+        "FacultyInfo", parent=styles["Normal"], alignment=ta,
+        fontSize=12 * info_font_scale, textColor=colors.HexColor("#444444"),
+    )
+    subtitle_style = ParagraphStyle(
+        "FacultySubtitle", parent=styles["Normal"], alignment=ta,
+        fontSize=11 * semester_font_scale, textColor=colors.HexColor("#666666"),
+    )
 
-    lines_data = [(f"{faculty.first_name} {faculty.last_name}", title_style, TITLE_LINE_HEIGHT)]
+    lines_data = [(f"{faculty.first_name} {faculty.last_name}", title_style, TITLE_LINE_HEIGHT * name_font_scale)]
 
     info_bits = []
     if faculty.rank:
@@ -184,9 +196,9 @@ def _build_faculty_info_area(faculty: Faculty, term: Term, info_layout: str, wid
     if faculty.office:
         info_bits.append(f"Office: {faculty.office}")
     if info_bits:
-        lines_data.append(("  |  ".join(info_bits), info_style, SUBLINE_HEIGHT))
+        lines_data.append(("  |  ".join(info_bits), info_style, SUBLINE_HEIGHT * info_font_scale))
 
-    lines_data.append((f"{_term_label(term)} Schedule", subtitle_style, SUBLINE_HEIGHT))
+    lines_data.append((f"{_term_label(term)} Schedule", subtitle_style, SUBLINE_HEIGHT * semester_font_scale))
 
     cap = item_width(info_layout, width, len(lines_data))
     widths = [cap if align == "fill" else _natural_width(text, style, cap) for text, style, _h in lines_data]
@@ -197,7 +209,7 @@ def _build_faculty_info_area(faculty: Faculty, term: Term, info_layout: str, wid
     return wrap_as_single_flowable(elements, block_width), height, block_width
 
 
-def _build_attribute_icon_area(faculty: Faculty):
+def _build_attribute_icon_area(faculty: Faculty, icon_scale: float = 1.0):
     """The attribute icon area — always a vertical stack of icons (or a text
     pill fallback for attributes with no uploaded icon), independent of the
     Header Section Layout option. Returns (flowable | None, height, width)."""
@@ -205,19 +217,20 @@ def _build_attribute_icon_area(faculty: Faculty):
     if not attributes:
         return None, 0, 0
 
+    icon_size = ICON_SIZE * icon_scale
     pill_style = ParagraphStyle(
         "AttributePill", parent=getSampleStyleSheet()["Normal"], alignment=TA_CENTER, fontSize=8,
         textColor=colors.HexColor("#444444"), borderColor=colors.HexColor("#aaaaaa"),
         borderWidth=0.5, borderPadding=3,
     )
-    width = ICON_SIZE + 10
-    rows = [[_attribute_flowable(a, pill_style)] for a in attributes]
+    width = icon_size + 10
+    rows = [[_attribute_flowable(a, pill_style, icon_size)] for a in attributes]
     table = Table(rows, colWidths=[width])
     table.setStyle(TableStyle([
         ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("TOPPADDING", (0, 0), (-1, -1), ICON_GAP / 2), ("BOTTOMPADDING", (0, 0), (-1, -1), ICON_GAP / 2),
     ]))
-    height = len(attributes) * (ICON_SIZE + ICON_GAP) + ICON_GAP
+    height = len(attributes) * (icon_size + ICON_GAP) + ICON_GAP
     return table, height, width
 
 
@@ -228,6 +241,8 @@ def generate_faculty_schedule_pdf(
     page_size: str = DEFAULT_PAGE_SIZE, orientation: str = DEFAULT_ORIENTATION,
     custom_width_in: float | None = None, custom_height_in: float | None = None,
     header_padding_in: float = DEFAULT_HEADER_PADDING_IN, info_padding_in: float = DEFAULT_INFO_PADDING_IN,
+    name_font_scale: float = 1.0, info_font_scale: float = 1.0, semester_font_scale: float = 1.0,
+    table_font_scale: float = 1.0, icon_scale: float = 1.0,
 ) -> bytes:
     weekdays, ticks, grid = build_faculty_schedule_grid(db, term, faculty)
     page_width, page_height = resolve_page_size(page_size, orientation, custom_width_in, custom_height_in)
@@ -239,21 +254,22 @@ def generate_faculty_schedule_pdf(
     )
     content_width = page_width - 2 * MARGIN
 
+    tfs = table_font_scale
     styles = getSampleStyleSheet()
     header_style = ParagraphStyle(
-        "CellHeader", parent=styles["Normal"], fontSize=12, alignment=TA_CENTER,
+        "CellHeader", parent=styles["Normal"], fontSize=12 * tfs, alignment=TA_CENTER,
         textColor=colors.HexColor("#222222"), fontName="Helvetica-Bold",
     )
     time_style = ParagraphStyle(
-        "TimeCell", parent=styles["Normal"], fontSize=7, alignment=TA_CENTER,
-        fontName="Helvetica-Bold", textColor=colors.HexColor("#333333"), leading=8,
+        "TimeCell", parent=styles["Normal"], fontSize=7 * tfs, alignment=TA_CENTER,
+        fontName="Helvetica-Bold", textColor=colors.HexColor("#333333"), leading=8 * tfs,
     )
     cell_body_style = ParagraphStyle(
-        "CellBody", parent=styles["Normal"], fontSize=9.5, alignment=TA_LEFT, leading=12,
+        "CellBody", parent=styles["Normal"], fontSize=9.5 * tfs, alignment=TA_LEFT, leading=12 * tfs,
         textColor=colors.black, fontName="Helvetica-Bold",
     )
     cell_time_style = ParagraphStyle(
-        "CellTime", parent=styles["Normal"], fontSize=8, alignment=TA_LEFT, leading=10,
+        "CellTime", parent=styles["Normal"], fontSize=8 * tfs, alignment=TA_LEFT, leading=10 * tfs,
         textColor=colors.HexColor("#333333"),
     )
     EMPTY_PAD = (2, 2, 3, 3)
@@ -263,14 +279,16 @@ def generate_faculty_schedule_pdf(
     if footer_band:
         footer_band.hAlign = "CENTER"
 
-    icon_flowable, icon_height, icon_width = _build_attribute_icon_area(faculty)
+    icon_flowable, icon_height, icon_width = _build_attribute_icon_area(faculty, icon_scale)
 
     header_gap = max(0.0, header_padding_in) * inch
     info_gap = max(0.0, info_padding_in) * inch
 
     num_header_items = (1 if header_flowable else 0) + 1 + (1 if icon_flowable else 0)
     info_width = item_width(header_layout, content_width, num_header_items)
-    info_area, info_height, info_block_width = _build_faculty_info_area(faculty, term, info_layout, info_width, info_gap)
+    info_area, info_height, info_block_width = _build_faculty_info_area(
+        faculty, term, info_layout, info_width, info_gap, name_font_scale, info_font_scale, semester_font_scale,
+    )
 
     header_items = [
         {"flowable": header_flowable, "height": header_height, "width": header_width},

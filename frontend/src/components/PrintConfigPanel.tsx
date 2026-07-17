@@ -7,10 +7,18 @@ import {
 import { FormModal } from './FormModal'
 import { showToast } from './Toast'
 import { useAuth } from '../contexts/AuthContext'
+import { SearchableSelect, type SearchableOption } from './SearchableSelect'
 
 interface PrintConfigPanelProps {
   config: PrintConfig
   onChange: (config: PrintConfig) => void
+  // Preview sub-section (feedback_66) — the entity list to search ("which
+  // table to preview" = which room/faculty schedule, whichever this export
+  // is keyed on) and a URL builder closing over the caller's own term/label
+  // state. Icon Size only makes sense for the Faculty Schedule export.
+  previewOptions: SearchableOption[]
+  buildPreviewUrl: (entityId: number) => string | null
+  showIconSize?: boolean
 }
 
 // Collapsible "Export Configuration" section (feedback_64/65) shared by the
@@ -20,7 +28,7 @@ interface PrintConfigPanelProps {
 // with its own padding spin box once its layout isn't Fill), and
 // saved-preset load/save. Fully controlled: the caller owns `config` and
 // threads it into its own export URL builder.
-export function PrintConfigPanel({ config, onChange }: PrintConfigPanelProps) {
+export function PrintConfigPanel({ config, onChange, previewOptions, buildPreviewUrl, showIconSize }: PrintConfigPanelProps) {
   const { isLoggedIn } = useAuth()
   const [open, setOpen] = useState(false)
   const [presets, setPresets] = useState<PdfLayoutPreset[]>([])
@@ -35,6 +43,35 @@ export function PrintConfigPanel({ config, onChange }: PrintConfigPanelProps) {
   const [uploadingFooter, setUploadingFooter] = useState(false)
   const headerFileRef = useRef<HTMLInputElement>(null)
   const footerFileRef = useRef<HTMLInputElement>(null)
+
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewEntityId, setPreviewEntityId] = useState<number | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+
+  // buildPreviewUrl is a fresh closure every parent render — read it via a
+  // ref so the debounce effect below only reacts to *semantic* changes
+  // (previewOpen/previewEntityId/config), not the caller re-rendering.
+  const buildPreviewUrlRef = useRef(buildPreviewUrl)
+  buildPreviewUrlRef.current = buildPreviewUrl
+
+  // Debounced so dragging a spinner or typing a font-size value doesn't
+  // re-render the PDF on every keystroke — only once things settle. The
+  // export routes default to Content-Disposition: attachment (so the
+  // Export button downloads a file); the preview needs the PDF to render
+  // in-place instead, so it appends inline=true to whatever URL the caller
+  // builds rather than downloading it.
+  useEffect(() => {
+    if (!previewOpen || previewEntityId == null) { setPreviewUrl(null); return }
+    const handle = setTimeout(() => {
+      const url = buildPreviewUrlRef.current(previewEntityId)
+      setPreviewUrl(url ? `${url}${url.includes('?') ? '&' : '?'}inline=true` : null)
+    }, 500)
+    return () => clearTimeout(handle)
+  }, [previewOpen, previewEntityId, config])
+
+  useEffect(() => {
+    if (previewEntityId == null && previewOptions.length > 0) setPreviewEntityId(previewOptions[0].id)
+  }, [previewOptions, previewEntityId])
 
   const loadPresets = () => pdfPresetsApi.list().then(setPresets)
 
@@ -185,6 +222,26 @@ export function PrintConfigPanel({ config, onChange }: PrintConfigPanelProps) {
           </div>
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 16 }}>
+            {([
+              { key: 'name_font_scale' as const, label: 'Name Font Size' },
+              { key: 'info_font_scale' as const, label: 'Info Font Size' },
+              { key: 'semester_font_scale' as const, label: 'Semester Font Size' },
+              { key: 'table_font_scale' as const, label: 'Table Font Size' },
+              ...(showIconSize ? [{ key: 'icon_scale' as const, label: 'Icon Size' }] : []),
+            ]).map(({ key, label }) => (
+              <div key={key}>
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>{label}</div>
+                <input
+                  type="number" min={0.25} max={3} step={0.1}
+                  value={config[key]}
+                  onChange={e => set(key, +e.target.value)}
+                  style={{ padding: '5px 8px', fontSize: 13, width: 70 }}
+                />
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 16 }}>
             <div>
               <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>Orientation</div>
               <select value={config.orientation} onChange={e => set('orientation', e.target.value)} style={{ padding: '5px 8px', fontSize: 13 }}>
@@ -256,6 +313,42 @@ export function PrintConfigPanel({ config, onChange }: PrintConfigPanelProps) {
                 </div>
               )}
             </div>
+          </div>
+
+          <div style={{ marginTop: 16, borderTop: '1px solid var(--border-color)', paddingTop: 12 }}>
+            <div
+              onClick={() => setPreviewOpen(o => !o)}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}
+            >
+              <h4 style={{ margin: 0, fontSize: 13, color: 'var(--text-bright)' }}>Preview</h4>
+              <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{previewOpen ? '▲ Collapse' : '▼ Expand'}</span>
+            </div>
+
+            {previewOpen && (
+              <div style={{ marginTop: 12 }}>
+                <SearchableSelect
+                  options={previewOptions}
+                  selectedId={previewEntityId}
+                  onSelect={setPreviewEntityId}
+                  placeholder="Select to preview..."
+                  searchPlaceholder="Search..."
+                />
+                <div style={{ marginTop: 12 }}>
+                  {previewUrl ? (
+                    <iframe
+                      key={previewEntityId ?? undefined}
+                      src={previewUrl}
+                      title="Export preview"
+                      style={{ width: '100%', height: 700, border: '1px solid var(--border-color)', borderRadius: 4, background: '#fff' }}
+                    />
+                  ) : (
+                    <div style={{ color: 'var(--text-secondary)', fontSize: 13, padding: 12 }}>
+                      {previewOptions.length === 0 ? 'Nothing available to preview yet.' : 'Select an item above to preview its export.'}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

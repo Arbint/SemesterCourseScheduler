@@ -213,6 +213,11 @@ export function printConfigParams(config: PrintConfig): Record<string, string> {
     custom_height_in: String(config.custom_height_in),
     header_padding_in: String(config.header_padding_in),
     info_padding_in: String(config.info_padding_in),
+    name_font_scale: String(config.name_font_scale),
+    info_font_scale: String(config.info_font_scale),
+    semester_font_scale: String(config.semester_font_scale),
+    table_font_scale: String(config.table_font_scale),
+    icon_scale: String(config.icon_scale),
   }
 }
 
@@ -381,6 +386,16 @@ export const doorTagSettingsApi = {
   update: (d: DoorTagSettings) => api.put<DoorTagSettings>('/door-tags/settings', d).then(r => r.data),
 }
 
+// Mirrors facultyApi.schedulePdfUrl — shared by the Room Schedule tab's
+// Export button and the Export Configuration preview (feedback_66).
+export function doorTagPdfUrl(termId: number, roomId: number, emptyLabel: string, config: PrintConfig): string {
+  const params = new URLSearchParams({
+    term_id: String(termId), room_id: String(roomId), empty_label: emptyLabel,
+    ...printConfigParams(config),
+  })
+  return `/api/door-tags/pdf?${params.toString()}`
+}
+
 // Shared between the Room Schedule and Faculty Schedule PDF exports
 // (feedback_63/64). Two independent dropdowns reuse this same 8-option set:
 // one for the header section's 3 items (header image / info text area /
@@ -426,6 +441,14 @@ export interface PrintConfig {
   // options (feedback_65).
   header_padding_in: number
   info_padding_in: number
+  // Scale multipliers (feedback_66) on top of each element's base point
+  // size, same convention as header_scale/footer_scale above. icon_scale
+  // only affects the Faculty Schedule export (rooms have no attribute icons).
+  name_font_scale: number
+  info_font_scale: number
+  semester_font_scale: number
+  table_font_scale: number
+  icon_scale: number
 }
 
 // A layout's own "align" half controls Fill vs not; independent of axis.
@@ -442,6 +465,11 @@ export const DEFAULT_PRINT_CONFIG: PrintConfig = {
   custom_height_in: 17,
   header_padding_in: 0.2,
   info_padding_in: 0.1,
+  name_font_scale: 1,
+  info_font_scale: 1,
+  semester_font_scale: 1,
+  table_font_scale: 1,
+  icon_scale: 1,
 }
 
 export interface PdfLayoutPreset {
