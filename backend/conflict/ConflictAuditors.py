@@ -38,9 +38,30 @@ def _entry_label(entry) -> str:
 
 def _time_slot_minutes(slot) -> int:
     """Minutes between a TimeSlot's start_time/end_time, both "HH:MM" 24h strings."""
-    sh, sm = (int(x) for x in slot.start_time.split(":"))
-    eh, em = (int(x) for x in slot.end_time.split(":"))
+    return _minutes_between(slot.start_time, slot.end_time)
+
+
+def _minutes_between(start: str, end: str) -> int:
+    """Minutes between two "HH:MM" 24h strings."""
+    sh, sm = (int(x) for x in start.split(":"))
+    eh, em = (int(x) for x in end.split(":"))
     return (eh * 60 + em) - (sh * 60 + sm)
+
+
+def _time_ranges_overlap(a_start: str, a_end: str, b_start: str, b_end: str) -> bool:
+    """Half-open interval overlap on zero-padded "HH:MM" strings — lexicographic
+    comparison is valid here since the format is fixed-width."""
+    return a_start < b_end and b_start < a_end
+
+
+def _entry_time_range(entry) -> tuple[str, str] | None:
+    """A ScheduleEntry's overall (start, end) "HH:MM" span across its (assumed
+    contiguous) time slots, or None if it has none."""
+    if not entry.time_slots:
+        return None
+    starts = [ts.start_time for ts in entry.time_slots]
+    ends = [ts.end_time for ts in entry.time_slots]
+    return min(starts), max(ends)
 
 
 def _entry_frequency(entry):
@@ -305,13 +326,16 @@ class OfficeHourConflict(ConflictAuditor):
     def Audit(self, term) -> list[ConflictReport]:
         reports = []
         office_hours = list(term.office_hours)
-        entries = [e for e in term.schedule_entries if e.faculty_id and e.time_slots and e.schedule_table_id and e.schedule_table]
+        # Courses (faculty_id set) only conflict with that same faculty's office
+        # hours; meetings (faculty_id always None) are department-wide and block
+        # every faculty's office hours regardless of whose entry it is.
+        entries = [e for e in term.schedule_entries if (e.faculty_id or e.meeting_id) and e.time_slots and e.schedule_table_id and e.schedule_table]
 
         for i, a in enumerate(office_hours):
             for b in office_hours[i + 1:]:
                 if a.faculty_id != b.faculty_id or a.weekday_id != b.weekday_id:
                     continue
-                if not _slots_overlap(a.time_slots, b.time_slots):
+                if not _time_ranges_overlap(a.start_time, a.end_time, b.start_time, b.end_time):
                     continue
                 reports.append(ConflictReport(
                     courses=[],
@@ -321,11 +345,12 @@ class OfficeHourConflict(ConflictAuditor):
 
         for oh in office_hours:
             for e in entries:
-                if e.faculty_id != oh.faculty_id:
+                if not e.meeting_id and e.faculty_id != oh.faculty_id:
                     continue
                 if oh.weekday_id not in _get_effective_weekdays(e):
                     continue
-                if not _slots_overlap(oh.time_slots, e.time_slots):
+                rng = _entry_time_range(e)
+                if not rng or not _time_ranges_overlap(oh.start_time, oh.end_time, rng[0], rng[1]):
                     continue
                 reports.append(ConflictReport(
                     courses=[e.course_id] if e.course_id else [],
@@ -348,9 +373,7 @@ class MinOfficeHours(ConflictAuditor):
         teaching_faculty_ids = {e.faculty_id for e in term.schedule_entries if e.faculty_id}
         minutes_by_faculty: dict[int, int] = {}
         for oh in term.office_hours:
-            minutes_by_faculty[oh.faculty_id] = minutes_by_faculty.get(oh.faculty_id, 0) + sum(
-                _time_slot_minutes(ts) for ts in oh.time_slots
-            )
+            minutes_by_faculty[oh.faculty_id] = minutes_by_faculty.get(oh.faculty_id, 0) + _minutes_between(oh.start_time, oh.end_time)
 
         for fid in teaching_faculty_ids:
             total = minutes_by_faculty.get(fid, 0)

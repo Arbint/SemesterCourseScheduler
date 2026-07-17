@@ -236,15 +236,17 @@ class MeetingOut(MeetingBase):
     term_id: int
 
 
-# --- OfficeHour ---
+# --- OfficeHour (feedback_57: free-form start/end, not slot-quantized) ---
 
 class OfficeHourCreate(BaseModel):
     term_id: int
     weekday_id: int
-    time_slot_ids: list[int] = []
+    start_time: str  # "HH:MM" 24h
+    end_time: str
 
-class OfficeHourResize(BaseModel):
-    time_slot_ids: list[int] = []
+class OfficeHourUpdate(BaseModel):
+    start_time: str
+    end_time: str
 
 class OfficeHourOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -252,17 +254,8 @@ class OfficeHourOut(BaseModel):
     term_id: int
     faculty_id: int
     weekday_id: int
-    time_slot_ids: list[int] = []
-
-    @classmethod
-    def from_orm(cls, office_hour):
-        return cls(
-            id=office_hour.id,
-            term_id=office_hour.term_id,
-            faculty_id=office_hour.faculty_id,
-            weekday_id=office_hour.weekday_id,
-            time_slot_ids=[ts.id for ts in office_hour.time_slots],
-        )
+    start_time: str
+    end_time: str
 
 
 class IssueItem(BaseModel):

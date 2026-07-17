@@ -155,7 +155,8 @@ export interface OfficeHour {
   term_id: number
   faculty_id: number
   weekday_id: number
-  time_slot_ids: number[]
+  start_time: string
+  end_time: string
 }
 
 export interface IssueItem {
@@ -301,10 +302,10 @@ export const meetingsApi = {
 
 export const officeHoursApi = {
   list: (termId: number) => api.get<OfficeHour[]>(`/terms/${termId}/office-hours`).then(r => r.data),
-  create: (facultyId: number, d: { term_id: number; weekday_id: number; time_slot_ids: number[] }) =>
+  create: (facultyId: number, d: { term_id: number; weekday_id: number; start_time: string; end_time: string }) =>
     api.post<OfficeHour>(`/faculty/${facultyId}/office-hours`, d).then(r => r.data),
-  resize: (id: number, time_slot_ids: number[]) =>
-    api.put<OfficeHour>(`/office-hours/${id}`, { time_slot_ids }).then(r => r.data),
+  update: (id: number, d: { start_time: string; end_time: string }) =>
+    api.put<OfficeHour>(`/office-hours/${id}`, d).then(r => r.data),
   delete: (id: number) => api.delete(`/office-hours/${id}`),
 }
 

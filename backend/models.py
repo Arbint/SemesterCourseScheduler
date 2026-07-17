@@ -48,12 +48,6 @@ schedule_entry_active_weekdays = Table(
     Column("weekday_id", Integer, ForeignKey("weekdays.id"), primary_key=True),
 )
 
-office_hour_timeslots = Table(
-    "office_hour_timeslots",
-    Base.metadata,
-    Column("office_hour_id", Integer, ForeignKey("office_hours.id"), primary_key=True),
-    Column("time_slot_id", Integer, ForeignKey("time_slots.id"), primary_key=True),
-)
 
 
 class Faculty(Base):
@@ -268,11 +262,14 @@ class OfficeHour(Base):
     term_id = Column(Integer, ForeignKey("terms.id"), nullable=False)
     faculty_id = Column(Integer, ForeignKey("faculty.id"), nullable=False)
     weekday_id = Column(Integer, ForeignKey("weekdays.id"), nullable=False)
+    # Free-form "HH:MM" 24h strings (feedback_57) — not tied to any predefined
+    # TimeSlot, so faculty aren't constrained to slot boundaries.
+    start_time = Column(String, nullable=False)
+    end_time = Column(String, nullable=False)
 
     term = relationship("Term", back_populates="office_hours")
     faculty = relationship("Faculty")
     weekday = relationship("Weekday")
-    time_slots = relationship("TimeSlot", secondary=office_hour_timeslots)
 
 
 class ScheduleTable(Base):
