@@ -7,7 +7,7 @@ from schemas import FacultyCreate, FacultyUpdate, FacultyOut, CourseOut
 from faculty_schedule_pdf import generate_faculty_schedule_pdf
 from door_tag_pdf import (
     DEFAULT_LAYOUT, DEFAULT_PAGE_SIZE, DEFAULT_ORIENTATION,
-    DEFAULT_HEADER_PADDING_IN, DEFAULT_INFO_PADDING_IN, _safe_hex_color,
+    DEFAULT_HEADER_PADDING_IN, DEFAULT_INFO_PADDING_IN, DEFAULT_MARGIN_IN, _safe_hex_color,
 )
 
 router = APIRouter(prefix="/api/faculty", tags=["faculty"])
@@ -131,6 +131,8 @@ def faculty_schedule_pdf(
     weekday_offset_y_in: float = 0.0,
     entry_name_padding_in: float = 0.0, entry_instructor_padding_in: float = 0.0, entry_time_padding_in: float = 0.0,
     show_rank: bool = True, show_office: bool = True, show_tags: bool = True, show_attributes: bool = True,
+    margin_in: float = DEFAULT_MARGIN_IN,
+    header_top_padding_in: float = 0.0, footer_top_padding_in: float = 0.0, table_top_padding_in: float = 0.0,
     inline: bool = False,
     db: Session = Depends(get_db),
 ):
@@ -164,6 +166,10 @@ def faculty_schedule_pdf(
     entry_name_padding_in = max(0.0, min(0.5, entry_name_padding_in))
     entry_instructor_padding_in = max(0.0, min(0.5, entry_instructor_padding_in))
     entry_time_padding_in = max(0.0, min(0.5, entry_time_padding_in))
+    margin_in = max(0.1, min(2.0, margin_in))
+    header_top_padding_in = max(0.0, min(1.0, header_top_padding_in))
+    footer_top_padding_in = max(0.0, min(1.0, footer_top_padding_in))
+    table_top_padding_in = max(0.0, min(1.0, table_top_padding_in))
     empty_bg_color = _safe_hex_color(empty_bg_color, "#ffffff")
     entry_name_font_color = _safe_hex_color(entry_name_font_color, "#000000")
     entry_instructor_font_color = _safe_hex_color(entry_instructor_font_color, "#000000")
@@ -183,6 +189,7 @@ def faculty_schedule_pdf(
         time_font_color, weekday_font_color, weekday_offset_y_in,
         entry_name_padding_in, entry_instructor_padding_in, entry_time_padding_in,
         show_rank, show_office, show_tags, show_attributes,
+        margin_in, header_top_padding_in, footer_top_padding_in, table_top_padding_in,
     )
     filename = f"faculty_schedule_{faculty.last_name}_{faculty.first_name}_{term.year}.pdf".replace(" ", "_")
     disposition = "inline" if inline else "attachment"

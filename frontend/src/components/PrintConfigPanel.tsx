@@ -413,6 +413,15 @@ export function PrintConfigPanel({
                 </select>
               </div>
               <div>
+                <div style={labelStyle}>Margin (in)</div>
+                <input
+                  type="number" min={0.1} max={2} step={0.05}
+                  value={config.margin_in}
+                  onChange={e => set('margin_in', +e.target.value)}
+                  style={numberInputStyle}
+                />
+              </div>
+              <div>
                 <div style={labelStyle}>Page Size</div>
                 <select value={config.page_size} onChange={e => set('page_size', e.target.value)} style={{ padding: '5px 8px', fontSize: 13 }}>
                   {PDF_PAGE_SIZE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -444,6 +453,15 @@ export function PrintConfigPanel({
           </div>
 
           <CollapsibleGroup title="Header" open={headerOpen} onToggle={() => setHeaderOpen(o => !o)}>
+            <div style={{ marginBottom: 16 }}>
+              <div style={labelStyle}>Header Top Padding (in)</div>
+              <input
+                type="number" min={0} max={1} step={0.05}
+                value={config.header_top_padding_in}
+                onChange={e => set('header_top_padding_in', +e.target.value)}
+                style={numberInputStyle}
+              />
+            </div>
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-bright)', marginBottom: 8 }}>Header Text Info Settings</div>
             {showIconSize && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 16 }}>
@@ -545,6 +563,15 @@ export function PrintConfigPanel({
           </CollapsibleGroup>
 
           <CollapsibleGroup title="Footer" open={footerOpen} onToggle={() => setFooterOpen(o => !o)}>
+            <div style={{ marginBottom: 16 }}>
+              <div style={labelStyle}>Footer Top Padding (in)</div>
+              <input
+                type="number" min={0} max={1} step={0.05}
+                value={config.footer_top_padding_in}
+                onChange={e => set('footer_top_padding_in', +e.target.value)}
+                style={numberInputStyle}
+              />
+            </div>
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-bright)', marginBottom: 8 }}>Footer Image Settings</div>
             {imageSettings('footer')}
           </CollapsibleGroup>
@@ -552,6 +579,15 @@ export function PrintConfigPanel({
           <div style={{ marginTop: 16 }}>
             <h4 style={{ margin: 0, fontSize: 13, color: 'var(--text-bright)' }}>Table Body</h4>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 12 }}>
+              <div>
+                <div style={labelStyle}>Table Top Padding (in)</div>
+                <input
+                  type="number" min={0} max={1} step={0.05}
+                  value={config.table_top_padding_in}
+                  onChange={e => set('table_top_padding_in', +e.target.value)}
+                  style={numberInputStyle}
+                />
+              </div>
               <div>
                 <div style={labelStyle}>Empty Slot Background Color</div>
                 <input type="color" value={config.empty_bg_color} onChange={e => set('empty_bg_color', e.target.value)} style={colorInputStyle} />

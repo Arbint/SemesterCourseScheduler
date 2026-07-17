@@ -244,6 +244,10 @@ export function printConfigParams(config: PrintConfig): Record<string, string> {
     show_office: String(config.show_office),
     show_tags: String(config.show_tags),
     show_attributes: String(config.show_attributes),
+    margin_in: String(config.margin_in),
+    header_top_padding_in: String(config.header_top_padding_in),
+    footer_top_padding_in: String(config.footer_top_padding_in),
+    table_top_padding_in: String(config.table_top_padding_in),
   }
 }
 
@@ -517,6 +521,14 @@ export interface PrintConfig {
   show_office: boolean
   show_tags: boolean
   show_attributes: boolean
+  // Overall page margin (inches, feedback_72) — paper edge to content, shown
+  // under Overall Settings. header_top_padding_in/footer_top_padding_in/
+  // table_top_padding_in are the extra vertical gap above each of those
+  // three content groups, on top of the fixed gap already between them.
+  margin_in: number
+  header_top_padding_in: number
+  footer_top_padding_in: number
+  table_top_padding_in: number
   // Image nudge (feedback_67, extended to footer + attribute icons in
   // feedback_69) — dx/dy (inches) sent to the backend; the per-arrow step
   // sizes are UI-only (how far one click moves it) and never leave the
@@ -582,6 +594,10 @@ export const DEFAULT_PRINT_CONFIG: PrintConfig = {
   show_office: true,
   show_tags: true,
   show_attributes: true,
+  margin_in: 0.45,
+  header_top_padding_in: 0,
+  footer_top_padding_in: 0,
+  table_top_padding_in: 0,
   header_offset_x_in: 0,
   header_offset_y_in: 0,
   header_offset_step_up_in: 0.1,

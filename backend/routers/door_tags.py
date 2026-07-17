@@ -6,7 +6,7 @@ import door_tag_assets as assets
 from database import get_db
 from door_tag_pdf import (
     generate_door_tag_pdf, DEFAULT_LAYOUT, DEFAULT_PAGE_SIZE, DEFAULT_ORIENTATION,
-    DEFAULT_HEADER_PADDING_IN, DEFAULT_INFO_PADDING_IN, _safe_hex_color,
+    DEFAULT_HEADER_PADDING_IN, DEFAULT_INFO_PADDING_IN, DEFAULT_MARGIN_IN, _safe_hex_color,
 )
 from models import DoorTagSettings, Room, Term
 from schemas import DoorTagSettingsOut, DoorTagSettingsUpdate
@@ -61,6 +61,8 @@ def door_tag_pdf(
     time_font_color: str = "#333333", weekday_font_color: str = "#222222",
     weekday_offset_y_in: float = 0.0,
     entry_name_padding_in: float = 0.0, entry_instructor_padding_in: float = 0.0, entry_time_padding_in: float = 0.0,
+    margin_in: float = DEFAULT_MARGIN_IN,
+    header_top_padding_in: float = 0.0, footer_top_padding_in: float = 0.0, table_top_padding_in: float = 0.0,
     inline: bool = False,
     db: Session = Depends(get_db),
 ):
@@ -91,6 +93,10 @@ def door_tag_pdf(
     entry_name_padding_in = max(0.0, min(0.5, entry_name_padding_in))
     entry_instructor_padding_in = max(0.0, min(0.5, entry_instructor_padding_in))
     entry_time_padding_in = max(0.0, min(0.5, entry_time_padding_in))
+    margin_in = max(0.1, min(2.0, margin_in))
+    header_top_padding_in = max(0.0, min(1.0, header_top_padding_in))
+    footer_top_padding_in = max(0.0, min(1.0, footer_top_padding_in))
+    table_top_padding_in = max(0.0, min(1.0, table_top_padding_in))
     empty_bg_color = _safe_hex_color(empty_bg_color, "#3a3a3a")
     empty_font_color = _safe_hex_color(empty_font_color, "#ffffff")
     entry_name_font_color = _safe_hex_color(entry_name_font_color, "#000000")
@@ -109,6 +115,7 @@ def door_tag_pdf(
         entry_time_font_scale, entry_time_font_color,
         time_font_color, weekday_font_color, weekday_offset_y_in,
         entry_name_padding_in, entry_instructor_padding_in, entry_time_padding_in,
+        margin_in, header_top_padding_in, footer_top_padding_in, table_top_padding_in,
     )
     filename = f"door_tag_{room.building_code}{room.room_number}_{term.year}.pdf"
     disposition = "inline" if inline else "attachment"

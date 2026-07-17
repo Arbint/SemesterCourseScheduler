@@ -44,7 +44,7 @@ def resolve_page_size(
 
 
 PAGE_WIDTH, PAGE_HEIGHT = TABLOID  # default/legacy fallback — generate_* now resolves its own per-call size
-MARGIN = 0.45 * inch
+DEFAULT_MARGIN_IN = 0.45  # feedback_72 — page margin (paper edge to content), now user-configurable
 TIME_COL_WIDTH = 0.8 * inch
 TICK_MINUTES = 15
 
@@ -500,16 +500,23 @@ def generate_door_tag_pdf(
     time_font_color: str = "#333333", weekday_font_color: str = "#222222",
     weekday_offset_y_in: float = 0.0,
     entry_name_padding_in: float = 0.0, entry_instructor_padding_in: float = 0.0, entry_time_padding_in: float = 0.0,
+    margin_in: float = DEFAULT_MARGIN_IN,
+    header_top_padding_in: float = 0.0, footer_top_padding_in: float = 0.0, table_top_padding_in: float = 0.0,
 ) -> bytes:
     weekdays, ticks, grid = build_door_tag_grid(db, term, room)
     page_width, page_height = resolve_page_size(page_size, orientation, custom_width_in, custom_height_in)
 
+    margin = max(0.1, margin_in) * inch
+    header_top_pad = max(0.0, header_top_padding_in) * inch
+    footer_top_pad = max(0.0, footer_top_padding_in) * inch
+    table_top_pad = max(0.0, table_top_padding_in) * inch
+
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
         buf, pagesize=(page_width, page_height),
-        leftMargin=MARGIN, rightMargin=MARGIN, topMargin=MARGIN, bottomMargin=MARGIN,
+        leftMargin=margin, rightMargin=margin, topMargin=margin, bottomMargin=margin,
     )
-    content_width = page_width - 2 * MARGIN
+    content_width = page_width - 2 * margin
 
     styles = getSampleStyleSheet()
     header_style = ParagraphStyle(
@@ -566,21 +573,27 @@ def generate_door_tag_pdf(
     info_elements, info_section_height = compose_items(header_items, header_layout, content_width, header_gap)
 
     elements = []
+    if header_top_pad:
+        elements.append(Spacer(1, header_top_pad))
     elements.extend(info_elements)
     elements.append(Spacer(1, SECTION_GAP))
+    if table_top_pad:
+        elements.append(Spacer(1, table_top_pad))
 
     if not weekdays or not ticks:
         elements.append(Paragraph("No schedule data available for this room/term.", styles["Normal"]))
         if footer_band:
             elements.append(Spacer(1, SECTION_GAP))
+            if footer_top_pad:
+                elements.append(Spacer(1, footer_top_pad))
             elements.append(footer_band)
         doc.build(elements)
         return buf.getvalue()
 
     num_ticks = len(ticks)
-    footer_reserved = (SECTION_GAP + footer_height) if footer_band else 0
+    footer_reserved = (SECTION_GAP + footer_top_pad + footer_height) if footer_band else 0
     usable_height = (
-        page_height - 2 * MARGIN - info_section_height - SECTION_GAP
+        page_height - 2 * margin - info_section_height - SECTION_GAP - header_top_pad - table_top_pad
         - WEEKDAY_ROW_HEIGHT - footer_reserved
     )
     # 0.94 safety factor: reportlab treats explicit rowHeights as targets, not
@@ -682,6 +695,8 @@ def generate_door_tag_pdf(
 
     if footer_band:
         elements.append(Spacer(1, SECTION_GAP))
+        if footer_top_pad:
+            elements.append(Spacer(1, footer_top_pad))
         elements.append(footer_band)
 
     doc.build(elements)
