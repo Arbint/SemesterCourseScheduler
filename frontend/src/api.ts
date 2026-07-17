@@ -218,8 +218,14 @@ export function printConfigParams(config: PrintConfig): Record<string, string> {
     semester_font_scale: String(config.semester_font_scale),
     table_font_scale: String(config.table_font_scale),
     icon_scale: String(config.icon_scale),
+    time_font_scale: String(config.time_font_scale),
+    weekday_font_scale: String(config.weekday_font_scale),
     header_offset_x_in: String(config.header_offset_x_in),
     header_offset_y_in: String(config.header_offset_y_in),
+    footer_offset_x_in: String(config.footer_offset_x_in),
+    footer_offset_y_in: String(config.footer_offset_y_in),
+    icon_offset_x_in: String(config.icon_offset_x_in),
+    icon_offset_y_in: String(config.icon_offset_y_in),
   }
 }
 
@@ -365,17 +371,21 @@ export const officeHoursApi = {
   delete: (id: number) => api.delete(`/office-hours/${id}`),
 }
 
+// Room Schedule and Faculty Schedule exports each get their own independent
+// header/footer image (feedback_69) — every call below is scoped to one.
+export type AssetScope = 'room' | 'faculty'
+
 export const doorTagAssetsApi = {
-  upload: (kind: 'header' | 'footer', file: File) => {
+  upload: (kind: 'header' | 'footer', scope: AssetScope, file: File) => {
     const form = new FormData()
     form.append('file', file)
     // Let the browser set Content-Type itself so it includes the multipart boundary.
-    return api.post(`/door-tags/${kind}-image`, form)
+    return api.post(`/door-tags/${kind}-image?scope=${scope}`, form)
   },
-  remove: (kind: 'header' | 'footer') => api.delete(`/door-tags/${kind}-image`),
-  exists: (kind: 'header' | 'footer') =>
-    api.get(`/door-tags/${kind}-image`, { validateStatus: () => true }).then(r => r.status === 200),
-  url: (kind: 'header' | 'footer') => `/api/door-tags/${kind}-image`,
+  remove: (kind: 'header' | 'footer', scope: AssetScope) => api.delete(`/door-tags/${kind}-image?scope=${scope}`),
+  exists: (kind: 'header' | 'footer', scope: AssetScope) =>
+    api.get(`/door-tags/${kind}-image?scope=${scope}`, { validateStatus: () => true }).then(r => r.status === 200),
+  url: (kind: 'header' | 'footer', scope: AssetScope) => `/api/door-tags/${kind}-image?scope=${scope}`,
 }
 
 export interface DoorTagSettings {
@@ -446,21 +456,41 @@ export interface PrintConfig {
   // Scale multipliers (feedback_66) on top of each element's base point
   // size, same convention as header_scale/footer_scale above. icon_scale
   // only affects the Faculty Schedule export (rooms have no attribute icons).
+  // table_font_scale/time_font_scale/weekday_font_scale (feedback_69) split
+  // what used to be one "Table Font Size" knob into the 3 pieces of the grid
+  // it always implicitly controlled — the entry/course cell body, the time
+  // column, and the weekday header row.
   name_font_scale: number
   info_font_scale: number
   semester_font_scale: number
   table_font_scale: number
+  time_font_scale: number
+  weekday_font_scale: number
   icon_scale: number
-  // Header image nudge (feedback_67) — dx/dy (inches) sent to the backend;
-  // the per-arrow step sizes are UI-only (how far one click moves it) and
-  // never leave the browser, but still live on PrintConfig so they're
-  // remembered by saved layout presets like everything else here.
+  // Image nudge (feedback_67, extended to footer + attribute icons in
+  // feedback_69) — dx/dy (inches) sent to the backend; the per-arrow step
+  // sizes are UI-only (how far one click moves it) and never leave the
+  // browser, but still live on PrintConfig so they're remembered by saved
+  // layout presets like everything else here. icon_offset_* only affects
+  // the Faculty Schedule export.
   header_offset_x_in: number
   header_offset_y_in: number
   header_offset_step_up_in: number
   header_offset_step_down_in: number
   header_offset_step_left_in: number
   header_offset_step_right_in: number
+  footer_offset_x_in: number
+  footer_offset_y_in: number
+  footer_offset_step_up_in: number
+  footer_offset_step_down_in: number
+  footer_offset_step_left_in: number
+  footer_offset_step_right_in: number
+  icon_offset_x_in: number
+  icon_offset_y_in: number
+  icon_offset_step_up_in: number
+  icon_offset_step_down_in: number
+  icon_offset_step_left_in: number
+  icon_offset_step_right_in: number
 }
 
 // A layout's own "align" half controls Fill vs not; independent of axis.
@@ -481,6 +511,8 @@ export const DEFAULT_PRINT_CONFIG: PrintConfig = {
   info_font_scale: 1,
   semester_font_scale: 1,
   table_font_scale: 1,
+  time_font_scale: 1,
+  weekday_font_scale: 1,
   icon_scale: 1,
   header_offset_x_in: 0,
   header_offset_y_in: 0,
@@ -488,17 +520,34 @@ export const DEFAULT_PRINT_CONFIG: PrintConfig = {
   header_offset_step_down_in: 0.1,
   header_offset_step_left_in: 0.1,
   header_offset_step_right_in: 0.1,
+  footer_offset_x_in: 0,
+  footer_offset_y_in: 0,
+  footer_offset_step_up_in: 0.1,
+  footer_offset_step_down_in: 0.1,
+  footer_offset_step_left_in: 0.1,
+  footer_offset_step_right_in: 0.1,
+  icon_offset_x_in: 0,
+  icon_offset_y_in: 0,
+  icon_offset_step_up_in: 0.1,
+  icon_offset_step_down_in: 0.1,
+  icon_offset_step_left_in: 0.1,
+  icon_offset_step_right_in: 0.1,
 }
 
 export interface PdfLayoutPreset {
   id: number
   name: string
+  scope: AssetScope
   config: PrintConfig
 }
 
+// Room Schedule and Faculty Schedule each keep their own independent list of
+// saved layouts (feedback_69).
 export const pdfPresetsApi = {
-  list: () => api.get<PdfLayoutPreset[]>('/pdf-presets').then(r => r.data),
-  create: (name: string, config: PrintConfig) => api.post<PdfLayoutPreset>('/pdf-presets', { name, config }).then(r => r.data),
+  list: (scope: AssetScope) => api.get<PdfLayoutPreset[]>('/pdf-presets', { params: { scope } }).then(r => r.data),
+  create: (name: string, scope: AssetScope, config: PrintConfig) =>
+    api.post<PdfLayoutPreset>('/pdf-presets', { name, scope, config }).then(r => r.data),
+  rename: (id: number, name: string) => api.patch<PdfLayoutPreset>(`/pdf-presets/${id}`, { name }).then(r => r.data),
   delete: (id: number) => api.delete(`/pdf-presets/${id}`),
 }
 

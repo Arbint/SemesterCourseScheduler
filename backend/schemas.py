@@ -86,12 +86,17 @@ class DoorTagSettingsUpdate(BaseModel):
 
 class PdfLayoutPresetCreate(BaseModel):
     name: str
+    scope: str
     config: dict
+
+class PdfLayoutPresetUpdate(BaseModel):
+    name: str
 
 class PdfLayoutPresetOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
+    scope: str
     config: dict
 
 

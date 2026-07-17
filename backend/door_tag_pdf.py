@@ -383,7 +383,7 @@ class _OffsetFlowable(Flowable):
         self.canv.restoreState()
 
 
-def _fit_image_band(kind: str, content_width: float, max_height: float):
+def _fit_image_band(kind: str, scope: str, content_width: float, max_height: float):
     """Loads the uploaded header/footer asset (if any) and returns
     (flowable, actual_height, actual_width) scaled to fit within
     content_width x max_height while preserving aspect ratio. Returns
@@ -392,8 +392,9 @@ def _fit_image_band(kind: str, content_width: float, max_height: float):
     its own .hAlign — defaults to CENTER, matching the old always-centered
     behavior, until a caller (see compose_info_section) overrides it. The
     caller needs the *actual* height up front to budget the rest of the page
-    precisely enough to stay on one sheet."""
-    path = assets.get_asset_path(kind)
+    precisely enough to stay on one sheet. `scope` ("room" or "faculty",
+    feedback_69) picks which export's own independently-uploaded asset to use."""
+    path = assets.get_asset_path(kind, scope)
     if not path:
         return None, 0, 0
 
@@ -449,7 +450,9 @@ def generate_door_tag_pdf(
     custom_width_in: float | None = None, custom_height_in: float | None = None,
     header_padding_in: float = DEFAULT_HEADER_PADDING_IN, info_padding_in: float = DEFAULT_INFO_PADDING_IN,
     name_font_scale: float = 1.0, semester_font_scale: float = 1.0, table_font_scale: float = 1.0,
+    time_font_scale: float = 1.0, weekday_font_scale: float = 1.0,
     header_offset_x_in: float = 0.0, header_offset_y_in: float = 0.0,
+    footer_offset_x_in: float = 0.0, footer_offset_y_in: float = 0.0,
 ) -> bytes:
     weekdays, ticks, grid = build_door_tag_grid(db, term, room)
     page_width, page_height = resolve_page_size(page_size, orientation, custom_width_in, custom_height_in)
@@ -464,12 +467,12 @@ def generate_door_tag_pdf(
     tfs = table_font_scale
     styles = getSampleStyleSheet()
     header_style = ParagraphStyle(
-        "CellHeader", parent=styles["Normal"], fontSize=12 * tfs, alignment=TA_CENTER,
+        "CellHeader", parent=styles["Normal"], fontSize=12 * weekday_font_scale, alignment=TA_CENTER,
         textColor=colors.HexColor("#222222"), fontName="Helvetica-Bold",
     )
     time_style = ParagraphStyle(
-        "TimeCell", parent=styles["Normal"], fontSize=7 * tfs, alignment=TA_CENTER,
-        fontName="Helvetica-Bold", textColor=colors.HexColor("#333333"), leading=8 * tfs,
+        "TimeCell", parent=styles["Normal"], fontSize=7 * time_font_scale, alignment=TA_CENTER,
+        fontName="Helvetica-Bold", textColor=colors.HexColor("#333333"), leading=8 * time_font_scale,
     )
     cell_body_style = ParagraphStyle(
         "CellBody", parent=styles["Normal"], fontSize=9.5 * tfs, alignment=TA_LEFT, leading=12 * tfs,
@@ -489,11 +492,12 @@ def generate_door_tag_pdf(
     )
     EMPTY_PAD = (2, 2, 3, 3)  # top, bottom, left, right — tighter than the course card's
 
-    header_flowable, header_height, header_width = _fit_image_band("header", content_width, HEADER_IMAGE_MAX_HEIGHT * header_scale)
+    header_flowable, header_height, header_width = _fit_image_band("header", "room", content_width, HEADER_IMAGE_MAX_HEIGHT * header_scale)
     if header_flowable is not None:
         header_flowable = _OffsetFlowable(header_flowable, header_offset_x_in * inch, header_offset_y_in * inch)
-    footer_band, footer_height, _ = _fit_image_band("footer", content_width, FOOTER_IMAGE_MAX_HEIGHT * footer_scale)
-    if footer_band:
+    footer_band, footer_height, _ = _fit_image_band("footer", "room", content_width, FOOTER_IMAGE_MAX_HEIGHT * footer_scale)
+    if footer_band is not None:
+        footer_band = _OffsetFlowable(footer_band, footer_offset_x_in * inch, footer_offset_y_in * inch)
         footer_band.hAlign = "CENTER"  # footer is never affected by the Layout option
 
     header_gap = max(0.0, header_padding_in) * inch

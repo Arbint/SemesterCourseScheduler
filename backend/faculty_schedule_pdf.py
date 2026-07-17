@@ -243,7 +243,10 @@ def generate_faculty_schedule_pdf(
     header_padding_in: float = DEFAULT_HEADER_PADDING_IN, info_padding_in: float = DEFAULT_INFO_PADDING_IN,
     name_font_scale: float = 1.0, info_font_scale: float = 1.0, semester_font_scale: float = 1.0,
     table_font_scale: float = 1.0, icon_scale: float = 1.0,
+    time_font_scale: float = 1.0, weekday_font_scale: float = 1.0,
     header_offset_x_in: float = 0.0, header_offset_y_in: float = 0.0,
+    footer_offset_x_in: float = 0.0, footer_offset_y_in: float = 0.0,
+    icon_offset_x_in: float = 0.0, icon_offset_y_in: float = 0.0,
 ) -> bytes:
     weekdays, ticks, grid = build_faculty_schedule_grid(db, term, faculty)
     page_width, page_height = resolve_page_size(page_size, orientation, custom_width_in, custom_height_in)
@@ -258,12 +261,12 @@ def generate_faculty_schedule_pdf(
     tfs = table_font_scale
     styles = getSampleStyleSheet()
     header_style = ParagraphStyle(
-        "CellHeader", parent=styles["Normal"], fontSize=12 * tfs, alignment=TA_CENTER,
+        "CellHeader", parent=styles["Normal"], fontSize=12 * weekday_font_scale, alignment=TA_CENTER,
         textColor=colors.HexColor("#222222"), fontName="Helvetica-Bold",
     )
     time_style = ParagraphStyle(
-        "TimeCell", parent=styles["Normal"], fontSize=7 * tfs, alignment=TA_CENTER,
-        fontName="Helvetica-Bold", textColor=colors.HexColor("#333333"), leading=8 * tfs,
+        "TimeCell", parent=styles["Normal"], fontSize=7 * time_font_scale, alignment=TA_CENTER,
+        fontName="Helvetica-Bold", textColor=colors.HexColor("#333333"), leading=8 * time_font_scale,
     )
     cell_body_style = ParagraphStyle(
         "CellBody", parent=styles["Normal"], fontSize=9.5 * tfs, alignment=TA_LEFT, leading=12 * tfs,
@@ -275,14 +278,17 @@ def generate_faculty_schedule_pdf(
     )
     EMPTY_PAD = (2, 2, 3, 3)
 
-    header_flowable, header_height, header_width = _fit_image_band("header", content_width, HEADER_IMAGE_MAX_HEIGHT * header_scale)
+    header_flowable, header_height, header_width = _fit_image_band("header", "faculty", content_width, HEADER_IMAGE_MAX_HEIGHT * header_scale)
     if header_flowable is not None:
         header_flowable = _OffsetFlowable(header_flowable, header_offset_x_in * inch, header_offset_y_in * inch)
-    footer_band, footer_height, _ = _fit_image_band("footer", content_width, FOOTER_IMAGE_MAX_HEIGHT * footer_scale)
-    if footer_band:
+    footer_band, footer_height, _ = _fit_image_band("footer", "faculty", content_width, FOOTER_IMAGE_MAX_HEIGHT * footer_scale)
+    if footer_band is not None:
+        footer_band = _OffsetFlowable(footer_band, footer_offset_x_in * inch, footer_offset_y_in * inch)
         footer_band.hAlign = "CENTER"
 
     icon_flowable, icon_height, icon_width = _build_attribute_icon_area(faculty, icon_scale)
+    if icon_flowable is not None:
+        icon_flowable = _OffsetFlowable(icon_flowable, icon_offset_x_in * inch, icon_offset_y_in * inch)
 
     header_gap = max(0.0, header_padding_in) * inch
     info_gap = max(0.0, info_padding_in) * inch

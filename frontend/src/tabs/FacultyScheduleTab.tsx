@@ -535,6 +535,8 @@ export function FacultyScheduleTab() {
           previewOptions={sortedFaculty.map(f => ({ id: f.id, label: facultyDisplayName(f) }))}
           buildPreviewUrl={id => selectedTermId != null ? facultyApi.schedulePdfUrl(id, selectedTermId, printConfig) : null}
           showIconSize
+          assetScope="faculty"
+          presetScope="faculty"
         />
 
         {!selectedTerm ? (

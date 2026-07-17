@@ -116,12 +116,15 @@ class DoorTagSettings(Base):
 
 
 class PdfLayoutPreset(Base):
-    """A saved snapshot of Export Configuration settings (feedback_64) — usable
-    from either the Room Schedule or Faculty Schedule export panel."""
+    """A saved snapshot of Export Configuration settings (feedback_64) — scoped
+    to one export panel, "room" (Room Schedule) or "faculty" (Faculty
+    Schedule), which each keep their own independent list (feedback_69)."""
     __tablename__ = "pdf_layout_presets"
+    __table_args__ = (UniqueConstraint("name", "scope"),)
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False, unique=True)
+    name = Column(String, nullable=False)
+    scope = Column(String, nullable=False, default="room")
     config = Column(JSON, nullable=False)
 
 

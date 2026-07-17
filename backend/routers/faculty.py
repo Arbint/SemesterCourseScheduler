@@ -119,7 +119,10 @@ def faculty_schedule_pdf(
     header_padding_in: float = DEFAULT_HEADER_PADDING_IN, info_padding_in: float = DEFAULT_INFO_PADDING_IN,
     name_font_scale: float = 1.0, info_font_scale: float = 1.0, semester_font_scale: float = 1.0,
     table_font_scale: float = 1.0, icon_scale: float = 1.0,
+    time_font_scale: float = 1.0, weekday_font_scale: float = 1.0,
     header_offset_x_in: float = 0.0, header_offset_y_in: float = 0.0,
+    footer_offset_x_in: float = 0.0, footer_offset_y_in: float = 0.0,
+    icon_offset_x_in: float = 0.0, icon_offset_y_in: float = 0.0,
     inline: bool = False,
     db: Session = Depends(get_db),
 ):
@@ -138,14 +141,21 @@ def faculty_schedule_pdf(
     info_font_scale = max(0.25, min(3.0, info_font_scale))
     semester_font_scale = max(0.25, min(3.0, semester_font_scale))
     table_font_scale = max(0.25, min(3.0, table_font_scale))
-    icon_scale = max(0.25, min(3.0, icon_scale))
+    icon_scale = max(0.25, min(20.0, icon_scale))
+    time_font_scale = max(0.25, min(3.0, time_font_scale))
+    weekday_font_scale = max(0.25, min(3.0, weekday_font_scale))
     header_offset_x_in = max(-5.0, min(5.0, header_offset_x_in))
     header_offset_y_in = max(-5.0, min(5.0, header_offset_y_in))
+    footer_offset_x_in = max(-5.0, min(5.0, footer_offset_x_in))
+    footer_offset_y_in = max(-5.0, min(5.0, footer_offset_y_in))
+    icon_offset_x_in = max(-5.0, min(5.0, icon_offset_x_in))
+    icon_offset_y_in = max(-5.0, min(5.0, icon_offset_y_in))
     content = generate_faculty_schedule_pdf(
         db, term, faculty, header_layout, info_layout, header_scale, footer_scale,
         page_size, orientation, custom_width_in, custom_height_in, header_padding_in, info_padding_in,
         name_font_scale, info_font_scale, semester_font_scale, table_font_scale, icon_scale,
-        header_offset_x_in, header_offset_y_in,
+        time_font_scale, weekday_font_scale, header_offset_x_in, header_offset_y_in,
+        footer_offset_x_in, footer_offset_y_in, icon_offset_x_in, icon_offset_y_in,
     )
     filename = f"faculty_schedule_{faculty.last_name}_{faculty.first_name}_{term.year}.pdf".replace(" ", "_")
     disposition = "inline" if inline else "attachment"

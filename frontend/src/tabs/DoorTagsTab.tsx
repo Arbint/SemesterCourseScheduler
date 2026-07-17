@@ -335,6 +335,8 @@ export function DoorTagsTab() {
           onChange={setPrintConfig}
           previewOptions={sortedRooms.map(r => ({ id: r.id, label: r.display_label }))}
           buildPreviewUrl={buildRoomPdfUrl}
+          assetScope="room"
+          presetScope="room"
         />
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
