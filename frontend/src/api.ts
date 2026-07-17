@@ -289,6 +289,19 @@ export const meetingsApi = {
   delete: (id: number) => api.delete(`/meetings/${id}`),
 }
 
+export const doorTagAssetsApi = {
+  upload: (kind: 'header' | 'footer', file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    // Let the browser set Content-Type itself so it includes the multipart boundary.
+    return api.post(`/door-tags/${kind}-image`, form)
+  },
+  remove: (kind: 'header' | 'footer') => api.delete(`/door-tags/${kind}-image`),
+  exists: (kind: 'header' | 'footer') =>
+    api.get(`/door-tags/${kind}-image`, { validateStatus: () => true }).then(r => r.status === 200),
+  url: (kind: 'header' | 'footer') => `/api/door-tags/${kind}-image`,
+}
+
 export interface FacultyCourseLoad {
   display: string
   sections: number

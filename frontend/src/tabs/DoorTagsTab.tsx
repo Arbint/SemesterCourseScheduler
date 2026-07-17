@@ -1,16 +1,41 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   termsApi, roomsApi, weekdaysApi, timeSlotsApi, tablesApi, entriesApi, coursesApi, facultyApi, meetingsApi,
-  termLabel,
+  termLabel, doorTagAssetsApi,
   type Term, type Room, type Weekday, type TimeSlot, type ScheduleTable, type ScheduleEntry,
   type Course, type Faculty, type Meeting,
 } from '../api'
 import { SearchableSelect } from '../components/SearchableSelect'
 import { courseColor, MEETING_SOLID_COLOR } from '../components/ScheduleGrid'
+import { showToast } from '../components/Toast'
 
 const DEFAULT_EMPTY_LABEL = 'OPEN'
 
 type CellData = { entry: ScheduleEntry; course: Course | null; meeting: Meeting | null; faculty: Faculty | null; span: number }
+type EmptyRun = { emptySpan: number }
+type GridCell = CellData | EmptyRun | 'covered'
+
+// Collapses consecutive empty (null) cells in a weekday column into one
+// merged block: the first cell becomes an EmptyRun with the run's length,
+// the rest become 'covered' — mirrors the backend door tag PDF's
+// _merge_empty_runs so on-screen and exported tables read the same way.
+function mergeEmptyRuns(column: (CellData | 'covered' | null)[]): GridCell[] {
+  const result: GridCell[] = new Array(column.length)
+  let i = 0
+  while (i < column.length) {
+    if (column[i] === null) {
+      let j = i
+      while (j < column.length && column[j] === null) j++
+      result[i] = { emptySpan: j - i }
+      for (let k = i + 1; k < j; k++) result[k] = 'covered'
+      i = j
+    } else {
+      result[i] = column[i] as GridCell
+      i++
+    }
+  }
+  return result
+}
 
 interface RoomFilter {
   id: string
@@ -127,6 +152,13 @@ export function DoorTagsTab() {
   const [courses, setCourses] = useState<Course[]>([])
   const [meetings, setMeetings] = useState<Meeting[]>([])
 
+  const [hasHeaderImage, setHasHeaderImage] = useState(false)
+  const [hasFooterImage, setHasFooterImage] = useState(false)
+  const [uploadingHeader, setUploadingHeader] = useState(false)
+  const [uploadingFooter, setUploadingFooter] = useState(false)
+  const headerFileRef = useRef<HTMLInputElement>(null)
+  const footerFileRef = useRef<HTMLInputElement>(null)
+
   useEffect(() => {
     Promise.all([
       termsApi.list(), roomsApi.list(), weekdaysApi.list(), timeSlotsApi.list(), facultyApi.list(),
@@ -138,6 +170,8 @@ export function DoorTagsTab() {
       setAllFaculty(f)
       if (t.length) setSelectedTermId(t[0].id)
     })
+    doorTagAssetsApi.exists('header').then(setHasHeaderImage)
+    doorTagAssetsApi.exists('footer').then(setHasFooterImage)
   }, [])
 
   useEffect(() => {
@@ -165,10 +199,12 @@ export function DoorTagsTab() {
   const sortedTimeSlots = [...timeSlots].sort((a, b) => a.display_order - b.display_order)
   const slotOrder = new Map(sortedTimeSlots.map((ts, i) => [ts.id, i]))
 
-  // grid[weekdayId][slotIndex] = CellData | 'covered' | null — mirrors the
+  // grid[weekdayId][slotIndex] = CellData | 'covered' | EmptyRun — mirrors the
   // rowSpan handling used by the Term Schedules / View tab grids, projected
   // by weekday instead of by room since each call here is scoped to one room.
-  const buildRoomGrid = (roomId: number): Map<number, (CellData | 'covered' | null)[]> => {
+  // Empty runs are merged (see mergeEmptyRuns) so a stretch of blank slots
+  // renders as one spanning cell with a single label.
+  const buildRoomGrid = (roomId: number): Map<number, GridCell[]> => {
     const grid = new Map<number, (CellData | 'covered' | null)[]>()
     for (const w of sortedWeekdays) grid.set(w.id, new Array(sortedTimeSlots.length).fill(null))
 
@@ -191,7 +227,10 @@ export function DoorTagsTab() {
         }
       }
     }
-    return grid
+
+    const mergedGrid = new Map<number, GridCell[]>()
+    for (const [wid, col] of grid) mergedGrid.set(wid, mergeEmptyRuns(col))
+    return mergedGrid
   }
 
   const selectedTerm = terms.find(t => t.id === selectedTermId)
@@ -204,6 +243,30 @@ export function DoorTagsTab() {
   }
   const removeRoomFilter = (id: string) => setRoomFilters(prev => prev.filter(f => f.id !== id))
   const toggleRoomFilterNot = (id: string) => setRoomFilters(prev => prev.map(f => f.id === id ? { ...f, negated: !f.negated } : f))
+
+  const uploadAsset = async (kind: 'header' | 'footer', file: File) => {
+    const setUploading = kind === 'header' ? setUploadingHeader : setUploadingFooter
+    const setHas = kind === 'header' ? setHasHeaderImage : setHasFooterImage
+    setUploading(true)
+    try {
+      await doorTagAssetsApi.upload(kind, file)
+      setHas(true)
+    } catch (e: any) {
+      showToast(e.response?.data?.detail || `Failed to upload ${kind} image`)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const removeAsset = async (kind: 'header' | 'footer') => {
+    const setHas = kind === 'header' ? setHasHeaderImage : setHasFooterImage
+    try {
+      await doorTagAssetsApi.remove(kind)
+      setHas(false)
+    } catch (e: any) {
+      showToast(e.response?.data?.detail || `Failed to remove ${kind} image`)
+    }
+  }
 
   const exportPdf = (roomId: number) => {
     if (!selectedTermId) return
@@ -241,6 +304,44 @@ export function DoorTagsTab() {
               style={{ padding: '5px 10px', fontSize: 13, width: 160 }}
             />
           </div>
+          {([
+            { kind: 'header' as const, label: 'Header Image', has: hasHeaderImage, uploading: uploadingHeader, ref: headerFileRef },
+            { kind: 'footer' as const, label: 'Footer Image', has: hasFooterImage, uploading: uploadingFooter, ref: footerFileRef },
+          ]).map(({ kind, label, has, uploading, ref }) => (
+            <div key={kind}>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>{label}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {has && (
+                  <img
+                    src={doorTagAssetsApi.url(kind)}
+                    alt={`${label} preview`}
+                    style={{ height: 26, maxWidth: 80, objectFit: 'contain', background: 'var(--bg-elevated)', borderRadius: 3 }}
+                  />
+                )}
+                <input
+                  ref={ref}
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.svg,image/jpeg,image/png,image/svg+xml"
+                  style={{ display: 'none' }}
+                  onChange={e => {
+                    const file = e.target.files?.[0]
+                    if (file) uploadAsset(kind, file)
+                    e.target.value = ''
+                  }}
+                />
+                <button
+                  className="btn-secondary btn-sm"
+                  disabled={uploading}
+                  onClick={() => ref.current?.click()}
+                >
+                  {uploading ? 'Uploading...' : has ? 'Replace' : 'Upload'}
+                </button>
+                {has && (
+                  <button className="btn-secondary btn-sm" onClick={() => removeAsset(kind)}>Remove</button>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
 
         <div style={{ marginBottom: 20 }}>
@@ -278,7 +379,7 @@ export function DoorTagsTab() {
                       <tr>
                         <th style={{ padding: '6px 10px', textAlign: 'left', background: 'var(--bg-elevated)', fontSize: 11, border: '1px solid var(--border-color)', minWidth: 120 }}>Time Slot</th>
                         {sortedWeekdays.map(w => (
-                          <th key={w.id} style={{ padding: '6px 10px', textAlign: 'center', background: 'var(--bg-elevated)', fontSize: 11, border: '1px solid var(--border-color)', minWidth: 150 }}>
+                          <th key={w.id} style={{ padding: '6px 10px', textAlign: 'center', background: 'var(--bg-elevated)', fontSize: 11, border: '1px solid var(--border-color)', minWidth: 190 }}>
                             {w.name.charAt(0).toUpperCase() + w.name.slice(1)}
                           </th>
                         ))}
@@ -292,36 +393,48 @@ export function DoorTagsTab() {
                           </td>
                           {sortedWeekdays.map(w => {
                             const cell = grid.get(w.id)?.[r] ?? null
-                            if (cell === 'covered') return null
-                            if (cell === null) {
+                            if (cell === 'covered' || cell === null) return null
+                            if ('emptySpan' in cell) {
                               return (
-                                <td key={w.id} style={{ padding: '8px 10px', border: '1px solid var(--border-color)', textAlign: 'center', fontSize: 12, color: 'var(--text-secondary)', opacity: 0.6 }}>
-                                  {emptyLabel || DEFAULT_EMPTY_LABEL}
+                                <td key={w.id} rowSpan={cell.emptySpan} style={{ padding: 4, border: '1px solid var(--border-color)' }}>
+                                  <div style={{
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    textAlign: 'center', fontSize: 12, color: 'var(--text-secondary)', opacity: 0.6,
+                                    minHeight: 26, boxSizing: 'border-box',
+                                  }}>
+                                    {emptyLabel || DEFAULT_EMPTY_LABEL}
+                                  </div>
                                 </td>
                               )
                             }
                             const rowSpan = cell.span
                             const bg = cell.course ? courseColor(cell.course.id) : MEETING_SOLID_COLOR
                             return (
-                              <td key={w.id} rowSpan={rowSpan} style={{ padding: '8px 10px', border: '1px solid var(--border-color)', textAlign: 'center', verticalAlign: 'middle', background: bg }}>
-                                {cell.course ? (
-                                  <>
-                                    <div style={{ fontWeight: 700, fontSize: 13, color: '#eee' }}>
-                                      {cell.course.dept_code} {cell.course.course_number} Sec {cell.entry.section}
-                                    </div>
-                                    <div style={{ fontSize: 12, color: '#ddd', marginTop: 2 }}>{cell.course.course_name}</div>
-                                    <div style={{ fontSize: 11, color: '#bbb', marginTop: 2 }}>
-                                      {cell.faculty ? `${cell.faculty.last_name}, ${cell.faculty.first_name}` : 'No instructor'}
-                                    </div>
-                                  </>
-                                ) : (
-                                  <>
-                                    <div style={{ fontWeight: 700, fontSize: 13, color: '#eee' }}>
-                                      {cell.meeting?.name}
-                                    </div>
-                                    <div style={{ fontSize: 11, color: '#bbb', marginTop: 2 }}>Meeting</div>
-                                  </>
-                                )}
+                              <td key={w.id} rowSpan={rowSpan} style={{ padding: 4, border: '1px solid var(--border-color)' }}>
+                                <div style={{
+                                  background: bg, borderRadius: 3,
+                                  display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
+                                  textAlign: 'center', padding: '8px 10px', boxSizing: 'border-box', minHeight: 64,
+                                }}>
+                                  {cell.course ? (
+                                    <>
+                                      <div style={{ fontWeight: 700, fontSize: 13, color: '#eee' }}>
+                                        {cell.course.dept_code} {cell.course.course_number} Sec {cell.entry.section}
+                                      </div>
+                                      <div style={{ fontSize: 12, color: '#ddd', marginTop: 2 }}>{cell.course.course_name}</div>
+                                      <div style={{ fontSize: 11, color: '#bbb', marginTop: 2 }}>
+                                        {cell.faculty ? `${cell.faculty.last_name}, ${cell.faculty.first_name}` : 'No instructor'}
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <div style={{ fontWeight: 700, fontSize: 13, color: '#eee' }}>
+                                        {cell.meeting?.name}
+                                      </div>
+                                      <div style={{ fontSize: 11, color: '#bbb', marginTop: 2 }}>Meeting</div>
+                                    </>
+                                  )}
+                                </div>
                               </td>
                             )
                           })}
