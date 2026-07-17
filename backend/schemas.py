@@ -10,6 +10,7 @@ class FacultyBase(BaseModel):
     last_name: str
     rank: RankEnum
     tags: list[str] = []
+    office: Optional[str] = None
 
 class FacultyCreate(FacultyBase):
     pass
@@ -28,10 +29,12 @@ class LoadSettingsOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     fulltime_load: int
     parttime_load: int
+    min_office_hours_per_week: int
 
 class LoadSettingsUpdate(BaseModel):
     fulltime_load: int
     parttime_load: int
+    min_office_hours_per_week: int
 
 
 # --- Semester ---
@@ -231,6 +234,35 @@ class MeetingOut(MeetingBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     term_id: int
+
+
+# --- OfficeHour ---
+
+class OfficeHourCreate(BaseModel):
+    term_id: int
+    weekday_id: int
+    time_slot_ids: list[int] = []
+
+class OfficeHourResize(BaseModel):
+    time_slot_ids: list[int] = []
+
+class OfficeHourOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    term_id: int
+    faculty_id: int
+    weekday_id: int
+    time_slot_ids: list[int] = []
+
+    @classmethod
+    def from_orm(cls, office_hour):
+        return cls(
+            id=office_hour.id,
+            term_id=office_hour.term_id,
+            faculty_id=office_hour.faculty_id,
+            weekday_id=office_hour.weekday_id,
+            time_slot_ids=[ts.id for ts in office_hour.time_slots],
+        )
 
 
 class IssueItem(BaseModel):

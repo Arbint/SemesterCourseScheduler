@@ -41,11 +41,13 @@ export interface Faculty {
   last_name: string
   rank: Rank
   tags: string[]
+  office: string | null
 }
 
 export interface LoadSettings {
   fulltime_load: number
   parttime_load: number
+  min_office_hours_per_week: number
 }
 
 export interface Semester {
@@ -146,6 +148,14 @@ export interface Meeting {
   name: string
   duration_minutes: number
   frequency: number
+}
+
+export interface OfficeHour {
+  id: number
+  term_id: number
+  faculty_id: number
+  weekday_id: number
+  time_slot_ids: number[]
 }
 
 export interface IssueItem {
@@ -287,6 +297,15 @@ export const meetingsApi = {
   update: (id: number, d: { name: string; duration_minutes: number; frequency: number }) =>
     api.put<Meeting>(`/meetings/${id}`, d).then(r => r.data),
   delete: (id: number) => api.delete(`/meetings/${id}`),
+}
+
+export const officeHoursApi = {
+  list: (termId: number) => api.get<OfficeHour[]>(`/terms/${termId}/office-hours`).then(r => r.data),
+  create: (facultyId: number, d: { term_id: number; weekday_id: number; time_slot_ids: number[] }) =>
+    api.post<OfficeHour>(`/faculty/${facultyId}/office-hours`, d).then(r => r.data),
+  resize: (id: number, time_slot_ids: number[]) =>
+    api.put<OfficeHour>(`/office-hours/${id}`, { time_slot_ids }).then(r => r.data),
+  delete: (id: number) => api.delete(`/office-hours/${id}`),
 }
 
 export const doorTagAssetsApi = {

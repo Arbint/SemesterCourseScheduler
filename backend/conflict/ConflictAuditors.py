@@ -36,6 +36,13 @@ def _entry_label(entry) -> str:
     return "?"
 
 
+def _time_slot_minutes(slot) -> int:
+    """Minutes between a TimeSlot's start_time/end_time, both "HH:MM" 24h strings."""
+    sh, sm = (int(x) for x in slot.start_time.split(":"))
+    eh, em = (int(x) for x in slot.end_time.split(":"))
+    return (eh * 60 + em) - (sh * 60 + sm)
+
+
 def _entry_frequency(entry):
     """Days/week the entry needs — course.frequency or meeting.frequency."""
     if entry.course_id:
@@ -283,5 +290,77 @@ class FacultyLoad(ConflictAuditor):
                     courses=[e.course_id for e in overloaded],
                     entries=[e.id for e in overloaded],
                     description=f"Faculty load: {f.first_name} {f.last_name} has {count} sections (full load is {limit})"
+                ))
+        return reports
+
+
+class OfficeHourConflict(ConflictAuditor):
+    """Critical: an office hour overlapping another office hour or a scheduled
+    course/meeting for the same faculty. The office-hours router hard-rejects this
+    at write time, so this mostly catches the cross-cutting case of a course later
+    getting dropped onto an existing office hour."""
+    def __init__(self, db):
+        super().__init__(db, isCritical=True)
+
+    def Audit(self, term) -> list[ConflictReport]:
+        reports = []
+        office_hours = list(term.office_hours)
+        entries = [e for e in term.schedule_entries if e.faculty_id and e.time_slots and e.schedule_table_id and e.schedule_table]
+
+        for i, a in enumerate(office_hours):
+            for b in office_hours[i + 1:]:
+                if a.faculty_id != b.faculty_id or a.weekday_id != b.weekday_id:
+                    continue
+                if not _slots_overlap(a.time_slots, b.time_slots):
+                    continue
+                reports.append(ConflictReport(
+                    courses=[],
+                    entries=[],
+                    description=f"Office hour conflict: {a.faculty.first_name} {a.faculty.last_name} has overlapping office hour blocks"
+                ))
+
+        for oh in office_hours:
+            for e in entries:
+                if e.faculty_id != oh.faculty_id:
+                    continue
+                if oh.weekday_id not in _get_effective_weekdays(e):
+                    continue
+                if not _slots_overlap(oh.time_slots, e.time_slots):
+                    continue
+                reports.append(ConflictReport(
+                    courses=[e.course_id] if e.course_id else [],
+                    entries=[e.id],
+                    description=f"Office hour conflict: {oh.faculty.first_name} {oh.faculty.last_name}'s office hours overlap {_entry_label(e)}"
+                ))
+        return reports
+
+
+class MinOfficeHours(ConflictAuditor):
+    def __init__(self, db):
+        super().__init__(db, isCritical=False)
+
+    def Audit(self, term) -> list[ConflictReport]:
+        from models import LoadSettings
+        reports = []
+        settings = self.db.query(LoadSettings).first()
+        min_minutes = (settings.min_office_hours_per_week if settings else 4) * 60
+
+        teaching_faculty_ids = {e.faculty_id for e in term.schedule_entries if e.faculty_id}
+        minutes_by_faculty: dict[int, int] = {}
+        for oh in term.office_hours:
+            minutes_by_faculty[oh.faculty_id] = minutes_by_faculty.get(oh.faculty_id, 0) + sum(
+                _time_slot_minutes(ts) for ts in oh.time_slots
+            )
+
+        for fid in teaching_faculty_ids:
+            total = minutes_by_faculty.get(fid, 0)
+            if total < min_minutes:
+                f = next((e.faculty for e in term.schedule_entries if e.faculty_id == fid), None)
+                if not f:
+                    continue
+                reports.append(ConflictReport(
+                    courses=[],
+                    entries=[],
+                    description=f"Office hours: {f.first_name} {f.last_name} has {total / 60:.1f} office hour(s)/week (minimum is {min_minutes / 60:.0f})"
                 ))
         return reports

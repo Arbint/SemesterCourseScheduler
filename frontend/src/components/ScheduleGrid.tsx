@@ -28,6 +28,10 @@ export function courseColor(courseId: number | null): string {
 // MEETING_BG gradient (e.g. a plain table cell background in Room Schedule).
 export const MEETING_SOLID_COLOR = '#1d3b52'
 
+// Office hour cells (Faculty Schedule tab) — a distinct green so they read as
+// neither a course (faculty-colored) nor a meeting (blue stripe).
+export const OFFICE_HOUR_SOLID_COLOR = '#1e4a2e'
+
 export const DAY_ABBR: Record<string, string> = { mon: 'M', tue: 'T', wed: 'W', thu: 'Th', fri: 'F' }
 const DAY_FULL: Record<string, string> = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri' }
 // One color per weekday (One Dark Pro palette) so a table's assigned days

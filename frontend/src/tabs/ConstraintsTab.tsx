@@ -88,8 +88,8 @@ export function ConstraintsTab() {
   const [taughtWith, setTaughtWith] = useState<TaughtWithGroup[]>([])
   const [coreq, setCoReq] = useState<CoReqGroup[]>([])
   const [courses, setCourses] = useState<Course[]>([])
-  const [loadSettings, setLoadSettings] = useState<LoadSettings>({ fulltime_load: 3, parttime_load: 2 })
-  const [loadForm, setLoadForm] = useState<LoadSettings>({ fulltime_load: 3, parttime_load: 2 })
+  const [loadSettings, setLoadSettings] = useState<LoadSettings>({ fulltime_load: 3, parttime_load: 2, min_office_hours_per_week: 4 })
+  const [loadForm, setLoadForm] = useState<LoadSettings>({ fulltime_load: 3, parttime_load: 2, min_office_hours_per_week: 4 })
   const [savingLoad, setSavingLoad] = useState(false)
 
   const load = async () => {
@@ -126,7 +126,8 @@ export function ConstraintsTab() {
   }
 
   const loadDirty = loadForm.fulltime_load !== loadSettings.fulltime_load ||
-    loadForm.parttime_load !== loadSettings.parttime_load
+    loadForm.parttime_load !== loadSettings.parttime_load ||
+    loadForm.min_office_hours_per_week !== loadSettings.min_office_hours_per_week
 
   return (
     <div>
@@ -153,6 +154,16 @@ export function ConstraintsTab() {
               type="number" min={1} max={10}
               value={loadForm.parttime_load}
               onChange={e => isLoggedIn && setLoadForm(f => ({ ...f, parttime_load: +e.target.value }))}
+              disabled={!isLoggedIn}
+              style={{ padding: '5px 8px', fontSize: 13 }}
+            />
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label style={{ fontSize: 12 }}>Min Office Hours/Week</label>
+            <input
+              type="number" min={0} max={40}
+              value={loadForm.min_office_hours_per_week}
+              onChange={e => isLoggedIn && setLoadForm(f => ({ ...f, min_office_hours_per_week: +e.target.value }))}
               disabled={!isLoggedIn}
               style={{ padding: '5px 8px', fontSize: 13 }}
             />

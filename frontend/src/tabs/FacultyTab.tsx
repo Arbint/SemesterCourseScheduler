@@ -6,7 +6,7 @@ import { MultiSelect } from '../components/MultiSelect'
 import { showToast } from '../components/Toast'
 import { useAuth } from '../contexts/AuthContext'
 
-const EMPTY: Omit<Faculty, 'id'> = { first_name: '', last_name: '', rank: 'full_time', tags: [] }
+const EMPTY: Omit<Faculty, 'id'> = { first_name: '', last_name: '', rank: 'full_time', tags: [], office: '' }
 
 export function FacultyTab() {
   const { isLoggedIn } = useAuth()
@@ -35,7 +35,7 @@ export function FacultyTab() {
 
   const openEdit = async (f: Faculty) => {
     setEditing(f)
-    setForm({ first_name: f.first_name, last_name: f.last_name, rank: f.rank, tags: f.tags })
+    setForm({ first_name: f.first_name, last_name: f.last_name, rank: f.rank, tags: f.tags, office: f.office ?? '' })
     const taught = await facultyApi.getCourses(f.id)
     setTeachingIds(taught.map(c => c.id))
     setShowModal(true)
@@ -94,6 +94,7 @@ export function FacultyTab() {
               <tr>
                 <th>Name</th>
                 <th>Rank</th>
+                <th>Office</th>
                 <th>Tags</th>
                 <th></th>
               </tr>
@@ -107,6 +108,7 @@ export function FacultyTab() {
                       {f.rank === 'full_time' ? 'Full Time' : 'Part Time'}
                     </span>
                   </td>
+                  <td style={{ color: 'var(--text-secondary)' }}>{f.office || '—'}</td>
                   <td>{f.tags.map(t => <span key={t} className="tag">{t}</span>)}</td>
                   <td style={{ display: 'flex', gap: 6 }}>
                     {isLoggedIn && <button className="btn-secondary btn-sm" onClick={() => openEdit(f)}>Edit</button>}
@@ -135,6 +137,14 @@ export function FacultyTab() {
               <option value="full_time">Full Time</option>
               <option value="part_time">Part Time</option>
             </select>
+          </div>
+          <div className="form-group">
+            <label>Office</label>
+            <input
+              value={form.office ?? ''}
+              onChange={e => setForm(f => ({ ...f, office: e.target.value }))}
+              placeholder="e.g. JB 245"
+            />
           </div>
           <div className="form-group">
             <label>Tags</label>

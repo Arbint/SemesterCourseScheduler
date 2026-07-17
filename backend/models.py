@@ -48,6 +48,13 @@ schedule_entry_active_weekdays = Table(
     Column("weekday_id", Integer, ForeignKey("weekdays.id"), primary_key=True),
 )
 
+office_hour_timeslots = Table(
+    "office_hour_timeslots",
+    Base.metadata,
+    Column("office_hour_id", Integer, ForeignKey("office_hours.id"), primary_key=True),
+    Column("time_slot_id", Integer, ForeignKey("time_slots.id"), primary_key=True),
+)
+
 
 class Faculty(Base):
     __tablename__ = "faculty"
@@ -57,6 +64,7 @@ class Faculty(Base):
     last_name = Column(String, nullable=False)
     rank = Column(Enum(RankEnum), nullable=False)
     tags = Column(JSON, default=list)
+    office = Column(String, nullable=True)
 
     teaching_capabilities = relationship("FacultyTeaching", back_populates="faculty", cascade="all, delete-orphan")
     schedule_entries = relationship("ScheduleEntry", back_populates="faculty")
@@ -68,6 +76,7 @@ class LoadSettings(Base):
     id = Column(Integer, primary_key=True, default=1)
     fulltime_load = Column(Integer, nullable=False, default=3)
     parttime_load = Column(Integer, nullable=False, default=2)
+    min_office_hours_per_week = Column(Integer, nullable=False, default=4)
 
 
 class Semester(Base):
@@ -236,6 +245,7 @@ class Term(Base):
     schedule_entries = relationship("ScheduleEntry", back_populates="term", cascade="all, delete-orphan")
     term_taught_with_groups = relationship("TermTaughtWithGroup", back_populates="term", cascade="all, delete-orphan")
     meetings = relationship("Meeting", back_populates="term", cascade="all, delete-orphan")
+    office_hours = relationship("OfficeHour", back_populates="term", cascade="all, delete-orphan")
 
 
 class Meeting(Base):
@@ -249,6 +259,20 @@ class Meeting(Base):
 
     term = relationship("Term", back_populates="meetings")
     schedule_entries = relationship("ScheduleEntry", back_populates="meeting", cascade="all, delete-orphan")
+
+
+class OfficeHour(Base):
+    __tablename__ = "office_hours"
+
+    id = Column(Integer, primary_key=True, index=True)
+    term_id = Column(Integer, ForeignKey("terms.id"), nullable=False)
+    faculty_id = Column(Integer, ForeignKey("faculty.id"), nullable=False)
+    weekday_id = Column(Integer, ForeignKey("weekdays.id"), nullable=False)
+
+    term = relationship("Term", back_populates="office_hours")
+    faculty = relationship("Faculty")
+    weekday = relationship("Weekday")
+    time_slots = relationship("TimeSlot", secondary=office_hour_timeslots)
 
 
 class ScheduleTable(Base):
