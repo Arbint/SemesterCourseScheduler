@@ -116,7 +116,7 @@ class DoorTagSettings(Base):
 
 
 class PdfLayoutPreset(Base):
-    """A saved snapshot of Print Configuration settings (feedback_64) — usable
+    """A saved snapshot of Export Configuration settings (feedback_64) — usable
     from either the Room Schedule or Faculty Schedule export panel."""
     __tablename__ = "pdf_layout_presets"
 

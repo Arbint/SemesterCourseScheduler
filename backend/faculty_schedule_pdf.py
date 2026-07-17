@@ -16,8 +16,9 @@ from door_tag_pdf import (
     WEEKDAY_ROW_HEIGHT, HEADER_IMAGE_MAX_HEIGHT, FOOTER_IMAGE_MAX_HEIGHT, SECTION_GAP,
     GRID_LINE_COLOR, ENTRY_EDGE_COLOR, CELL_INSET, MEETING_COLOR,
     WEEKDAY_FULL, _entry_color, _merge_empty_runs, _term_label, _parse_hhmm, _format_clock,
-    _fit_image_band, _make_card, _text_item, wrap_as_single_flowable,
+    _fit_image_band, _make_card, _text_item, wrap_as_single_flowable, _natural_width, _ALIGN_TA,
     DEFAULT_LAYOUT, DEFAULT_PAGE_SIZE, DEFAULT_ORIENTATION, resolve_page_size,
+    DEFAULT_HEADER_PADDING_IN, DEFAULT_INFO_PADDING_IN,
     parse_layout, compose_items, item_width, TITLE_LINE_HEIGHT, SUBLINE_HEIGHT,
 )
 from models import Faculty, Term, TimeSlot, Weekday
@@ -165,13 +166,15 @@ def _attribute_flowable(attribute, pill_style):
     return Image(str(path), width=iw * scale, height=ih * scale)
 
 
-def _build_faculty_info_area(faculty: Faculty, term: Term, info_layout: str, width: float):
+def _build_faculty_info_area(faculty: Faculty, term: Term, info_layout: str, width: float, gap: float):
     """The faculty export's info area — name / rank-office / term lines,
-    arranged per the Info Text Area Layout option. Returns (flowable, height)."""
+    arranged per the Info Text Area Layout option. Returns (flowable, height, width)."""
+    axis, align = parse_layout(info_layout)
+    ta = _ALIGN_TA[align]
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle("FacultyTitle", parent=styles["Title"], alignment=TA_CENTER, fontSize=22, leading=25)
-    info_style = ParagraphStyle("FacultyInfo", parent=styles["Normal"], alignment=TA_CENTER, fontSize=12, textColor=colors.HexColor("#444444"))
-    subtitle_style = ParagraphStyle("FacultySubtitle", parent=styles["Normal"], alignment=TA_CENTER, fontSize=11, textColor=colors.HexColor("#666666"))
+    title_style = ParagraphStyle("FacultyTitle", parent=styles["Title"], alignment=ta, fontSize=22, leading=25)
+    info_style = ParagraphStyle("FacultyInfo", parent=styles["Normal"], alignment=ta, fontSize=12, textColor=colors.HexColor("#444444"))
+    subtitle_style = ParagraphStyle("FacultySubtitle", parent=styles["Normal"], alignment=ta, fontSize=11, textColor=colors.HexColor("#666666"))
 
     lines_data = [(f"{faculty.first_name} {faculty.last_name}", title_style, TITLE_LINE_HEIGHT)]
 
@@ -185,12 +188,13 @@ def _build_faculty_info_area(faculty: Faculty, term: Term, info_layout: str, wid
 
     lines_data.append((f"{_term_label(term)} Schedule", subtitle_style, SUBLINE_HEIGHT))
 
-    num_lines = len(lines_data)
-    line_width = item_width(info_layout, width, num_lines)
-    line_items = [_text_item(Paragraph(escape(text), style), line_width, height) for text, style, height in lines_data]
+    cap = item_width(info_layout, width, len(lines_data))
+    widths = [cap if align == "fill" else _natural_width(text, style, cap) for text, style, _h in lines_data]
+    line_items = [_text_item(Paragraph(escape(text), style), w, h) for (text, style, h), w in zip(lines_data, widths)]
 
-    elements, height = compose_items(line_items, info_layout, width)
-    return wrap_as_single_flowable(elements, width), height
+    elements, height = compose_items(line_items, info_layout, width, gap)
+    block_width = cap if align == "fill" else (max(widths) if axis == "vertical" else sum(widths) + gap * (len(widths) - 1))
+    return wrap_as_single_flowable(elements, block_width), height, block_width
 
 
 def _build_attribute_icon_area(faculty: Faculty):
@@ -223,6 +227,7 @@ def generate_faculty_schedule_pdf(
     header_scale: float = 1.0, footer_scale: float = 1.0,
     page_size: str = DEFAULT_PAGE_SIZE, orientation: str = DEFAULT_ORIENTATION,
     custom_width_in: float | None = None, custom_height_in: float | None = None,
+    header_padding_in: float = DEFAULT_HEADER_PADDING_IN, info_padding_in: float = DEFAULT_INFO_PADDING_IN,
 ) -> bytes:
     weekdays, ticks, grid = build_faculty_schedule_grid(db, term, faculty)
     page_width, page_height = resolve_page_size(page_size, orientation, custom_width_in, custom_height_in)
@@ -260,16 +265,19 @@ def generate_faculty_schedule_pdf(
 
     icon_flowable, icon_height, icon_width = _build_attribute_icon_area(faculty)
 
+    header_gap = max(0.0, header_padding_in) * inch
+    info_gap = max(0.0, info_padding_in) * inch
+
     num_header_items = (1 if header_flowable else 0) + 1 + (1 if icon_flowable else 0)
     info_width = item_width(header_layout, content_width, num_header_items)
-    info_area, info_height = _build_faculty_info_area(faculty, term, info_layout, info_width)
+    info_area, info_height, info_block_width = _build_faculty_info_area(faculty, term, info_layout, info_width, info_gap)
 
     header_items = [
-        {"flowable": header_flowable, "height": header_height},
-        {"flowable": info_area, "height": info_height},
-        {"flowable": icon_flowable, "height": icon_height},
+        {"flowable": header_flowable, "height": header_height, "width": header_width},
+        {"flowable": info_area, "height": info_height, "width": info_block_width},
+        {"flowable": icon_flowable, "height": icon_height, "width": icon_width},
     ]
-    info_elements, info_section_height = compose_items(header_items, header_layout, content_width)
+    info_elements, info_section_height = compose_items(header_items, header_layout, content_width, header_gap)
 
     elements = []
     elements.extend(info_elements)

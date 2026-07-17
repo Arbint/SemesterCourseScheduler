@@ -211,6 +211,8 @@ export function printConfigParams(config: PrintConfig): Record<string, string> {
     orientation: config.orientation,
     custom_width_in: String(config.custom_width_in),
     custom_height_in: String(config.custom_height_in),
+    header_padding_in: String(config.header_padding_in),
+    info_padding_in: String(config.info_padding_in),
   }
 }
 
@@ -408,7 +410,7 @@ export const PDF_ORIENTATION_OPTIONS: { value: string; label: string }[] = [
   { value: 'landscape', label: 'Landscape' },
 ]
 
-// One "Print Configuration" snapshot (feedback_64) — everything needed to
+// One "Export Configuration" snapshot (feedback_64) — everything needed to
 // reproduce a PDF export's page/layout settings, shared by both exports.
 export interface PrintConfig {
   header_layout: string
@@ -419,7 +421,15 @@ export interface PrintConfig {
   orientation: string
   custom_width_in: number
   custom_height_in: number
+  // Gap (inches) between items under their respective layout, only used —
+  // and only shown in the UI — when that layout isn't one of the two Fill
+  // options (feedback_65).
+  header_padding_in: number
+  info_padding_in: number
 }
+
+// A layout's own "align" half controls Fill vs not; independent of axis.
+export const isFillLayout = (layout: string) => layout.endsWith('_fill')
 
 export const DEFAULT_PRINT_CONFIG: PrintConfig = {
   header_layout: 'vertical_center',
@@ -430,6 +440,8 @@ export const DEFAULT_PRINT_CONFIG: PrintConfig = {
   orientation: 'portrait',
   custom_width_in: 11,
   custom_height_in: 17,
+  header_padding_in: 0.2,
+  info_padding_in: 0.1,
 }
 
 export interface PdfLayoutPreset {

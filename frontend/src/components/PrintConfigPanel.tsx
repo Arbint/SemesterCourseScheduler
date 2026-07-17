@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   doorTagAssetsApi, pdfPresetsApi,
-  PDF_LAYOUT_OPTIONS, PDF_PAGE_SIZE_OPTIONS, PDF_ORIENTATION_OPTIONS,
-  type PrintConfig, type PdfLayoutPreset,
+  PDF_LAYOUT_OPTIONS, PDF_PAGE_SIZE_OPTIONS, PDF_ORIENTATION_OPTIONS, isFillLayout,
+  DEFAULT_PRINT_CONFIG, type PrintConfig, type PdfLayoutPreset,
 } from '../api'
 import { FormModal } from './FormModal'
 import { showToast } from './Toast'
@@ -13,10 +13,11 @@ interface PrintConfigPanelProps {
   onChange: (config: PrintConfig) => void
 }
 
-// Collapsible "Print Configuration" section (feedback_64) shared by the Room
-// Schedule and Faculty Schedule export panels — header/footer image (a
+// Collapsible "Export Configuration" section (feedback_64/65) shared by the
+// Room Schedule and Faculty Schedule export panels — header/footer image (a
 // single global asset, same as before), header/footer size, orientation,
-// page size (+ custom dimensions), the two 8-option layout dropdowns, and
+// page size (+ custom dimensions), the two 8-option layout dropdowns (each
+// with its own padding spin box once its layout isn't Fill), and
 // saved-preset load/save. Fully controlled: the caller owns `config` and
 // threads it into its own export URL builder.
 export function PrintConfigPanel({ config, onChange }: PrintConfigPanelProps) {
@@ -72,7 +73,9 @@ export function PrintConfigPanel({ config, onChange }: PrintConfigPanelProps) {
   const applyPreset = (id: string) => {
     setSelectedPresetId(id)
     const preset = presets.find(p => String(p.id) === id)
-    if (preset) onChange(preset.config)
+    // Merge over the defaults so presets saved before a config field existed
+    // (e.g. the padding settings added in feedback_65) still apply cleanly.
+    if (preset) onChange({ ...DEFAULT_PRINT_CONFIG, ...preset.config })
   }
 
   const savePreset = async () => {
@@ -109,7 +112,7 @@ export function PrintConfigPanel({ config, onChange }: PrintConfigPanelProps) {
         onClick={() => setOpen(o => !o)}
         style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}
       >
-        <h3 style={{ margin: 0, fontSize: 14, color: 'var(--text-bright)' }}>Print Configuration</h3>
+        <h3 style={{ margin: 0, fontSize: 14, color: 'var(--text-bright)' }}>Export Configuration</h3>
         <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{open ? '▲ Collapse' : '▼ Expand'}</span>
       </div>
 
@@ -224,12 +227,34 @@ export function PrintConfigPanel({ config, onChange }: PrintConfigPanelProps) {
               <select value={config.header_layout} onChange={e => set('header_layout', e.target.value)} style={{ padding: '5px 8px', fontSize: 13 }}>
                 {PDF_LAYOUT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
+              {!isFillLayout(config.header_layout) && (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>Header Padding (in)</div>
+                  <input
+                    type="number" min={0} max={2} step={0.05}
+                    value={config.header_padding_in}
+                    onChange={e => set('header_padding_in', +e.target.value)}
+                    style={{ padding: '5px 8px', fontSize: 13, width: 70 }}
+                  />
+                </div>
+              )}
             </div>
             <div>
               <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>Info Text Area Layout</div>
               <select value={config.info_layout} onChange={e => set('info_layout', e.target.value)} style={{ padding: '5px 8px', fontSize: 13 }}>
                 {PDF_LAYOUT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
+              {!isFillLayout(config.info_layout) && (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>Info Padding (in)</div>
+                  <input
+                    type="number" min={0} max={2} step={0.05}
+                    value={config.info_padding_in}
+                    onChange={e => set('info_padding_in', +e.target.value)}
+                    style={{ padding: '5px 8px', fontSize: 13, width: 70 }}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>

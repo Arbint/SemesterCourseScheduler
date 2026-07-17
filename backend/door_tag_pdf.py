@@ -7,6 +7,7 @@ from reportlab.lib.pagesizes import letter, legal, TABLOID, A4, A3
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sqlalchemy.orm import Session
 from svglib.svglib import svg2rlg
@@ -84,12 +85,11 @@ LAYOUT_OPTIONS = [
     "horizontal_center", "horizontal_left", "horizontal_right", "horizontal_fill",
 ]
 DEFAULT_LAYOUT = "vertical_center"
-ITEM_GAP = 0.18 * inch
-# Non-fill vertical/horizontal items are sized to a fixed "natural" width
-# rather than the full content width — otherwise Left/Center/Right would be
-# visually indistinguishable from each other (or from Fill) for text blocks,
-# which have no true intrinsic width of their own.
-NATURAL_TEXT_WIDTH = 4.5 * inch
+# Default gap (feedback_65) between items under a non-Fill layout — the user
+# can override both via the Header/Info Padding spin boxes, which only show
+# up once their layout is set to something other than *_fill.
+DEFAULT_HEADER_PADDING_IN = 0.2
+DEFAULT_INFO_PADDING_IN = 0.1
 
 _ALIGN_NAME = {"center": "CENTER", "left": "LEFT", "right": "RIGHT", "fill": "CENTER"}
 _ALIGN_TA = {"center": TA_CENTER, "left": TA_LEFT, "right": TA_RIGHT, "fill": TA_CENTER}
@@ -105,21 +105,37 @@ def parse_layout(layout: str) -> tuple[str, str]:
 
 
 def item_width(layout: str, content_width: float, num_items: int) -> float:
-    """How wide a single item (or the info text area as a whole) should be
-    built to. Fill claims real estate (full width stacked, or an even split
-    side by side); anything else gets a fixed natural width, positioned via
-    hAlign."""
+    """Width budget for one item under this layout. Fill claims real estate
+    up front (full width stacked, or an even split side by side) since it
+    has no natural size of its own. Anything else just gets the full
+    available width back as an upper bound — non-fill items size themselves
+    to their own natural (shrink-to-fit) content width, capped by this, so
+    Left/Center/Right/non-fill items sit snugly next to each other instead
+    of each claiming an even share of the width."""
     axis, align = parse_layout(layout)
     if align != "fill":
-        return NATURAL_TEXT_WIDTH
+        return content_width
     return content_width if axis == "vertical" else content_width / max(1, num_items)
 
 
-def compose_items(items: list[dict], layout: str, available_width: float):
-    """Arranges 1-3 pre-built {"flowable", "height"} items per one of the 8
-    layout options. Used for both the header section (image / info text area
-    / icon area) and, recursively, the info text area's own lines. Returns
-    (elements: list, total_height: float)."""
+def _natural_width(text: str, style: ParagraphStyle, cap: float) -> float:
+    """Shrink-to-fit width for a single line of plain (unwrapped) text set in
+    `style`, capped so it never exceeds the available area — long text still
+    falls back to wrapping within `cap` rather than overflowing the page."""
+    return min(stringWidth(text, style.fontName, style.fontSize) + 6, cap)
+
+
+def compose_items(items: list[dict], layout: str, available_width: float, gap: float):
+    """Arranges 1-3 pre-built {"flowable", "height", "width"} items per one
+    of the 8 layout options, spaced `gap` points apart when the layout isn't
+    Fill. "width" (each item's own natural, already shrink-to-fit size) is
+    only required for a non-Fill horizontal row — a reportlab Table column
+    left as `None` doesn't shrink-wrap to its content the way one might
+    expect, it stretches to fill whatever width the Table is wrapped at, so
+    every column needs its real width spelled out explicitly to sit snugly
+    next to its neighbors instead of spreading out. Used for both the header
+    section (image / info text area / icon area) and, recursively, the info
+    text area's own lines. Returns (elements: list, total_height: float)."""
     items = [it for it in items if it.get("flowable") is not None]
     if not items:
         return [], 0
@@ -139,12 +155,12 @@ def compose_items(items: list[dict], layout: str, available_width: float):
             elements.append(it["flowable"])
             total_h += it["height"]
             if i < len(items) - 1:
-                elements.append(Spacer(1, SECTION_GAP))
-                total_h += SECTION_GAP
+                elements.append(Spacer(1, gap))
+                total_h += gap
         return elements, total_h
 
     # horizontal — one row, either evenly split (fill) or each item at its
-    # own natural size with a small fixed gap between them
+    # own natural size with `gap` between them
     if align == "fill":
         col_w = available_width / len(items)
         row = Table([[it["flowable"] for it in items]], colWidths=[col_w] * len(items))
@@ -152,10 +168,10 @@ def compose_items(items: list[dict], layout: str, available_width: float):
         cells, col_widths = [], []
         for i, it in enumerate(items):
             cells.append(it["flowable"])
-            col_widths.append(None)
+            col_widths.append(it["width"])
             if i < len(items) - 1:
-                cells.append(Spacer(ITEM_GAP, 1))
-                col_widths.append(ITEM_GAP)
+                cells.append(Spacer(gap, 1))
+                col_widths.append(gap)
         row = Table([cells], colWidths=col_widths)
     row.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -175,7 +191,7 @@ def _text_item(paragraph, width: float, height: float) -> dict:
         ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
         ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
     ]))
-    return {"flowable": table, "height": height}
+    return {"flowable": table, "height": height, "width": width}
 
 
 TITLE_LINE_HEIGHT = 0.42 * inch
@@ -198,21 +214,26 @@ def wrap_as_single_flowable(elements: list, width: float):
     return table
 
 
-def _build_room_info_area(room: Room, term: Term, info_layout: str, width: float):
+def _build_room_info_area(room: Room, term: Term, info_layout: str, width: float, gap: float):
     """The room export's info area — a title + subtitle line, arranged per
-    the Info Text Area Layout option. Returns (flowable, height)."""
-    title_style = ParagraphStyle("DoorTagTitle", parent=getSampleStyleSheet()["Title"], alignment=TA_CENTER, fontSize=22, leading=25)
+    the Info Text Area Layout option. Returns (flowable, height, width)."""
+    axis, align = parse_layout(info_layout)
+    ta = _ALIGN_TA[align]
+    title_style = ParagraphStyle("DoorTagTitle", parent=getSampleStyleSheet()["Title"], alignment=ta, fontSize=22, leading=25)
     subtitle_style = ParagraphStyle(
-        "DoorTagSubtitle", parent=getSampleStyleSheet()["Normal"], alignment=TA_CENTER, fontSize=12,
+        "DoorTagSubtitle", parent=getSampleStyleSheet()["Normal"], alignment=ta, fontSize=12,
         textColor=colors.HexColor("#444444"),
     )
-    line_width = item_width(info_layout, width, 2)
-    lines = [
-        _text_item(Paragraph(escape(room.display_label), title_style), line_width, TITLE_LINE_HEIGHT),
-        _text_item(Paragraph(escape(f"{_term_label(term)} Schedule"), subtitle_style), line_width, SUBLINE_HEIGHT),
+    raw_lines = [
+        (room.display_label, title_style, TITLE_LINE_HEIGHT),
+        (f"{_term_label(term)} Schedule", subtitle_style, SUBLINE_HEIGHT),
     ]
-    elements, height = compose_items(lines, info_layout, width)
-    return wrap_as_single_flowable(elements, width), height
+    cap = item_width(info_layout, width, len(raw_lines))
+    widths = [cap if align == "fill" else _natural_width(raw, style, cap) for raw, style, _h in raw_lines]
+    lines = [_text_item(Paragraph(escape(raw), style), w, h) for (raw, style, h), w in zip(raw_lines, widths)]
+    elements, height = compose_items(lines, info_layout, width, gap)
+    block_width = cap if align == "fill" else (max(widths) if axis == "vertical" else sum(widths) + gap * (len(widths) - 1))
+    return wrap_as_single_flowable(elements, block_width), height, block_width
 
 
 def _entry_color(course_id: int | None) -> colors.HexColor:
@@ -394,6 +415,7 @@ def generate_door_tag_pdf(
     header_scale: float = 1.0, footer_scale: float = 1.0,
     page_size: str = DEFAULT_PAGE_SIZE, orientation: str = DEFAULT_ORIENTATION,
     custom_width_in: float | None = None, custom_height_in: float | None = None,
+    header_padding_in: float = DEFAULT_HEADER_PADDING_IN, info_padding_in: float = DEFAULT_INFO_PADDING_IN,
 ) -> bytes:
     weekdays, ticks, grid = build_door_tag_grid(db, term, room)
     page_width, page_height = resolve_page_size(page_size, orientation, custom_width_in, custom_height_in)
@@ -437,12 +459,18 @@ def generate_door_tag_pdf(
     if footer_band:
         footer_band.hAlign = "CENTER"  # footer is never affected by the Layout option
 
+    header_gap = max(0.0, header_padding_in) * inch
+    info_gap = max(0.0, info_padding_in) * inch
+
     num_header_items = 1 + (1 if header_flowable else 0)
     info_width = item_width(header_layout, content_width, num_header_items)
-    info_area, info_height = _build_room_info_area(room, term, info_layout, info_width)
+    info_area, info_height, info_block_width = _build_room_info_area(room, term, info_layout, info_width, info_gap)
 
-    header_items = [{"flowable": header_flowable, "height": header_height}, {"flowable": info_area, "height": info_height}]
-    info_elements, info_section_height = compose_items(header_items, header_layout, content_width)
+    header_items = [
+        {"flowable": header_flowable, "height": header_height, "width": header_width},
+        {"flowable": info_area, "height": info_height, "width": info_block_width},
+    ]
+    info_elements, info_section_height = compose_items(header_items, header_layout, content_width, header_gap)
 
     elements = []
     elements.extend(info_elements)
