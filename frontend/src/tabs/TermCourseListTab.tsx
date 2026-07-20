@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   termsApi, tablesApi, entriesApi, coursesApi, facultyApi, roomsApi, weekdaysApi, timeSlotsApi, termLabel,
+  courseListExportUrl,
   type Term, type ScheduleTable, type ScheduleEntry, type Course, type Faculty, type Room, type Weekday, type TimeSlot,
 } from '../api'
 import { SearchableSelect } from '../components/SearchableSelect'
@@ -32,6 +33,8 @@ function minutesOf(t: string): number {
   return h * 60 + m
 }
 
+const EMPTY_COLUMN_FILTERS = { code: '', title: '', section: '', instructor: '', time: '', room: '' }
+
 export function TermCourseListTab() {
   const [terms, setTerms] = useState<Term[]>([])
   const [selectedTermId, setSelectedTermId] = useState<number | null>(null)
@@ -43,6 +46,7 @@ export function TermCourseListTab() {
   const [weekdays, setWeekdays] = useState<Weekday[]>([])
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([])
   const [sort, setSort] = useState<SortState | null>({ key: 'code', dir: 'asc' })
+  const [columnFilters, setColumnFilters] = useState(EMPTY_COLUMN_FILTERS)
 
   useEffect(() => {
     Promise.all([termsApi.list(), facultyApi.list(), roomsApi.list(), weekdaysApi.list(), timeSlotsApi.list()])
@@ -124,12 +128,42 @@ export function TermCourseListTab() {
     }
   }
 
-  const sortedRows = sort ? [...rows].sort((a, b) => compareValues(sortKeyValue(a, sort.key), sortKeyValue(b, sort.key), sort.dir)) : rows
+  const filteredRows = rows.filter(r => {
+    const f = columnFilters
+    if (f.code && !`${r.course.dept_code} ${r.course.course_number}`.toLowerCase().includes(f.code.toLowerCase())) return false
+    if (f.title && !r.course.course_name.toLowerCase().includes(f.title.toLowerCase())) return false
+    if (f.section && !String(r.entry.section).includes(f.section)) return false
+    if (f.instructor) {
+      const name = r.faculty ? `${r.faculty.last_name}, ${r.faculty.first_name}` : 'No instructor'
+      if (!name.toLowerCase().includes(f.instructor.toLowerCase())) return false
+    }
+    if (f.time && !r.timeLabel.toLowerCase().includes(f.time.toLowerCase())) return false
+    if (f.room) {
+      const roomName = r.room?.display_label ?? 'Not scheduled'
+      if (!roomName.toLowerCase().includes(f.room.toLowerCase())) return false
+    }
+    return true
+  })
+
+  const sortedRows = sort
+    ? [...filteredRows].sort((a, b) => compareValues(sortKeyValue(a, sort.key), sortKeyValue(b, sort.key), sort.dir))
+    : filteredRows
+
+  const setColumnFilter = (key: keyof typeof EMPTY_COLUMN_FILTERS, value: string) =>
+    setColumnFilters(f => ({ ...f, [key]: value }))
 
   return (
     <div>
       <div className="page-header">
         <h1>Term Course List</h1>
+        {selectedTermId && sortedRows.length > 0 && (
+          <button
+            className="btn-primary btn-sm"
+            onClick={() => window.open(courseListExportUrl(selectedTermId, sortedRows.map(r => r.entry.id)), '_blank')}
+          >
+            Export
+          </button>
+        )}
       </div>
       <div style={{ padding: '0 20px 20px' }}>
         <div style={{ margin: '16px 0' }}>
@@ -137,7 +171,7 @@ export function TermCourseListTab() {
           <SearchableSelect
             options={terms.map(t => ({ id: t.id, label: termLabel(t) }))}
             selectedId={selectedTermId}
-            onSelect={setSelectedTermId}
+            onSelect={id => { setSelectedTermId(id); setColumnFilters(EMPTY_COLUMN_FILTERS) }}
             placeholder="Select term..."
             searchPlaceholder="Search terms..."
           />
@@ -145,22 +179,30 @@ export function TermCourseListTab() {
 
         {!selectedTerm ? (
           <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Select a term.</div>
-        ) : sortedRows.length === 0 ? (
+        ) : rows.length === 0 ? (
           <div className="empty-state"><div className="icon">📋</div>No courses in this term yet.</div>
         ) : (
           <table>
             <thead>
               <tr>
-                <SortableTh label="Course Code" sortKey="code" sort={sort} onSort={k => setSort(s => nextSort(s, k))} />
-                <SortableTh label="Title" sortKey="title" sort={sort} onSort={k => setSort(s => nextSort(s, k))} />
-                <SortableTh label="Sec" sortKey="section" sort={sort} onSort={k => setSort(s => nextSort(s, k))} />
-                <SortableTh label="Instructor" sortKey="instructor" sort={sort} onSort={k => setSort(s => nextSort(s, k))} />
-                <SortableTh label="Time" sortKey="time" sort={sort} onSort={k => setSort(s => nextSort(s, k))} />
-                <SortableTh label="Room" sortKey="room" sort={sort} onSort={k => setSort(s => nextSort(s, k))} />
+                <SortableTh label="Course Code" sortKey="code" sort={sort} onSort={k => setSort(s => nextSort(s, k))}
+                  filterValue={columnFilters.code} onFilterChange={v => setColumnFilter('code', v)} filterPlaceholder="e.g. ANGD 3371" />
+                <SortableTh label="Title" sortKey="title" sort={sort} onSort={k => setSort(s => nextSort(s, k))}
+                  filterValue={columnFilters.title} onFilterChange={v => setColumnFilter('title', v)} filterPlaceholder="Filter title..." />
+                <SortableTh label="Sec" sortKey="section" sort={sort} onSort={k => setSort(s => nextSort(s, k))}
+                  filterValue={columnFilters.section} onFilterChange={v => setColumnFilter('section', v)} filterPlaceholder="#" />
+                <SortableTh label="Instructor" sortKey="instructor" sort={sort} onSort={k => setSort(s => nextSort(s, k))}
+                  filterValue={columnFilters.instructor} onFilterChange={v => setColumnFilter('instructor', v)} filterPlaceholder="Filter instructor..." />
+                <SortableTh label="Time" sortKey="time" sort={sort} onSort={k => setSort(s => nextSort(s, k))}
+                  filterValue={columnFilters.time} onFilterChange={v => setColumnFilter('time', v)} filterPlaceholder="e.g. Mon" />
+                <SortableTh label="Room" sortKey="room" sort={sort} onSort={k => setSort(s => nextSort(s, k))}
+                  filterValue={columnFilters.room} onFilterChange={v => setColumnFilter('room', v)} filterPlaceholder="Filter room..." />
               </tr>
             </thead>
             <tbody>
-              {sortedRows.map(r => (
+              {sortedRows.length === 0 ? (
+                <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 16 }}>No courses match the current filters.</td></tr>
+              ) : sortedRows.map(r => (
                 <tr key={r.entry.id}>
                   <td style={{ fontFamily: 'monospace', color: 'var(--accent)' }}>
                     {r.course.dept_code} {r.course.course_number}

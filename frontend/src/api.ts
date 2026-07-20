@@ -344,6 +344,12 @@ export const termsApi = {
   delete: (id: number) => api.delete(`/terms/${id}`),
 }
 
+// Exports exactly the rows given, in that order — so the download matches
+// whatever the Term Course List tab currently has sorted/filtered to.
+export function courseListExportUrl(termId: number, entryIds: number[]): string {
+  return `/api/terms/${termId}/course-list/export?entry_ids=${entryIds.join(',')}`
+}
+
 export const termTaughtWithApi = {
   list: (termId: number) => api.get<TermTaughtWithGroup[]>(`/terms/${termId}/taughtwith`).then(r => r.data),
   create: (termId: number, course_ids: number[]) =>

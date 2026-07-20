@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from database import get_db
@@ -114,6 +115,21 @@ def delete_term(term_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "Term not found")
     db.delete(t)
     db.commit()
+
+
+@router.get("/{term_id}/course-list/export")
+def export_course_list(term_id: int, entry_ids: str = Query(..., description="Comma-separated ScheduleEntry ids, in the order to export"), db: Session = Depends(get_db)):
+    from export import generate_course_list_excel
+    ids = [int(x) for x in entry_ids.split(",") if x.strip()]
+    try:
+        content = generate_course_list_excel(db, term_id, ids)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=course_list_{term_id}.xlsx"}
+    )
 
 
 # --- Per-term TaughtWith ---

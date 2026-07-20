@@ -25,6 +25,84 @@ def _credit_hours(course_number: int) -> int:
     return (course_number // 100) % 10
 
 
+DAY_ABBR = {"mon": "Mon", "tue": "Tue", "wed": "Wed", "thu": "Thu", "fri": "Fri"}
+
+
+def _format_clock(t: str) -> str:
+    """"HH:MM" 24h -> "H:MM AM/PM" — mirrors the frontend's formatClock."""
+    h_str, m = t.split(":")
+    h = int(h_str) % 12
+    if h == 0:
+        h = 12
+    ampm = "PM" if int(h_str) >= 12 else "AM"
+    return f"{h}:{m} {ampm}"
+
+
+def _entry_time_label(entry) -> str:
+    """Day abbreviations + start-end time span for a scheduled entry, or
+    "Not scheduled" — mirrors the Term Course List tab's buildTimeInfo."""
+    table = entry.schedule_table
+    if not table or not entry.time_slots:
+        return "Not scheduled"
+
+    eff_ids = {w.id for w in entry.active_weekdays} if entry.active_weekdays else {w.id for w in table.weekdays}
+    days = sorted((w for w in table.weekdays if w.id in eff_ids), key=lambda w: w.display_order)
+    day_labels = [DAY_ABBR.get(w.name.value, w.name.value) for w in days]
+    slots = sorted(entry.time_slots, key=lambda ts: ts.display_order)
+    if not slots or not day_labels:
+        return "Not scheduled"
+
+    return f"{'/'.join(day_labels)} {_format_clock(slots[0].start_time)}–{_format_clock(slots[-1].end_time)}"
+
+
+def generate_course_list_excel(db, term_id: int, entry_ids: list[int]) -> bytes:
+    """Flat Course Code / Title / Section / Instructor / Time / Room sheet for
+    the Term Course List tab's Export button — rows in the exact order given,
+    so it matches whatever the user currently has sorted/filtered on screen."""
+    from models import Term, ScheduleEntry
+
+    term = db.query(Term).filter(Term.id == term_id).first()
+    if not term:
+        raise ValueError("Term not found")
+
+    entries_by_id = {
+        e.id: e for e in
+        db.query(ScheduleEntry).filter(ScheduleEntry.term_id == term_id, ScheduleEntry.id.in_(entry_ids)).all()
+    }
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Course List"
+
+    hdr_fill = PatternFill(fill_type="solid", fgColor=HEADER_GRAY)
+    hdr_font = Font(bold=True, color="FFFFFF")
+    for col, header in enumerate(["Course Code", "Title", "Section", "Instructor", "Time", "Room"], start=1):
+        c = ws.cell(row=1, column=col, value=header)
+        c.font = hdr_font
+        c.fill = hdr_fill
+
+    row = 2
+    for eid in entry_ids:
+        entry = entries_by_id.get(eid)
+        if not entry or not entry.course_id:
+            continue
+        course = entry.course
+        ws.cell(row=row, column=1, value=f"{course.dept_code} {course.course_number}")
+        ws.cell(row=row, column=2, value=course.course_name)
+        ws.cell(row=row, column=3, value=entry.section)
+        ws.cell(row=row, column=4, value=f"{entry.faculty.last_name}, {entry.faculty.first_name}" if entry.faculty else "No instructor")
+        ws.cell(row=row, column=5, value=_entry_time_label(entry))
+        ws.cell(row=row, column=6, value=entry.room.display_label if entry.room else "Not scheduled")
+        row += 1
+
+    for col_idx, width in enumerate([16, 34, 9, 22, 30, 14], start=1):
+        ws.column_dimensions[get_column_letter(col_idx)].width = width
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
 def generate_excel(db, term_id: int) -> bytes:
     from models import Term, TimeSlot, Room, TaughtWithGroup
 
