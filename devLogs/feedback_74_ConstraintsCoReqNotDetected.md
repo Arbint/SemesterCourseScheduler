@@ -1,0 +1,1 @@
+for the spring 2027 V2, when I drag the Peorid Styles at 4:30 PM on Monday Wednesday, it overlaps withe Character Modeling I, they are listed as Co-Requisites (must not overlap). but the issue was not detected and reported by the auditors, can you check and fix the issues? Also double check other potential auditor issues.

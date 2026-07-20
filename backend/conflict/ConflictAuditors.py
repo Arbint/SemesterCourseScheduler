@@ -129,44 +129,35 @@ class CoReqTimeConflict(ConflictAuditor):
             if len(sections_by_course) < 2:
                 continue
 
-            # Check if ALL sections of every course overlap with ALL sections of every other course
-            # Conflict exists only if every section-pair across the two courses overlaps
-            all_overlap = True
-            for i, cid_a in enumerate(course_ids):
-                for cid_b in course_ids[i + 1:]:
-                    secs_a = sections_by_course.get(cid_a, [])
-                    secs_b = sections_by_course.get(cid_b, [])
-                    if not secs_a or not secs_b:
-                        all_overlap = False
-                        break
-                    # There must exist at least one non-overlapping pair
-                    has_non_overlap = False
+            # Each pair of co-req courses is checked independently: a conflict exists
+            # for that pair only if EVERY section combination between the two courses
+            # overlaps (i.e. there is no way to schedule a student into non-colliding
+            # sections). A group with 3+ members can have one conflicting pair and one
+            # clean pair at the same time, so pairs must not share a single verdict.
+            scheduled_ids = [cid for cid in course_ids if cid in sections_by_course]
+            for i, cid_a in enumerate(scheduled_ids):
+                for cid_b in scheduled_ids[i + 1:]:
+                    secs_a = sections_by_course[cid_a]
+                    secs_b = sections_by_course[cid_b]
+
+                    all_pairs_collide = True
                     for ea in secs_a:
                         for eb in secs_b:
                             weekdays_a = _get_effective_weekdays(ea)
                             weekdays_b = _get_effective_weekdays(eb)
-                            if not (weekdays_a & weekdays_b):
-                                has_non_overlap = True
+                            if not (weekdays_a & weekdays_b) or not _slots_overlap(ea.time_slots, eb.time_slots):
+                                all_pairs_collide = False
                                 break
-                            if not _slots_overlap(ea.time_slots, eb.time_slots):
-                                has_non_overlap = True
-                                break
-                        if has_non_overlap:
+                        if not all_pairs_collide:
                             break
-                    if not has_non_overlap:
-                        all_overlap = True
-                    else:
-                        all_overlap = False
-                if not all_overlap:
-                    break
 
-            if all_overlap:
-                entry_ids = [e.id for cid in course_ids for e in sections_by_course.get(cid, [])]
-                reports.append(ConflictReport(
-                    courses=course_ids,
-                    entries=entry_ids,
-                    description=f"Co-requisite conflict: all sections of co-requisite courses overlap in time"
-                ))
+                    if all_pairs_collide:
+                        entry_ids = [e.id for e in secs_a] + [e.id for e in secs_b]
+                        reports.append(ConflictReport(
+                            courses=[cid_a, cid_b],
+                            entries=entry_ids,
+                            description=f"Co-requisite conflict: all sections of {_entry_label(secs_a[0])} and {_entry_label(secs_b[0])} overlap in time"
+                        ))
         return reports
 
 
