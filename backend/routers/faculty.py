@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from database import get_db
@@ -16,6 +16,18 @@ router = APIRouter(prefix="/api/faculty", tags=["faculty"])
 @router.get("", response_model=list[FacultyOut])
 def list_faculty(db: Session = Depends(get_db)):
     return [FacultyOut.from_orm(f) for f in db.query(Faculty).all()]
+
+
+@router.get("/export")
+def export_faculty_list(faculty_ids: str = Query(..., description="Comma-separated Faculty ids, in the order to export"), db: Session = Depends(get_db)):
+    from export import generate_faculty_list_excel
+    ids = [int(x) for x in faculty_ids.split(",") if x.strip()]
+    content = generate_faculty_list_excel(db, ids)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=faculty_list.xlsx"}
+    )
 
 
 @router.post("", response_model=FacultyOut, status_code=201)

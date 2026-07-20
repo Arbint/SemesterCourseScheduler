@@ -32,7 +32,7 @@ export default api
 // --- Types ---
 
 export type FullTimeOrPartTime = 'full_time' | 'part_time'
-export type FacultyRank = 'instructor' | 'senior_instructor' | 'assistant_professor' | 'associate_professor' | 'professor_of_practice' | 'professor'
+export type FacultyRank = 'instructor' | 'senior_instructor' | 'assistant_professor' | 'associate_professor' | 'professor' | 'assistant_professor_of_practice' | 'associate_professor_of_practice' | 'professor_of_practice'
 export type SemesterName = 'fall' | 'spring' | 'summer'
 export type WeekdayName = 'mon' | 'tue' | 'wed' | 'thu' | 'fri'
 
@@ -249,6 +249,10 @@ export function printConfigParams(config: PrintConfig): Record<string, string> {
     footer_top_padding_in: String(config.footer_top_padding_in),
     table_top_padding_in: String(config.table_top_padding_in),
   }
+}
+
+export function facultyExportUrl(facultyIds: number[]): string {
+  return `/api/faculty/export?faculty_ids=${facultyIds.join(',')}`
 }
 
 export const facultyApi = {

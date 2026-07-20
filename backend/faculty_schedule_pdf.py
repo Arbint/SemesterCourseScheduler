@@ -29,8 +29,10 @@ RANK_LABELS = {
     "senior_instructor": "Senior Instructor",
     "assistant_professor": "Assistant Professor",
     "associate_professor": "Associate Professor",
-    "professor_of_practice": "Professor of Practice",
     "professor": "Professor",
+    "assistant_professor_of_practice": "Assistant Professor of Practice",
+    "associate_professor_of_practice": "Associate Professor of Practice",
+    "professor_of_practice": "Professor of Practice",
 }
 
 # Light, welcoming green for office hours — distinct from course pastels and

@@ -17,8 +17,10 @@ class FacultyRankEnum(str, enum.Enum):
     senior_instructor = "senior_instructor"
     assistant_professor = "assistant_professor"
     associate_professor = "associate_professor"
-    professor_of_practice = "professor_of_practice"
     professor = "professor"
+    assistant_professor_of_practice = "assistant_professor_of_practice"
+    associate_professor_of_practice = "associate_professor_of_practice"
+    professor_of_practice = "professor_of_practice"
 
 
 class SemesterEnum(str, enum.Enum):

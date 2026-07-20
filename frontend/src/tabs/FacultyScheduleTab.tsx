@@ -23,8 +23,10 @@ const RANK_LABELS: Record<FacultyRank, string> = {
   senior_instructor: 'Senior Instructor',
   assistant_professor: 'Assistant Professor',
   associate_professor: 'Associate Professor',
-  professor_of_practice: 'Professor of Practice',
   professor: 'Professor',
+  assistant_professor_of_practice: 'Assistant Professor of Practice',
+  associate_professor_of_practice: 'Associate Professor of Practice',
+  professor_of_practice: 'Professor of Practice',
 }
 
 type CourseCell = { kind: 'course'; entry: ScheduleEntry; course: Course; room: Room | null; span: number; timeRange: string }

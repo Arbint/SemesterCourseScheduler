@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
-import { facultyApi, coursesApi, facultyAttributesApi, type Faculty, type Course, type FacultyRank, type FacultyAttribute } from '../api'
+import { facultyApi, coursesApi, facultyAttributesApi, facultyExportUrl, type Faculty, type Course, type FacultyRank, type FacultyAttribute } from '../api'
 import { FormModal } from '../components/FormModal'
 import { TagInput } from '../components/TagInput'
 import { MultiSelect } from '../components/MultiSelect'
 import { showToast } from '../components/Toast'
 import { useAuth } from '../contexts/AuthContext'
+import { SortableTh, compareValues, nextSort, type SortState } from '../components/SortableTh'
 
 const EMPTY: Omit<Faculty, 'id' | 'attribute_ids'> = { first_name: '', last_name: '', full_time_or_part_time: 'full_time', tags: [], office: '', is_department_owned: false, rank: null }
 
@@ -13,8 +14,10 @@ const RANK_LABELS: Record<FacultyRank, string> = {
   senior_instructor: 'Senior Instructor',
   assistant_professor: 'Assistant Professor',
   associate_professor: 'Associate Professor',
-  professor_of_practice: 'Professor of Practice',
   professor: 'Professor',
+  assistant_professor_of_practice: 'Assistant Professor of Practice',
+  associate_professor_of_practice: 'Associate Professor of Practice',
+  professor_of_practice: 'Professor of Practice',
 }
 
 // Manage-attributes panel — lives under the faculty list, lets the user
@@ -175,6 +178,8 @@ function AttributePanel({ attributes, isLoggedIn, onChanged }: {
   )
 }
 
+const EMPTY_COLUMN_FILTERS = { name: '', rank: '', fulltime: '', office: '', ownership: '', attributes: '', tags: '' }
+
 export function FacultyTab() {
   const { isLoggedIn } = useAuth()
   const [faculty, setFaculty] = useState<Faculty[]>([])
@@ -186,6 +191,8 @@ export function FacultyTab() {
   const [attributeIds, setAttributeIds] = useState<number[]>([])
   const [saving, setSaving] = useState(false)
   const [showModal, setShowModal] = useState(false)
+  const [sort, setSort] = useState<SortState | null>(null)
+  const [columnFilters, setColumnFilters] = useState(EMPTY_COLUMN_FILTERS)
 
   const load = async () => {
     const [f, c, a] = await Promise.all([facultyApi.list(), coursesApi.list(), facultyAttributesApi.list()])
@@ -262,11 +269,62 @@ export function FacultyTab() {
     }
   }
 
+  const attributeNames = (f: Faculty) =>
+    f.attribute_ids.map(aid => attributeMap.get(aid)?.name ?? '').join(' ')
+
+  const filteredFaculty = faculty.filter(f => {
+    const flt = columnFilters
+    if (flt.name && !`${f.last_name}, ${f.first_name}`.toLowerCase().includes(flt.name.toLowerCase())) return false
+    if (flt.rank && !(f.rank ? RANK_LABELS[f.rank] : '').toLowerCase().includes(flt.rank.toLowerCase())) return false
+    if (flt.fulltime) {
+      const label = f.full_time_or_part_time === 'full_time' ? 'Full Time' : 'Part Time'
+      if (!label.toLowerCase().includes(flt.fulltime.toLowerCase())) return false
+    }
+    if (flt.office && !(f.office || '').toLowerCase().includes(flt.office.toLowerCase())) return false
+    if (flt.ownership) {
+      const label = f.is_department_owned ? 'Department' : ''
+      if (!label.toLowerCase().includes(flt.ownership.toLowerCase())) return false
+    }
+    if (flt.attributes && !attributeNames(f).toLowerCase().includes(flt.attributes.toLowerCase())) return false
+    if (flt.tags && !f.tags.join(' ').toLowerCase().includes(flt.tags.toLowerCase())) return false
+    return true
+  })
+
+  const sortKeyValue = (f: Faculty, key: string): string | number => {
+    switch (key) {
+      case 'name': return `${f.last_name}, ${f.first_name}`
+      case 'rank': return f.rank ? RANK_LABELS[f.rank] : ''
+      case 'fulltime': return f.full_time_or_part_time
+      case 'office': return f.office ?? ''
+      case 'ownership': return f.is_department_owned ? 1 : 0
+      case 'attributes': return f.attribute_ids.length
+      case 'tags': return f.tags.length
+      default: return 0
+    }
+  }
+
+  const sortedFaculty = sort
+    ? [...filteredFaculty].sort((a, b) => compareValues(sortKeyValue(a, sort.key), sortKeyValue(b, sort.key), sort.dir))
+    : filteredFaculty
+
+  const setColumnFilter = (key: keyof typeof EMPTY_COLUMN_FILTERS, value: string) =>
+    setColumnFilters(f => ({ ...f, [key]: value }))
+
   return (
     <div>
       <div className="page-header">
         <h1>Faculty</h1>
-        {isLoggedIn && <button className="btn-primary" onClick={openNew}>+ Add Faculty</button>}
+        <div style={{ display: 'flex', gap: 8 }}>
+          {sortedFaculty.length > 0 && (
+            <button
+              className="btn-secondary"
+              onClick={() => window.open(facultyExportUrl(sortedFaculty.map(f => f.id)), '_blank')}
+            >
+              Export
+            </button>
+          )}
+          {isLoggedIn && <button className="btn-primary" onClick={openNew}>+ Add Faculty</button>}
+        </div>
       </div>
       <div className="page-content">
         {faculty.length === 0 ? (
@@ -275,18 +333,27 @@ export function FacultyTab() {
           <table>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Rank</th>
-                <th>Full-Time/Part-Time</th>
-                <th>Office</th>
-                <th>Ownership</th>
-                <th>Attributes</th>
-                <th>Tags</th>
+                <SortableTh label="Name" sortKey="name" sort={sort} onSort={k => setSort(s => nextSort(s, k))}
+                  filterValue={columnFilters.name} onFilterChange={v => setColumnFilter('name', v)} filterPlaceholder="Filter name..." />
+                <SortableTh label="Rank" sortKey="rank" sort={sort} onSort={k => setSort(s => nextSort(s, k))}
+                  filterValue={columnFilters.rank} onFilterChange={v => setColumnFilter('rank', v)} filterPlaceholder="Filter rank..." />
+                <SortableTh label="Full-Time/Part-Time" sortKey="fulltime" sort={sort} onSort={k => setSort(s => nextSort(s, k))}
+                  filterValue={columnFilters.fulltime} onFilterChange={v => setColumnFilter('fulltime', v)} filterPlaceholder="Full/Part..." />
+                <SortableTh label="Office" sortKey="office" sort={sort} onSort={k => setSort(s => nextSort(s, k))}
+                  filterValue={columnFilters.office} onFilterChange={v => setColumnFilter('office', v)} filterPlaceholder="Filter office..." />
+                <SortableTh label="Ownership" sortKey="ownership" sort={sort} onSort={k => setSort(s => nextSort(s, k))}
+                  filterValue={columnFilters.ownership} onFilterChange={v => setColumnFilter('ownership', v)} filterPlaceholder="Dept..." />
+                <SortableTh label="Attributes" sortKey="attributes" sort={sort} onSort={k => setSort(s => nextSort(s, k))}
+                  filterValue={columnFilters.attributes} onFilterChange={v => setColumnFilter('attributes', v)} filterPlaceholder="Filter attrs..." />
+                <SortableTh label="Tags" sortKey="tags" sort={sort} onSort={k => setSort(s => nextSort(s, k))}
+                  filterValue={columnFilters.tags} onFilterChange={v => setColumnFilter('tags', v)} filterPlaceholder="Filter tags..." />
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {faculty.map(f => (
+              {sortedFaculty.length === 0 ? (
+                <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 16 }}>No faculty match the current filters.</td></tr>
+              ) : sortedFaculty.map(f => (
                 <tr key={f.id}>
                   <td style={{ color: 'var(--text-bright)' }}>{f.last_name}, {f.first_name}</td>
                   <td style={{ color: 'var(--text-secondary)' }}>{f.rank ? RANK_LABELS[f.rank] : '—'}</td>

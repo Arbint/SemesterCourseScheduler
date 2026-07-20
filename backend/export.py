@@ -55,6 +55,60 @@ def _entry_time_label(entry) -> str:
     return f"{'/'.join(day_labels)} {_format_clock(slots[0].start_time)}–{_format_clock(slots[-1].end_time)}"
 
 
+RANK_LABELS = {
+    "instructor": "Instructor",
+    "senior_instructor": "Senior Instructor",
+    "assistant_professor": "Assistant Professor",
+    "associate_professor": "Associate Professor",
+    "professor": "Professor",
+    "assistant_professor_of_practice": "Assistant Professor of Practice",
+    "associate_professor_of_practice": "Associate Professor of Practice",
+    "professor_of_practice": "Professor of Practice",
+}
+
+
+def generate_faculty_list_excel(db, faculty_ids: list[int]) -> bytes:
+    """Name / Rank / Full-Time-Part-Time / Office / Ownership / Attributes / Tags
+    sheet for the Faculty tab's Export button — rows in the exact order given,
+    so it matches whatever the user currently has filtered on screen."""
+    from models import Faculty
+
+    faculty_by_id = {f.id: f for f in db.query(Faculty).filter(Faculty.id.in_(faculty_ids)).all()}
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Faculty"
+
+    hdr_fill = PatternFill(fill_type="solid", fgColor=HEADER_GRAY)
+    hdr_font = Font(bold=True, color="FFFFFF")
+    headers = ["Name", "Rank", "Full-Time/Part-Time", "Office", "Ownership", "Attributes", "Tags"]
+    for col, header in enumerate(headers, start=1):
+        c = ws.cell(row=1, column=col, value=header)
+        c.font = hdr_font
+        c.fill = hdr_fill
+
+    row = 2
+    for fid in faculty_ids:
+        f = faculty_by_id.get(fid)
+        if not f:
+            continue
+        ws.cell(row=row, column=1, value=f"{f.last_name}, {f.first_name}")
+        ws.cell(row=row, column=2, value=RANK_LABELS.get(f.rank.value, "") if f.rank else "")
+        ws.cell(row=row, column=3, value="Full Time" if f.full_time_or_part_time.value == "full_time" else "Part Time")
+        ws.cell(row=row, column=4, value=f.office or "")
+        ws.cell(row=row, column=5, value="Department" if f.is_department_owned else "")
+        ws.cell(row=row, column=6, value=", ".join(a.name for a in f.attributes))
+        ws.cell(row=row, column=7, value=", ".join(f.tags or []))
+        row += 1
+
+    for col_idx, width in enumerate([24, 22, 18, 14, 14, 28, 28], start=1):
+        ws.column_dimensions[get_column_letter(col_idx)].width = width
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
 def generate_course_list_excel(db, term_id: int, entry_ids: list[int]) -> bytes:
     """Flat Course Code / Title / Section / Instructor / Time / Room sheet for
     the Term Course List tab's Export button — rows in the exact order given,
