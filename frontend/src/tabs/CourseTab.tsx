@@ -4,6 +4,7 @@ import { FormModal } from '../components/FormModal'
 import { MultiSelect } from '../components/MultiSelect'
 import { showToast } from '../components/Toast'
 import { useAuth } from '../contexts/AuthContext'
+import { SortableTh, compareValues, nextSort, type SortState } from '../components/SortableTh'
 
 const EMPTY: Omit<Course, 'id' | 'semester_ids'> = {
   dept_code: '', course_number: 0, course_name: '', duration_minutes: 75, capacity: 30, frequency: 2
@@ -15,6 +16,8 @@ function decodeNumber(n: number) {
   return `Level: ${levels[+s[0]] || s[0]}, Credits: ${s[1]}, Category: ${s[2]}, Index: ${s[3]}`
 }
 
+const EMPTY_COLUMN_FILTERS = { code: '', name: '', duration: '', capacity: '', frequency: '', semesters: '' }
+
 export function CourseTab() {
   const { isLoggedIn } = useAuth()
   const [courses, setCourses] = useState<Course[]>([])
@@ -24,6 +27,8 @@ export function CourseTab() {
   const [semIds, setSemIds] = useState<number[]>([])
   const [saving, setSaving] = useState(false)
   const [showModal, setShowModal] = useState(false)
+  const [sort, setSort] = useState<SortState | null>(null)
+  const [columnFilters, setColumnFilters] = useState(EMPTY_COLUMN_FILTERS)
 
   const load = async () => {
     const [c, s] = await Promise.all([coursesApi.list(), semestersApi.list()])
@@ -110,6 +115,39 @@ export function CourseTab() {
     }
   }
 
+  const semesterNames = (c: Course) =>
+    c.semester_ids.map(id => semesters.find(s => s.id === id)?.name ?? '').join(' ')
+
+  const filteredCourses = courses.filter(c => {
+    const f = columnFilters
+    if (f.code && !`${c.dept_code} ${c.course_number}`.toLowerCase().includes(f.code.toLowerCase())) return false
+    if (f.name && !c.course_name.toLowerCase().includes(f.name.toLowerCase())) return false
+    if (f.duration && !String(c.duration_minutes).includes(f.duration)) return false
+    if (f.capacity && !String(c.capacity).includes(f.capacity)) return false
+    if (f.frequency && !String(c.frequency).includes(f.frequency)) return false
+    if (f.semesters && !semesterNames(c).toLowerCase().includes(f.semesters.toLowerCase())) return false
+    return true
+  })
+
+  const sortKeyValue = (c: Course, key: string): string | number => {
+    switch (key) {
+      case 'code': return c.course_number // number part only, per feedback_75
+      case 'name': return c.course_name
+      case 'duration': return c.duration_minutes
+      case 'capacity': return c.capacity
+      case 'frequency': return c.frequency
+      case 'semesters': return c.semester_ids.length
+      default: return 0
+    }
+  }
+
+  const sortedCourses = sort
+    ? [...filteredCourses].sort((a, b) => compareValues(sortKeyValue(a, sort.key), sortKeyValue(b, sort.key), sort.dir))
+    : filteredCourses
+
+  const setColumnFilter = (key: keyof typeof EMPTY_COLUMN_FILTERS, value: string) =>
+    setColumnFilters(f => ({ ...f, [key]: value }))
+
   return (
     <div>
       <div className="page-header">
@@ -123,17 +161,25 @@ export function CourseTab() {
           <table>
             <thead>
               <tr>
-                <th>Code</th>
-                <th>Name</th>
-                <th>Duration</th>
-                <th>Capacity</th>
-                <th>Freq/week</th>
-                <th>Semesters</th>
+                <SortableTh label="Code" sortKey="code" sort={sort} onSort={k => setSort(s => nextSort(s, k))}
+                  filterValue={columnFilters.code} onFilterChange={v => setColumnFilter('code', v)} filterPlaceholder="e.g. ANGD 3371" />
+                <SortableTh label="Name" sortKey="name" sort={sort} onSort={k => setSort(s => nextSort(s, k))}
+                  filterValue={columnFilters.name} onFilterChange={v => setColumnFilter('name', v)} filterPlaceholder="Filter name..." />
+                <SortableTh label="Duration" sortKey="duration" sort={sort} onSort={k => setSort(s => nextSort(s, k))}
+                  filterValue={columnFilters.duration} onFilterChange={v => setColumnFilter('duration', v)} filterPlaceholder="min" />
+                <SortableTh label="Capacity" sortKey="capacity" sort={sort} onSort={k => setSort(s => nextSort(s, k))}
+                  filterValue={columnFilters.capacity} onFilterChange={v => setColumnFilter('capacity', v)} filterPlaceholder="cap" />
+                <SortableTh label="Freq/week" sortKey="frequency" sort={sort} onSort={k => setSort(s => nextSort(s, k))}
+                  filterValue={columnFilters.frequency} onFilterChange={v => setColumnFilter('frequency', v)} filterPlaceholder="×/wk" />
+                <SortableTh label="Semesters" sortKey="semesters" sort={sort} onSort={k => setSort(s => nextSort(s, k))}
+                  filterValue={columnFilters.semesters} onFilterChange={v => setColumnFilter('semesters', v)} filterPlaceholder="fall..." />
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {courses.map(c => (
+              {sortedCourses.length === 0 ? (
+                <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 16 }}>No courses match the current filters.</td></tr>
+              ) : sortedCourses.map(c => (
                 <tr key={c.id}>
                   <td style={{ fontFamily: 'monospace', color: 'var(--accent)' }} title={decodeNumber(c.course_number)}>
                     {c.dept_code} {c.course_number}
