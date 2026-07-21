@@ -96,11 +96,15 @@ export interface Course {
   semester_ids: number[]
   scheduled_entry_count: number
   taught_with_partner_ids: number[]
+  // id of this TaughtWith group's lead course (feedback_80) — may equal this
+  // course's own id; null if not in any TaughtWith group.
+  taught_with_lead_id: number | null
 }
 
 export interface TaughtWithGroup {
   id: number
-  course_ids: number[]
+  course_ids: number[] // ordered lead-first
+  lead_course_id: number | null
 }
 
 export interface CoReqGroup {
@@ -111,7 +115,8 @@ export interface CoReqGroup {
 export interface TermTaughtWithGroup {
   id: number
   term_id: number
-  course_ids: number[]
+  course_ids: number[] // ordered lead-first
+  lead_course_id: number | null
 }
 
 export interface Term {
@@ -376,13 +381,15 @@ export const entriesApi = {
   // Provide exactly one of course_id / meeting_id.
   create: (tableId: number, d: { course_id?: number; meeting_id?: number; room_id?: number; time_slot_ids: number[]; faculty_id?: number; active_weekday_ids?: number[] }) =>
     api.post<EntryWithWarnings>(`/tables/${tableId}/entries`, d).then(r => r.data),
-  update: (id: number, d: { room_id?: number; time_slot_ids?: number[]; schedule_table_id?: number; faculty_id?: number; active_weekday_ids?: number[] }) =>
+  update: (id: number, d: { room_id?: number; time_slot_ids?: number[]; schedule_table_id?: number; faculty_id?: number; active_weekday_ids?: number[]; section?: number }) =>
     api.put<EntryWithWarnings>(`/entries/${id}`, d).then(r => r.data),
   patchFaculty: (id: number, faculty_id: number | null) =>
     api.patch<EntryWithWarnings>(`/entries/${id}/faculty`, { faculty_id }).then(r => r.data),
   delete: (id: number) => api.delete(`/entries/${id}`),
   patchSectionCount: (termId: number, courseId: number, count: number) =>
     api.patch(`/terms/${termId}/courses/${courseId}/section-count`, { count }),
+  getSectionsNeeded: (termId: number) =>
+    api.get<Record<number, number>>(`/terms/${termId}/sections-needed`).then(r => r.data),
 }
 
 export const meetingsApi = {

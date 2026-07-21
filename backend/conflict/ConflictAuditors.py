@@ -214,6 +214,66 @@ class RoomCapacity(ConflictAuditor):
         return reports
 
 
+class SectionNumbering(ConflictAuditor):
+    """Critical: catches section-numbering problems on a course's scheduled
+    sections within a term (feedback_79) — duplicate numbers, numbers that
+    don't start at 1 or skip a value, and more sections scheduled than the
+    chair asked for via the Course List's "Sections needed" control."""
+    def __init__(self, db):
+        super().__init__(db, isCritical=True)
+
+    def Audit(self, term) -> list[ConflictReport]:
+        from models import TermCourseSectionsNeeded
+        reports = []
+        needed_map = {
+            r.course_id: r.count
+            for r in self.db.query(TermCourseSectionsNeeded).filter(TermCourseSectionsNeeded.term_id == term.id).all()
+        }
+
+        by_course: dict[int, list] = {}
+        for e in term.schedule_entries:
+            if e.course_id is None:
+                continue
+            by_course.setdefault(e.course_id, []).append(e)
+
+        for course_id, entries in by_course.items():
+            scheduled = [e for e in entries if e.schedule_table_id is not None]
+            if not scheduled:
+                continue
+            label = f"{entries[0].course.dept_code}{entries[0].course.course_number}"
+
+            needed = needed_map.get(course_id)
+            if needed is not None and len(scheduled) > needed:
+                reports.append(ConflictReport(
+                    courses=[course_id],
+                    entries=[e.id for e in scheduled],
+                    description=f"Section count: {label} has {len(scheduled)} section(s) scheduled but only {needed} needed"
+                ))
+
+            by_number: dict[int, list] = {}
+            for e in scheduled:
+                by_number.setdefault(e.section, []).append(e)
+
+            duplicated = {n: es for n, es in by_number.items() if len(es) > 1}
+            if duplicated:
+                dup_entries = [e.id for es in duplicated.values() for e in es]
+                nums = ", ".join(str(n) for n in sorted(duplicated))
+                reports.append(ConflictReport(
+                    courses=[course_id],
+                    entries=dup_entries,
+                    description=f"Section numbering: {label} has section number {nums} used by more than one section"
+                ))
+
+            numbers = sorted(by_number.keys())
+            if numbers != list(range(1, len(numbers) + 1)):
+                reports.append(ConflictReport(
+                    courses=[course_id],
+                    entries=[e.id for e in scheduled],
+                    description=f"Section numbering: {label}'s section numbers ({', '.join(str(n) for n in numbers)}) should start at 1 with no gaps"
+                ))
+        return reports
+
+
 class FrequencyConflict(ConflictAuditor):
     """Critical: fires when a table has fewer days than the course/meeting requires."""
     def __init__(self, db):

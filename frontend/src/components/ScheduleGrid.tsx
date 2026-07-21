@@ -129,9 +129,58 @@ export function formatEntryTimeRange(entry: ScheduleEntry, timeSlots: TimeSlot[]
   return `${start} - ${end}`
 }
 
+// Click-to-edit "§N" section number badge — freely settable by the user
+// (feedback_79); duplicates/gaps are reported by the SectionNumbering
+// auditor rather than blocked here.
+function EditableSectionBadge({ section, isLoggedIn, onChange }: {
+  section: number
+  isLoggedIn: boolean
+  onChange: (n: number) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState(String(section))
+
+  if (!editing) {
+    return isLoggedIn ? (
+      <span
+        onPointerDown={e => e.stopPropagation()}
+        onClick={e => { e.stopPropagation(); setValue(String(section)); setEditing(true) }}
+        style={{ cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 2 }}
+        title="Click to change section number"
+      >
+        §{section}
+      </span>
+    ) : <>§{section}</>
+  }
+
+  const commit = () => {
+    const n = parseInt(value, 10)
+    setEditing(false)
+    if (!isNaN(n) && n > 0 && n !== section) onChange(n)
+  }
+
+  return (
+    <input
+      type="number"
+      min={1}
+      autoFocus
+      value={value}
+      onPointerDown={e => e.stopPropagation()}
+      onClick={e => e.stopPropagation()}
+      onChange={e => setValue(e.target.value)}
+      onBlur={commit}
+      onKeyDown={e => {
+        if (e.key === 'Enter') commit()
+        if (e.key === 'Escape') setEditing(false)
+      }}
+      style={{ width: 34, fontSize: 'inherit', fontWeight: 'inherit', padding: '0 2px', background: 'rgba(0,0,0,0.35)', color: 'inherit', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 2 }}
+    />
+  )
+}
+
 // --- Scheduled Section Card (inside table cell) ---
 export function ScheduledSectionCard({
-  entry, course, allFaculty, tableWeekdays, dimmed, isLoggedIn, issueHighlightSeverity, onFacultyChange, onDelete, onActiveWeekdaysChange
+  entry, course, allFaculty, tableWeekdays, dimmed, isLoggedIn, issueHighlightSeverity, onFacultyChange, onDelete, onActiveWeekdaysChange, onSectionChange
 }: {
   entry: ScheduleEntry
   course: Course
@@ -144,6 +193,7 @@ export function ScheduledSectionCard({
   onFacultyChange: (fid: number | null) => void
   onDelete: () => void
   onActiveWeekdaysChange: (ids: number[]) => void
+  onSectionChange: (section: number) => void
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `entry-${entry.id}`,
@@ -192,7 +242,9 @@ export function ScheduledSectionCard({
           : undefined,
       }}
     >
-      <div style={{ fontWeight: 600, color: '#ddd' }}>{course.dept_code} {course.course_number} §{entry.section}</div>
+      <div style={{ fontWeight: 600, color: '#ddd' }}>
+        {course.dept_code} {course.course_number} <EditableSectionBadge section={entry.section} isLoggedIn={isLoggedIn} onChange={onSectionChange} />
+      </div>
       <div style={{ color: '#bbb', marginTop: 2, fontSize: fs(10) }}>{course.course_name}</div>
       {showToggles && (
         <div
@@ -257,7 +309,7 @@ export function ScheduledSectionCard({
 export function TaughtWithSectionCard({
   primaryEntry, primaryCourse, partnerCourse,
   allFaculty, tableWeekdays, dimmed, isLoggedIn, issueHighlightSeverity,
-  onFacultyChange, onDelete, onActiveWeekdaysChange
+  onFacultyChange, onDelete, onActiveWeekdaysChange, onSectionChange
 }: {
   primaryEntry: ScheduleEntry
   partnerEntry: ScheduleEntry
@@ -271,6 +323,7 @@ export function TaughtWithSectionCard({
   onFacultyChange: (fid: number | null) => void
   onDelete: () => void
   onActiveWeekdaysChange: (ids: number[]) => void
+  onSectionChange: (section: number) => void
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `entry-${primaryEntry.id}`,
@@ -320,7 +373,7 @@ export function TaughtWithSectionCard({
       }}
     >
       <div style={{ fontWeight: 600, color: '#ddd', lineHeight: 1.3 }}>
-        {primaryCourse.dept_code} {primaryCourse.course_number} §{primaryEntry.section}
+        {primaryCourse.dept_code} {primaryCourse.course_number} <EditableSectionBadge section={primaryEntry.section} isLoggedIn={isLoggedIn} onChange={onSectionChange} />
       </div>
       <div style={{ color: '#bbb', fontSize: fs(10), marginTop: 1 }}>{primaryCourse.course_name}</div>
       <div style={{ color: 'rgba(180,200,220,0.8)', fontSize: fs(10), marginTop: 3, fontWeight: 600 }}>
@@ -833,10 +886,10 @@ export function ColumnResizer({ onMouseDown }: { onMouseDown: (e: React.MouseEve
 // --- Drop Cell ---
 export function TableCell({
   tableId, timeSlotId, roomId, rowSpan = 1, isOnline = false, tableWeekdays,
-  entries, courses, meetings = new Map(), effectivePartnerIds, allFaculty, isEntryDimmed, isLoggedIn,
+  entries, courses, meetings = new Map(), effectivePartnerIds, effectiveLeadId, allFaculty, isEntryDimmed, isLoggedIn,
   issueHighlightEntryIds, issueHighlightSeverity, cellWidth, cellHeight = DEFAULT_CELL_HEIGHT,
   viewMode = false, fontPx = 14, timeSlots = [],
-  onFacultyChange, onDeleteEntry, onActiveWeekdaysChange
+  onFacultyChange, onDeleteEntry, onActiveWeekdaysChange, onSectionChange
 }: {
   tableId: number
   timeSlotId: number
@@ -848,6 +901,9 @@ export function TableCell({
   courses: Map<number, Course>
   meetings?: Map<number, Meeting>
   effectivePartnerIds: Map<number, number[]>
+  // course_id -> lead course_id for its TaughtWith group (feedback_80) — the
+  // lead is always shown as "primary" in a combined TaughtWith cell.
+  effectiveLeadId: Map<number, number>
   allFaculty: Faculty[]
   isEntryDimmed: (e: ScheduleEntry) => boolean
   isLoggedIn: boolean
@@ -863,6 +919,7 @@ export function TableCell({
   onFacultyChange: (entryId: number, fid: number | null) => void
   onDeleteEntry: (entryId: number) => void
   onActiveWeekdaysChange: (entryId: number, ids: number[]) => void
+  onSectionChange: (entryId: number, section: number) => void
 }) {
   const dropId = `cell-${tableId}-${timeSlotId}-${roomId}`
   const { setNodeRef, isOver } = useDroppable({
@@ -888,7 +945,13 @@ export function TableCell({
       .map(pid => cellEntries.find(ce => ce.course_id === pid && !usedIds.has(ce.id)))
       .find(Boolean)
     if (partnerEntry) {
-      entryGroups.push({ primary: e, partner: partnerEntry })
+      // The group's lead course is always "primary" — not whichever entry
+      // this loop happened to reach first (feedback_80).
+      const leadId = e.course_id ? effectiveLeadId.get(e.course_id) : undefined
+      const [primary, partner] = leadId != null && partnerEntry.course_id === leadId
+        ? [partnerEntry, e]
+        : [e, partnerEntry]
+      entryGroups.push({ primary, partner })
       usedIds.add(e.id)
       usedIds.add(partnerEntry.id)
     } else {
@@ -966,6 +1029,7 @@ export function TableCell({
                     onFacultyChange={fid => { onFacultyChange(group.primary.id, fid); onFacultyChange(group.partner!.id, fid) }}
                     onDelete={() => { onDeleteEntry(group.primary.id); onDeleteEntry(group.partner!.id) }}
                     onActiveWeekdaysChange={ids => { onActiveWeekdaysChange(group.primary.id, ids); onActiveWeekdaysChange(group.partner!.id, ids) }}
+                    onSectionChange={section => onSectionChange(group.primary.id, section)}
                   />
                 )}
               </div>
@@ -1020,6 +1084,7 @@ export function TableCell({
                   onFacultyChange={fid => onFacultyChange(group.primary.id, fid)}
                   onDelete={() => onDeleteEntry(group.primary.id)}
                   onActiveWeekdaysChange={ids => onActiveWeekdaysChange(group.primary.id, ids)}
+                  onSectionChange={section => onSectionChange(group.primary.id, section)}
                 />
               )}
             </div>
@@ -1032,9 +1097,9 @@ export function TableCell({
 
 // --- Schedule Table Component ---
 export function ScheduleTableView({
-  table, weekdays, timeSlots, rooms, entries, courses, meetings = new Map(), effectivePartnerIds, allFaculty,
+  table, weekdays, timeSlots, rooms, entries, courses, meetings = new Map(), effectivePartnerIds, effectiveLeadId, allFaculty,
   isEntryDimmed, isLoggedIn, issueHighlightEntryIds, issueHighlightSeverity,
-  onWeekdaysChange, onDeleteTable, onFacultyChange, onDeleteEntry, onActiveWeekdaysChange,
+  onWeekdaysChange, onDeleteTable, onFacultyChange, onDeleteEntry, onActiveWeekdaysChange, onSectionChange,
   forceHideUnused = false, cellWidth = DEFAULT_CELL_WIDTH, cellHeight = DEFAULT_CELL_HEIGHT,
   viewMode = false, fontScale = 1,
 }: {
@@ -1046,6 +1111,7 @@ export function ScheduleTableView({
   courses: Map<number, Course>
   meetings?: Map<number, Meeting>
   effectivePartnerIds: Map<number, number[]>
+  effectiveLeadId: Map<number, number>
   allFaculty: Faculty[]
   isEntryDimmed: (e: ScheduleEntry) => boolean
   isLoggedIn: boolean
@@ -1056,6 +1122,7 @@ export function ScheduleTableView({
   onFacultyChange: (entryId: number, fid: number | null) => void
   onDeleteEntry: (entryId: number) => void
   onActiveWeekdaysChange: (entryId: number, ids: number[]) => void
+  onSectionChange: (entryId: number, section: number) => void
   // View tab: always hide unused rooms/time-slot rows, no toggle shown.
   forceHideUnused?: boolean
   // Uniform column width/height for all room cells — the same values are
@@ -1223,6 +1290,7 @@ export function ScheduleTableView({
                       courses={courses}
                       meetings={meetings}
                       effectivePartnerIds={effectivePartnerIds}
+                      effectiveLeadId={effectiveLeadId}
                       allFaculty={allFaculty}
                       isEntryDimmed={isEntryDimmed}
                       issueHighlightEntryIds={issueHighlightEntryIds}
@@ -1235,6 +1303,7 @@ export function ScheduleTableView({
                       onFacultyChange={onFacultyChange}
                       onDeleteEntry={onDeleteEntry}
                       onActiveWeekdaysChange={onActiveWeekdaysChange}
+                      onSectionChange={onSectionChange}
                     />
                   )
                 })}

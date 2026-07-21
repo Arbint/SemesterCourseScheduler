@@ -224,7 +224,9 @@ class TaughtWithGroup(Base):
     __tablename__ = "taught_with_groups"
 
     id = Column(Integer, primary_key=True, index=True)
-    members = relationship("TaughtWithMember", back_populates="group", cascade="all, delete-orphan")
+    # Ordered by sort_order so members[0] is always the group's lead course
+    # (feedback_80) — not left to incidental row-iteration order.
+    members = relationship("TaughtWithMember", back_populates="group", cascade="all, delete-orphan", order_by="TaughtWithMember.sort_order")
 
 
 class TaughtWithMember(Base):
@@ -232,6 +234,9 @@ class TaughtWithMember(Base):
 
     group_id = Column(Integer, ForeignKey("taught_with_groups.id"), primary_key=True)
     course_id = Column(Integer, ForeignKey("courses.id"), primary_key=True, unique=True)
+    # The first course added to a group gets sort_order 0 and is the "lead"
+    # course, always displayed first (feedback_80).
+    sort_order = Column(Integer, nullable=False, default=0)
 
     group = relationship("TaughtWithGroup", back_populates="members")
     course = relationship("Course", back_populates="taught_with_membership")
@@ -261,7 +266,7 @@ class TermTaughtWithGroup(Base):
     term_id = Column(Integer, ForeignKey("terms.id"), nullable=False)
 
     term = relationship("Term", back_populates="term_taught_with_groups")
-    members = relationship("TermTaughtWithMember", back_populates="group", cascade="all, delete-orphan")
+    members = relationship("TermTaughtWithMember", back_populates="group", cascade="all, delete-orphan", order_by="TermTaughtWithMember.sort_order")
 
 
 class TermTaughtWithMember(Base):
@@ -269,6 +274,7 @@ class TermTaughtWithMember(Base):
 
     group_id = Column(Integer, ForeignKey("term_taught_with_groups.id"), primary_key=True)
     course_id = Column(Integer, ForeignKey("courses.id"), primary_key=True)
+    sort_order = Column(Integer, nullable=False, default=0)
 
     group = relationship("TermTaughtWithGroup", back_populates="members")
     course = relationship("Course")
@@ -298,6 +304,23 @@ class Term(Base):
     term_taught_with_groups = relationship("TermTaughtWithGroup", back_populates="term", cascade="all, delete-orphan")
     meetings = relationship("Meeting", back_populates="term", cascade="all, delete-orphan")
     office_hours = relationship("OfficeHour", back_populates="term", cascade="all, delete-orphan")
+    sections_needed = relationship("TermCourseSectionsNeeded", back_populates="term", cascade="all, delete-orphan")
+
+
+class TermCourseSectionsNeeded(Base):
+    """How many sections of a course the chair wants scheduled in a given term
+    (feedback_79) — set via the Course List's "Sections needed" spin box.
+    Distinct from the actual count of ScheduleEntry rows: a course can be
+    over-sectioned by repeated drag-and-drop beyond this target, which is
+    exactly what SectionNumbering (ConflictAuditors.py) flags."""
+    __tablename__ = "term_course_sections_needed"
+
+    term_id = Column(Integer, ForeignKey("terms.id"), primary_key=True)
+    course_id = Column(Integer, ForeignKey("courses.id"), primary_key=True)
+    count = Column(Integer, nullable=False)
+
+    term = relationship("Term", back_populates="sections_needed")
+    course = relationship("Course")
 
 
 class Meeting(Base):

@@ -180,6 +180,9 @@ class CourseOut(CourseBase):
     semester_ids: list[int] = []
     scheduled_entry_count: int = 0
     taught_with_partner_ids: list[int] = []
+    # id of this group's lead course (feedback_80) — may be this course's own
+    # id if it IS the lead. None if not in any TaughtWith group.
+    taught_with_lead_id: Optional[int] = None
 
     @classmethod
     def from_orm_with_semesters(cls, course):
@@ -187,10 +190,9 @@ class CourseOut(CourseBase):
         obj.semester_ids = [o.semester_id for o in course.offerings]
         obj.scheduled_entry_count = len(course.schedule_entries)
         if course.taught_with_membership:
-            obj.taught_with_partner_ids = [
-                m.course_id for m in course.taught_with_membership.group.members
-                if m.course_id != course.id
-            ]
+            members = course.taught_with_membership.group.members  # ordered lead-first
+            obj.taught_with_partner_ids = [m.course_id for m in members if m.course_id != course.id]
+            obj.taught_with_lead_id = members[0].course_id if members else None
         return obj
 
 
@@ -199,11 +201,13 @@ class CourseOut(CourseBase):
 class TaughtWithGroupOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
-    course_ids: list[int] = []
+    course_ids: list[int] = []  # ordered lead-first (feedback_80)
+    lead_course_id: Optional[int] = None
 
     @classmethod
     def from_orm(cls, group):
-        return cls(id=group.id, course_ids=[m.course_id for m in group.members])
+        course_ids = [m.course_id for m in group.members]
+        return cls(id=group.id, course_ids=course_ids, lead_course_id=course_ids[0] if course_ids else None)
 
 
 # --- TermTaughtWith ---
@@ -212,11 +216,13 @@ class TermTaughtWithGroupOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     term_id: int
-    course_ids: list[int] = []
+    course_ids: list[int] = []  # ordered lead-first (feedback_80)
+    lead_course_id: Optional[int] = None
 
     @classmethod
     def from_orm(cls, group):
-        return cls(id=group.id, term_id=group.term_id, course_ids=[m.course_id for m in group.members])
+        course_ids = [m.course_id for m in group.members]
+        return cls(id=group.id, term_id=group.term_id, course_ids=course_ids, lead_course_id=course_ids[0] if course_ids else None)
 
 
 # --- CoReq ---
@@ -248,6 +254,9 @@ class ScheduleEntryUpdate(BaseModel):
     schedule_table_id: Optional[int] = None
     faculty_id: Optional[int] = None
     active_weekday_ids: Optional[list[int]] = None
+    # User-editable section number (feedback_79) — freely settable; duplicates/gaps
+    # are reported by the SectionNumbering auditor rather than blocked here.
+    section: Optional[int] = None
 
 class ScheduleEntryFacultyPatch(BaseModel):
     faculty_id: Optional[int] = None

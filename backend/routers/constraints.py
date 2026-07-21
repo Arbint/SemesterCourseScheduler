@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from database import get_db
 from models import TaughtWithGroup, TaughtWithMember, CoReqGroup, CoReqMember
@@ -38,7 +39,11 @@ def add_taughtwith_course(group_id: int, course_id: int, db: Session = Depends(g
     existing_member = db.query(TaughtWithMember).filter(TaughtWithMember.course_id == course_id).first()
     if existing_member:
         raise HTTPException(409, "Course already belongs to a TaughtWith group")
-    db.add(TaughtWithMember(group_id=group_id, course_id=course_id))
+    # The first course added to a group becomes its lead (sort_order 0),
+    # always displayed first thereafter (feedback_80).
+    max_order = db.query(func.max(TaughtWithMember.sort_order)).filter(TaughtWithMember.group_id == group_id).scalar()
+    next_order = 0 if max_order is None else max_order + 1
+    db.add(TaughtWithMember(group_id=group_id, course_id=course_id, sort_order=next_order))
     db.commit()
     return {"ok": True}
 

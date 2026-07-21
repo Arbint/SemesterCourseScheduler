@@ -394,13 +394,18 @@ export function TermSchedulingTab() {
 
   // Combined partner map: global (from course.taught_with_partner_ids) + per-term
   const effectivePartnerIds = new Map<number, number[]>()
+  // Combined lead map: which course_id is the group's lead — always displayed
+  // first when two TaughtWith partners land in the same cell (feedback_80).
+  const effectiveLeadId = new Map<number, number>()
   for (const c of courses) {
     const partners = [...c.taught_with_partner_ids]
+    if (c.taught_with_lead_id != null) effectiveLeadId.set(c.id, c.taught_with_lead_id)
     for (const g of termTaughtWith) {
       if (g.course_ids.includes(c.id)) {
         for (const pid of g.course_ids) {
           if (pid !== c.id && !partners.includes(pid)) partners.push(pid)
         }
+        if (g.lead_course_id != null) effectiveLeadId.set(c.id, g.lead_course_id)
       }
     }
     if (partners.length) effectivePartnerIds.set(c.id, partners)
@@ -487,12 +492,13 @@ export function TermSchedulingTab() {
     const termData = term ?? terms.find(t => t.id === termId)
     if (!termData) return
 
-    const [tbs, ents, cs, ttw, mts] = await Promise.all([
+    const [tbs, ents, cs, ttw, mts, needed] = await Promise.all([
       tablesApi.list(termId),
       entriesApi.listByTerm(termId),
       coursesApi.list(termData.semester_name),
       termTaughtWithApi.list(termId),
       meetingsApi.list(termId),
+      entriesApi.getSectionsNeeded(termId),
     ])
     setTables(tbs)
     setEntries(ents)
@@ -500,11 +506,13 @@ export function TermSchedulingTab() {
     setTermTaughtWith(ttw)
     setMeetings(mts)
 
-    // Init needed sections map
+    // Init needed sections map — prefer the persisted target (set via the
+    // spin box); a course that's never had one set falls back to however
+    // many entries already exist for it, same as before (feedback_79).
     const map = new Map<number, number>()
     for (const c of cs) {
       const courseEntries = ents.filter(e => e.course_id === c.id)
-      map.set(c.id, Math.max(1, courseEntries.length))
+      map.set(c.id, needed[c.id] ?? Math.max(1, courseEntries.length))
     }
     setNeededSections(map)
   }
@@ -767,6 +775,24 @@ export function TermSchedulingTab() {
       }
     } catch (e: any) {
       showToast(e.response?.data?.detail || 'Failed to assign instructor')
+    }
+  }
+
+  const handleSectionNumberChange = async (entryId: number, section: number) => {
+    const prevSection = entries.find(e => e.id === entryId)?.section
+    try {
+      const { entry: updated, errors: errs, warnings: warns } = await entriesApi.update(entryId, { section })
+      setEntries(prev => prev.map(e => e.id === entryId ? { ...e, section: updated.section } : e))
+      setErrors(errs)
+      setWarnings(warns)
+      if (prevSection !== undefined && prevSection !== section) {
+        undoStack.push({
+          label: 'Change section number',
+          undo: async () => { await entriesApi.update(entryId, { section: prevSection }) },
+        })
+      }
+    } catch (e: any) {
+      showToast(e.response?.data?.detail || 'Failed to change section number')
     }
   }
 
@@ -1216,6 +1242,7 @@ export function TermSchedulingTab() {
                 courses={courseMap}
                 meetings={meetingMap}
                 effectivePartnerIds={effectivePartnerIds}
+                effectiveLeadId={effectiveLeadId}
                 allFaculty={allFaculty}
                 isEntryDimmed={isEntryDimmed}
                 isLoggedIn={isLoggedIn}
@@ -1226,6 +1253,7 @@ export function TermSchedulingTab() {
                 onFacultyChange={handleFacultyChange}
                 onDeleteEntry={handleDeleteEntry}
                 onActiveWeekdaysChange={handleActiveWeekdaysChange}
+                onSectionChange={handleSectionNumberChange}
               />
             ))}
             {selectedTermId && isLoggedIn && (

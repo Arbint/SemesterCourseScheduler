@@ -4,7 +4,7 @@ import { showToast } from '../components/Toast'
 import { useAuth } from '../contexts/AuthContext'
 
 function GroupPanel({
-  title, groups, courses, isLoggedIn, onCreateGroup, onDeleteGroup, onAddCourse, onRemoveCourse
+  title, groups, courses, isLoggedIn, onCreateGroup, onDeleteGroup, onAddCourse, onRemoveCourse, showLead = false
 }: {
   title: string
   groups: { id: number; course_ids: number[] }[]
@@ -14,6 +14,10 @@ function GroupPanel({
   onDeleteGroup: (id: number) => void
   onAddCourse: (gid: number, cid: number) => void
   onRemoveCourse: (gid: number, cid: number) => void
+  // The first course in course_ids is the group's lead (feedback_80) —
+  // TaughtWith cares which course displays first in the schedule; CoReq
+  // doesn't, so this only applies to the TaughtWith panel.
+  showLead?: boolean
 }) {
   const [addingFor, setAddingFor] = useState<number | null>(null)
   const [selectedCourse, setSelectedCourse] = useState<string>('')
@@ -30,10 +34,15 @@ function GroupPanel({
 
   return (
     <div className="card" style={{ flex: 1 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: showLead ? 4 : 16 }}>
         <h3 style={{ margin: 0, color: 'var(--text-bright)', fontSize: 14 }}>{title}</h3>
         {isLoggedIn && <button className="btn-secondary btn-sm" onClick={onCreateGroup}>+ New Group</button>}
       </div>
+      {showLead && (
+        <div style={{ color: 'var(--text-secondary)', fontSize: 11, marginBottom: 12 }}>
+          The first course added to a group is its lead — always shown first in the schedule.
+        </div>
+      )}
 
       {groups.length === 0 && (
         <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>No groups yet.</div>
@@ -49,14 +58,20 @@ function GroupPanel({
               {isLoggedIn && <button className="btn-danger btn-sm" onClick={() => onDeleteGroup(g.id)}>Delete Group</button>}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-              {g.course_ids.map(cid => {
+              {g.course_ids.map((cid, idx) => {
                 const c = courseMap[cid]
+                const isLead = showLead && idx === 0
                 return c ? (
                   <span key={cid} style={{
-                    background: 'var(--bg-surface)', border: '1px solid var(--border-color)',
+                    background: 'var(--bg-surface)', border: isLead ? '1px solid var(--accent)' : '1px solid var(--border-color)',
                     borderRadius: 'var(--border-radius)', padding: '3px 8px', fontSize: 12,
                     display: 'flex', alignItems: 'center', gap: 4
                   }}>
+                    {isLead && (
+                      <span title="Always displayed first in the schedule" style={{ fontSize: 9, fontWeight: 700, color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 3, padding: '1px 3px', letterSpacing: '0.03em' }}>
+                        LEAD
+                      </span>
+                    )}
                     <span style={{ color: 'var(--accent)' }}>{c.dept_code} {c.course_number}</span>
                     <span style={{ color: 'var(--text-secondary)' }}>{c.course_name}</span>
                     {isLoggedIn && <button onClick={() => onRemoveCourse(g.id, cid)} style={{ background: 'none', padding: '0 0 0 4px', color: 'var(--error)', minWidth: 'unset' }}>×</button>}
@@ -201,6 +216,7 @@ export function ConstraintsTab() {
           onDeleteGroup={id => withToast(() => constraintsApi.deleteTaughtWith(id).then(() => {}))}
           onAddCourse={(gid, cid) => withToast(() => constraintsApi.addTaughtWithCourse(gid, cid).then(() => {}))}
           onRemoveCourse={(gid, cid) => withToast(() => constraintsApi.removeTaughtWithCourse(gid, cid).then(() => {}))}
+          showLead
         />
         <GroupPanel
           title="Co-Requisites (must not overlap)"

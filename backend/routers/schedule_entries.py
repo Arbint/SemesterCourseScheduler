@@ -11,6 +11,23 @@ from conflict.runner import run_audits
 router = APIRouter(tags=["schedule_entries"])
 
 
+def _next_section_number(db: Session, term_id: int, course_id: int) -> int:
+    """Smallest positive section number not already used by a *scheduled*
+    section of this course in this term — fills gaps instead of always
+    appending, so numbers stay unique and gapless (feedback_79)."""
+    used = {
+        e.section for e in db.query(ScheduleEntry).filter(
+            ScheduleEntry.term_id == term_id,
+            ScheduleEntry.course_id == course_id,
+            ScheduleEntry.schedule_table_id.isnot(None),
+        ).all()
+    }
+    n = 1
+    while n in used:
+        n += 1
+    return n
+
+
 def _refresh_term(db: Session, term_id: int) -> Term:
     """Reload the term with all relationships the auditors need, pre-loaded."""
     db.expire_all()
@@ -159,13 +176,6 @@ def create_entry(table_id: int, data: ScheduleEntryCreate, db: Session = Depends
             active_days = db.query(Weekday).filter(Weekday.id.in_(data.active_weekday_ids)).all()
             entry.active_weekdays = active_days
     else:
-        # Determine next section number for this course in this term
-        existing = db.query(ScheduleEntry).filter(
-            ScheduleEntry.term_id == table.term_id,
-            ScheduleEntry.course_id == data.course_id,
-            ScheduleEntry.schedule_table_id.isnot(None)
-        ).all()
-
         # Find existing unscheduled entry for this course in this term to reuse
         unscheduled = db.query(ScheduleEntry).filter(
             ScheduleEntry.term_id == table.term_id,
@@ -173,16 +183,18 @@ def create_entry(table_id: int, data: ScheduleEntryCreate, db: Session = Depends
             ScheduleEntry.schedule_table_id.is_(None)
         ).first()
 
+        next_section = _next_section_number(db, table.term_id, data.course_id)
+
         if unscheduled:
             entry = unscheduled
             entry.schedule_table_id = table_id
-            entry.section = len(existing) + 1
+            entry.section = next_section
         else:
             entry = ScheduleEntry(
                 term_id=table.term_id,
                 schedule_table_id=table_id,
                 course_id=data.course_id,
-                section=len(existing) + 1,
+                section=next_section,
             )
             db.add(entry)
 
@@ -229,6 +241,8 @@ def update_entry(entry_id: int, data: ScheduleEntryUpdate, db: Session = Depends
         entry.schedule_table_id = data.schedule_table_id
     if data.room_id is not None:
         entry.room_id = data.room_id
+    if data.section is not None:
+        entry.section = data.section
     if data.faculty_id is not None:
         entry.faculty_id = data.faculty_id
 

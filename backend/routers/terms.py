@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import (
     Term, ScheduleEntry, ScheduleTable, CourseOffering,
-    TermTaughtWithGroup, TermTaughtWithMember,
+    TermTaughtWithGroup, TermTaughtWithMember, TermCourseSectionsNeeded,
 )
 from schemas import TermCreate, TermOut, TermRename, TermTaughtWithGroupOut
 
@@ -72,8 +72,12 @@ def create_term(data: TermCreate, db: Session = Depends(get_db)):
             new_group = TermTaughtWithGroup(term_id=term.id)
             db.add(new_group)
             db.flush()
-            for member in src_group.members:
-                db.add(TermTaughtWithMember(group_id=new_group.id, course_id=member.course_id))
+            # src_group.members is already lead-first (sort_order) — preserve it.
+            for i, member in enumerate(src_group.members):
+                db.add(TermTaughtWithMember(group_id=new_group.id, course_id=member.course_id, sort_order=i))
+
+        for src_needed in source.sections_needed:
+            db.add(TermCourseSectionsNeeded(term_id=term.id, course_id=src_needed.course_id, count=src_needed.count))
 
     db.commit()
     db.refresh(term)
@@ -153,8 +157,10 @@ def create_term_taughtwith(term_id: int, data: TermTaughtWithCreate, db: Session
     group = TermTaughtWithGroup(term_id=term_id)
     db.add(group)
     db.flush()
-    for cid in data.course_ids:
-        db.add(TermTaughtWithMember(group_id=group.id, course_id=cid))
+    # The first course in the request becomes the group's lead (sort_order 0),
+    # always displayed first thereafter (feedback_80).
+    for i, cid in enumerate(data.course_ids):
+        db.add(TermTaughtWithMember(group_id=group.id, course_id=cid, sort_order=i))
     db.commit()
     db.refresh(group)
     return TermTaughtWithGroupOut.from_orm(group)
