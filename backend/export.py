@@ -110,9 +110,10 @@ def generate_faculty_list_excel(db, faculty_ids: list[int]) -> bytes:
 
 
 def generate_course_list_excel(db, term_id: int, entry_ids: list[int]) -> bytes:
-    """Flat Course Code / Title / Section / Instructor / Time / Room sheet for
-    the Term Course List tab's Export button — rows in the exact order given,
-    so it matches whatever the user currently has sorted/filtered on screen."""
+    """Flat Course Code / Title / Section / Instructor / Full-Time-Part-Time /
+    Time / Room sheet for the Term Course List tab's Export button — rows in
+    the exact order given, so it matches whatever the user currently has
+    sorted/filtered on screen (feedback_75/81)."""
     from models import Term, ScheduleEntry
 
     term = db.query(Term).filter(Term.id == term_id).first()
@@ -130,7 +131,8 @@ def generate_course_list_excel(db, term_id: int, entry_ids: list[int]) -> bytes:
 
     hdr_fill = PatternFill(fill_type="solid", fgColor=HEADER_GRAY)
     hdr_font = Font(bold=True, color="FFFFFF")
-    for col, header in enumerate(["Course Code", "Title", "Section", "Instructor", "Time", "Room"], start=1):
+    headers = ["Course Code", "Title", "Section", "Instructor", "Full-Time/Part-Time", "Time", "Room"]
+    for col, header in enumerate(headers, start=1):
         c = ws.cell(row=1, column=col, value=header)
         c.font = hdr_font
         c.fill = hdr_fill
@@ -141,15 +143,17 @@ def generate_course_list_excel(db, term_id: int, entry_ids: list[int]) -> bytes:
         if not entry or not entry.course_id:
             continue
         course = entry.course
+        faculty = entry.faculty
         ws.cell(row=row, column=1, value=f"{course.dept_code} {course.course_number}")
         ws.cell(row=row, column=2, value=course.course_name)
         ws.cell(row=row, column=3, value=entry.section)
-        ws.cell(row=row, column=4, value=f"{entry.faculty.last_name}, {entry.faculty.first_name}" if entry.faculty else "No instructor")
-        ws.cell(row=row, column=5, value=_entry_time_label(entry))
-        ws.cell(row=row, column=6, value=entry.room.display_label if entry.room else "Not scheduled")
+        ws.cell(row=row, column=4, value=f"{faculty.last_name}, {faculty.first_name}" if faculty else "No instructor")
+        ws.cell(row=row, column=5, value=("Full Time" if faculty.full_time_or_part_time.value == "full_time" else "Part Time") if faculty else "")
+        ws.cell(row=row, column=6, value=_entry_time_label(entry))
+        ws.cell(row=row, column=7, value=entry.room.display_label if entry.room else "Not scheduled")
         row += 1
 
-    for col_idx, width in enumerate([16, 34, 9, 22, 30, 14], start=1):
+    for col_idx, width in enumerate([16, 34, 9, 22, 18, 30, 14], start=1):
         ws.column_dimensions[get_column_letter(col_idx)].width = width
 
     buf = io.BytesIO()

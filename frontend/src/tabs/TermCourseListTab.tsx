@@ -33,7 +33,7 @@ function minutesOf(t: string): number {
   return h * 60 + m
 }
 
-const EMPTY_COLUMN_FILTERS = { code: '', title: '', section: '', instructor: '', time: '', room: '' }
+const EMPTY_COLUMN_FILTERS = { code: '', title: '', section: '', instructor: '', fulltime: '', time: '', room: '' }
 
 export function TermCourseListTab() {
   const [terms, setTerms] = useState<Term[]>([])
@@ -122,6 +122,7 @@ export function TermCourseListTab() {
       case 'title': return r.course.course_name
       case 'section': return r.entry.section
       case 'instructor': return r.faculty ? `${r.faculty.last_name}, ${r.faculty.first_name}` : ''
+      case 'fulltime': return r.faculty ? (r.faculty.full_time_or_part_time === 'full_time' ? 'Full Time' : 'Part Time') : ''
       case 'time': return r.startMinutes < 0 ? Number.MAX_SAFE_INTEGER : (weekdayOrder(r.dayLabel, weekdayMap) * 100000 + r.startMinutes)
       case 'room': return r.room?.display_label ?? ''
       default: return 0
@@ -136,6 +137,10 @@ export function TermCourseListTab() {
     if (f.instructor) {
       const name = r.faculty ? `${r.faculty.last_name}, ${r.faculty.first_name}` : 'No instructor'
       if (!name.toLowerCase().includes(f.instructor.toLowerCase())) return false
+    }
+    if (f.fulltime) {
+      const label = r.faculty ? (r.faculty.full_time_or_part_time === 'full_time' ? 'Full Time' : 'Part Time') : ''
+      if (!label.toLowerCase().includes(f.fulltime.toLowerCase())) return false
     }
     if (f.time && !r.timeLabel.toLowerCase().includes(f.time.toLowerCase())) return false
     if (f.room) {
@@ -193,6 +198,8 @@ export function TermCourseListTab() {
                   filterValue={columnFilters.section} onFilterChange={v => setColumnFilter('section', v)} filterPlaceholder="#" />
                 <SortableTh label="Instructor" sortKey="instructor" sort={sort} onSort={k => setSort(s => nextSort(s, k))}
                   filterValue={columnFilters.instructor} onFilterChange={v => setColumnFilter('instructor', v)} filterPlaceholder="Filter instructor..." />
+                <SortableTh label="Full-Time/Part-Time" sortKey="fulltime" sort={sort} onSort={k => setSort(s => nextSort(s, k))}
+                  filterValue={columnFilters.fulltime} onFilterChange={v => setColumnFilter('fulltime', v)} filterPlaceholder="Full/Part..." />
                 <SortableTh label="Time" sortKey="time" sort={sort} onSort={k => setSort(s => nextSort(s, k))}
                   filterValue={columnFilters.time} onFilterChange={v => setColumnFilter('time', v)} filterPlaceholder="e.g. Mon" />
                 <SortableTh label="Room" sortKey="room" sort={sort} onSort={k => setSort(s => nextSort(s, k))}
@@ -201,7 +208,7 @@ export function TermCourseListTab() {
             </thead>
             <tbody>
               {sortedRows.length === 0 ? (
-                <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 16 }}>No courses match the current filters.</td></tr>
+                <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: 16 }}>No courses match the current filters.</td></tr>
               ) : sortedRows.map(r => (
                 <tr key={r.entry.id}>
                   <td style={{ fontFamily: 'monospace', color: 'var(--accent)' }}>
@@ -210,6 +217,7 @@ export function TermCourseListTab() {
                   <td style={{ color: 'var(--text-bright)' }}>{r.course.course_name}</td>
                   <td>{r.entry.section}</td>
                   <td>{r.faculty ? `${r.faculty.last_name}, ${r.faculty.first_name}` : 'No instructor'}</td>
+                  <td>{r.faculty ? (r.faculty.full_time_or_part_time === 'full_time' ? 'Full Time' : 'Part Time') : '—'}</td>
                   <td style={{ color: r.startMinutes < 0 ? 'var(--text-secondary)' : undefined }}>{r.timeLabel}</td>
                   <td>{r.room?.display_label ?? 'Not scheduled'}</td>
                 </tr>

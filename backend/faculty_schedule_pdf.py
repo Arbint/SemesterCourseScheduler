@@ -47,6 +47,27 @@ def _requires_department_meeting(faculty: Faculty) -> bool:
     return faculty.is_department_owned and faculty.full_time_or_part_time.value == "full_time"
 
 
+def _build_taughtwith_lead_map(db: Session, term_id: int) -> dict[int, int]:
+    """course_id -> lead course_id (feedback_80), combining global TaughtWith
+    groups and this term's own — a faculty teaching both halves of a
+    TaughtWith pair gets two entries at the exact same time/room, and the
+    lead is always the one shown, with its partner noted alongside it."""
+    from models import TaughtWithGroup, TermTaughtWithGroup
+
+    result: dict[int, int] = {}
+    for g in db.query(TaughtWithGroup).all():
+        if g.members:
+            lead = g.members[0].course_id  # members ordered lead-first
+            for m in g.members:
+                result[m.course_id] = lead
+    for g in db.query(TermTaughtWithGroup).filter(TermTaughtWithGroup.term_id == term_id).all():
+        if g.members:
+            lead = g.members[0].course_id
+            for m in g.members:
+                result[m.course_id] = lead
+    return result
+
+
 def build_faculty_schedule_grid(db: Session, term: Term, faculty: Faculty):
     """Same tick-grid approach as build_door_tag_grid, scoped to one faculty's
     own courses, their department meeting (only if actually required — see
@@ -89,7 +110,14 @@ def build_faculty_schedule_grid(db: Session, term: Term, faculty: Faculty):
                 raw_grid[wid][i] = "COVERED"
 
     requires_meeting = _requires_department_meeting(faculty)
+    lead_map = _build_taughtwith_lead_map(db, term.id)
 
+    # Collect entries first, grouped by (weekday, start) — a TaughtWith pair
+    # this faculty teaches both halves of lands two entries on the exact
+    # same tick. Deciding the winner only after collecting means the lead
+    # always wins, instead of whichever entry the loop reached first
+    # (feedback_80; place() used to just silently drop the second one).
+    grouped: dict[tuple[int, int], list[tuple]] = {}
     for table in term.schedule_tables:
         table_weekday_ids = [w.id for w in table.weekdays]
         for entry in table.entries:
@@ -101,27 +129,46 @@ def build_faculty_schedule_grid(db: Session, term: Term, faculty: Faculty):
                 continue
             entry_start = min(_parse_hhmm(ts.start_time) for ts in entry.time_slots)
             entry_end = max(_parse_hhmm(ts.end_time) for ts in entry.time_slots)
-            time_range = f"{_format_clock(entry_start)} to {_format_clock(entry_end)}"
-            if entry.course_id:
-                course = entry.course
-                display = {
-                    "title": f"{course.dept_code} {course.course_number} Sec {entry.section}",
-                    "name": course.course_name,
-                    "instructor": "",
-                    "time_range": time_range,
-                    "color": _entry_color(course.id),
-                }
-            else:
-                display = {
-                    "title": entry.meeting.name,
-                    "name": "",
-                    "instructor": "",
-                    "time_range": time_range,
-                    "color": colors.HexColor(MEETING_COLOR),
-                }
             active_wids = [w.id for w in entry.active_weekdays] or table_weekday_ids
             for wid in active_wids:
-                place(wid, entry_start, entry_end, display)
+                grouped.setdefault((wid, entry_start), []).append((entry, entry_end))
+
+    for (wid, entry_start), items in grouped.items():
+        def _sort_key(item):
+            entry = item[0]
+            if entry.course_id is None:
+                return (1, 0)
+            lead = lead_map.get(entry.course_id)
+            return (0, 0) if lead is None or lead == entry.course_id else (0, 1)
+        items.sort(key=_sort_key)
+        primary_entry, entry_end = items[0]
+        partner_entries = [it[0] for it in items[1:]]
+
+        time_range = f"{_format_clock(entry_start)} to {_format_clock(entry_end)}"
+        if primary_entry.course_id:
+            course = primary_entry.course
+            name = course.course_name
+            partner_codes = ", ".join(
+                f"{pe.course.dept_code} {pe.course.course_number}" for pe in partner_entries if pe.course_id
+            )
+            if partner_codes:
+                name += f" & {partner_codes}"
+            display = {
+                "title": f"{course.dept_code} {course.course_number} Sec {primary_entry.section}",
+                "name": name,
+                "instructor": "",
+                "time_range": time_range,
+                "color": _entry_color(course.id),
+            }
+        else:
+            display = {
+                "title": primary_entry.meeting.name,
+                "name": "",
+                "instructor": "",
+                "time_range": time_range,
+                "color": colors.HexColor(MEETING_COLOR),
+            }
+        place(wid, entry_start, entry_end, display)
 
     for oh in office_hours:
         start_min = _parse_hhmm(oh.start_time)

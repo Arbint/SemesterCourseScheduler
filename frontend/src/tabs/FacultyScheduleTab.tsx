@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import {
   termsApi, tablesApi, entriesApi, coursesApi, weekdaysApi, timeSlotsApi, facultyApi, roomsApi,
-  officeHoursApi, loadSettingsApi, meetingsApi, facultyAttributesApi, termLabel, DEFAULT_PRINT_CONFIG,
+  officeHoursApi, loadSettingsApi, meetingsApi, facultyAttributesApi, termTaughtWithApi, termLabel,
+  DEFAULT_PRINT_CONFIG, buildEffectiveTaughtWith,
   type Term, type Weekday, type TimeSlot, type ScheduleTable, type ScheduleEntry,
   type Course, type Faculty, type OfficeHour, type LoadSettings, type Room, type Meeting,
-  type FacultyRank, type FacultyAttribute, type PrintConfig,
+  type FacultyRank, type FacultyAttribute, type PrintConfig, type TermTaughtWithGroup,
 } from '../api'
 import { SearchableSelect } from '../components/SearchableSelect'
 import { courseColor, OFFICE_HOUR_SOLID_COLOR, MEETING_SOLID_COLOR } from '../components/ScheduleGrid'
@@ -29,7 +30,10 @@ const RANK_LABELS: Record<FacultyRank, string> = {
   professor_of_practice: 'Professor of Practice',
 }
 
-type CourseCell = { kind: 'course'; entry: ScheduleEntry; course: Course; room: Room | null; span: number; timeRange: string }
+// partnerCourse: set when this faculty teaches both halves of a TaughtWith
+// pair in the same slot — course is always the lead, partnerCourse the
+// other half (feedback_80).
+type CourseCell = { kind: 'course'; entry: ScheduleEntry; course: Course; partnerCourse?: Course; room: Room | null; span: number; timeRange: string }
 // Meetings (feedback_58) carry no faculty_id of their own — they're
 // department-wide, so the same meeting is shown on every faculty's table.
 type MeetingCell = { kind: 'meeting'; entry: ScheduleEntry; meeting: Meeting; room: Room | null; span: number; timeRange: string }
@@ -256,6 +260,7 @@ export function FacultyScheduleTab() {
   const [courses, setCourses] = useState<Course[]>([])
   const [meetings, setMeetings] = useState<Meeting[]>([])
   const [officeHours, setOfficeHours] = useState<OfficeHour[]>([])
+  const [termTaughtWith, setTermTaughtWith] = useState<TermTaughtWithGroup[]>([])
 
   const [popup, setPopup] = useState<PopupState | null>(null)
   const [savingPopup, setSavingPopup] = useState(false)
@@ -278,7 +283,7 @@ export function FacultyScheduleTab() {
   }, [])
 
   useEffect(() => {
-    if (!selectedTermId) { setTables([]); setEntries([]); setCourses([]); setMeetings([]); setOfficeHours([]); return }
+    if (!selectedTermId) { setTables([]); setEntries([]); setCourses([]); setMeetings([]); setOfficeHours([]); setTermTaughtWith([]); return }
     const term = terms.find(t => t.id === selectedTermId)
     if (!term) return
     Promise.all([
@@ -287,12 +292,14 @@ export function FacultyScheduleTab() {
       coursesApi.list(term.semester_name),
       meetingsApi.list(selectedTermId),
       officeHoursApi.list(selectedTermId),
-    ]).then(([tbs, ents, cs, mts, ohs]) => {
+      termTaughtWithApi.list(selectedTermId),
+    ]).then(([tbs, ents, cs, mts, ohs, ttw]) => {
       setTables(tbs)
       setEntries(ents)
       setCourses(cs)
       setMeetings(mts)
       setOfficeHours(ohs)
+      setTermTaughtWith(ttw)
     })
   }, [selectedTermId, terms])
 
@@ -313,6 +320,11 @@ export function FacultyScheduleTab() {
   const meetingMap = new Map(meetings.map(m => [m.id, m]))
   const roomMap = new Map(rooms.map(r => [r.id, r]))
   const attributeMap = new Map(attributes.map(a => [a.id, a]))
+  // Which course_id is the TaughtWith lead — a faculty teaching both halves
+  // of a TaughtWith pair has two entries landing in the same cell; the lead
+  // is always shown as primary, with its partner noted alongside it
+  // (feedback_80), instead of one silently overwriting the other.
+  const { leadId: effectiveLeadId } = buildEffectiveTaughtWith(courses, termTaughtWith)
   const sortedWeekdays = useMemo(
     () => [...weekdays].sort((a, b) => a.display_order - b.display_order),
     [weekdays]
@@ -338,6 +350,13 @@ export function FacultyScheduleTab() {
     const grid = new Map<number, GridCell[]>()
     for (const w of sortedWeekdays) grid.set(w.id, new Array(numSlots).fill(null).map(() => ({ kind: 'empty' } as GridCell)))
 
+    // Collect this faculty's own course entries first, grouped by
+    // (weekday, startIdx) — a TaughtWith pair this faculty teaches both
+    // halves of lands two entries on the exact same cell. Deciding the
+    // winner only after collecting means the lead always wins, instead of
+    // whichever entry the loop happened to reach last (feedback_80).
+    type PlacedCourse = { entry: ScheduleEntry; course: Course; room: Room | null; span: number; timeRange: string; startIdx: number }
+    const cellGroups = new Map<string, PlacedCourse[]>()
     for (const table of tables) {
       for (const entry of entries) {
         if (entry.faculty_id !== facultyId || entry.schedule_table_id !== table.id || !entry.course_id) continue
@@ -351,12 +370,27 @@ export function FacultyScheduleTab() {
         const room = entry.room_id != null ? roomMap.get(entry.room_id) ?? null : null
         const effWeekdays = entry.active_weekday_ids.length ? entry.active_weekday_ids : table.weekday_ids
         for (const wid of effWeekdays) {
-          const col = grid.get(wid)
-          if (!col) continue
-          col[startIdx] = { kind: 'course', entry, course, room, span, timeRange }
-          for (let i = startIdx + 1; i < startIdx + span && i < col.length; i++) col[i] = { kind: 'covered' }
+          const key = `${wid}:${startIdx}`
+          const arr = cellGroups.get(key) ?? []
+          arr.push({ entry, course, room, span, timeRange, startIdx })
+          cellGroups.set(key, arr)
         }
       }
+    }
+
+    for (const [key, group] of cellGroups) {
+      const wid = Number(key.split(':')[0])
+      const col = grid.get(wid)
+      if (!col) continue
+      let primary = group[0]
+      let partner: PlacedCourse | undefined
+      if (group.length > 1) {
+        const leadCid = effectiveLeadId.get(primary.course.id)
+        primary = group.find(g => g.course.id === leadCid) ?? primary
+        partner = group.find(g => g !== primary)
+      }
+      col[primary.startIdx] = { kind: 'course', entry: primary.entry, course: primary.course, partnerCourse: partner?.course, room: primary.room, span: primary.span, timeRange: primary.timeRange }
+      for (let i = primary.startIdx + 1; i < primary.startIdx + primary.span && i < col.length; i++) col[i] = { kind: 'covered' }
     }
 
     if (requiresDepartmentMeeting) for (const table of tables) {
@@ -647,6 +681,11 @@ export function FacultyScheduleTab() {
                                       {cell.course.dept_code} {cell.course.course_number} Sec {cell.entry.section}
                                     </div>
                                     <div style={{ fontSize: 12, color: '#ddd', marginTop: 2 }}>{cell.course.course_name}</div>
+                                    {cell.partnerCourse && (
+                                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)', marginTop: 2, fontWeight: 600 }}>
+                                        & {cell.partnerCourse.dept_code} {cell.partnerCourse.course_number}
+                                      </div>
+                                    )}
                                     {cell.room && (
                                       <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)', marginTop: 3 }}>{cell.room.display_label}</div>
                                     )}

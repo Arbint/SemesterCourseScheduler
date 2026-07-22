@@ -5,7 +5,7 @@ import { DndContext, type DragEndEvent, useDraggable } from '@dnd-kit/core'
 import {
   termsApi, tablesApi, entriesApi, coursesApi, roomsApi, timeSlotsApi,
   weekdaysApi, semestersApi, facultyApi, chatApi, termTaughtWithApi, auditApi, meetingsApi,
-  termLabel,
+  termLabel, buildEffectiveTaughtWith,
   type Term, type ScheduleTable, type ScheduleEntry, type Course, type Meeting,
   type Room, type TimeSlot, type Weekday, type Semester, type Faculty,
   type IssueItem, type TermTaughtWithGroup, type ChatTraceStep
@@ -392,24 +392,8 @@ export function TermSchedulingTab() {
   const courseMap = new Map(courses.map(c => [c.id, c]))
   const meetingMap = new Map(meetings.map(m => [m.id, m]))
 
-  // Combined partner map: global (from course.taught_with_partner_ids) + per-term
-  const effectivePartnerIds = new Map<number, number[]>()
-  // Combined lead map: which course_id is the group's lead — always displayed
-  // first when two TaughtWith partners land in the same cell (feedback_80).
-  const effectiveLeadId = new Map<number, number>()
-  for (const c of courses) {
-    const partners = [...c.taught_with_partner_ids]
-    if (c.taught_with_lead_id != null) effectiveLeadId.set(c.id, c.taught_with_lead_id)
-    for (const g of termTaughtWith) {
-      if (g.course_ids.includes(c.id)) {
-        for (const pid of g.course_ids) {
-          if (pid !== c.id && !partners.includes(pid)) partners.push(pid)
-        }
-        if (g.lead_course_id != null) effectiveLeadId.set(c.id, g.lead_course_id)
-      }
-    }
-    if (partners.length) effectivePartnerIds.set(c.id, partners)
-  }
+  // Combined partner/lead maps: global (course.taught_with_*) + per-term groups.
+  const { partnerIds: effectivePartnerIds, leadId: effectiveLeadId } = buildEffectiveTaughtWith(courses, termTaughtWith)
 
   // Clear issue highlight when the underlying issue is resolved
   useEffect(() => {

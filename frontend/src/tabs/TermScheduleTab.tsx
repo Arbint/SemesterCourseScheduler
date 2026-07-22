@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   termsApi, tablesApi, entriesApi, coursesApi, roomsApi, timeSlotsApi,
-  weekdaysApi, termTaughtWithApi, facultyApi, meetingsApi,
+  weekdaysApi, termTaughtWithApi, facultyApi, meetingsApi, buildEffectiveTaughtWith,
   type Term, type ScheduleTable, type ScheduleEntry, type Course,
   type Room, type TimeSlot, type Weekday, type Faculty, type TermTaughtWithGroup, type Meeting,
 } from '../api'
@@ -149,23 +149,7 @@ export function TermScheduleTab() {
   const courseMap = new Map(courses.map(c => [c.id, c]))
   const meetingMap = new Map(meetings.map(m => [m.id, m]))
 
-  const effectivePartnerIds = new Map<number, number[]>()
-  // Which course_id is the group's lead — always displayed first when two
-  // TaughtWith partners land in the same cell (feedback_80).
-  const effectiveLeadId = new Map<number, number>()
-  for (const c of courses) {
-    const partners = [...c.taught_with_partner_ids]
-    if (c.taught_with_lead_id != null) effectiveLeadId.set(c.id, c.taught_with_lead_id)
-    for (const g of termTaughtWith) {
-      if (g.course_ids.includes(c.id)) {
-        for (const pid of g.course_ids) {
-          if (pid !== c.id && !partners.includes(pid)) partners.push(pid)
-        }
-        if (g.lead_course_id != null) effectiveLeadId.set(c.id, g.lead_course_id)
-      }
-    }
-    if (partners.length) effectivePartnerIds.set(c.id, partners)
-  }
+  const { partnerIds: effectivePartnerIds, leadId: effectiveLeadId } = buildEffectiveTaughtWith(courses, termTaughtWith)
 
   const isEntryDimmed = (entry: ScheduleEntry): boolean =>
     entryMatchesFilters(entry, entry.course_id != null ? courseMap.get(entry.course_id) : undefined, tables.find(t => t.id === entry.schedule_table_id), activeFilters)

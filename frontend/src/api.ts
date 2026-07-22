@@ -119,6 +119,33 @@ export interface TermTaughtWithGroup {
   lead_course_id: number | null
 }
 
+// Combines global (course.taught_with_partner_ids/lead_id) + per-term
+// TaughtWith groups into one pair of lookup maps — shared by every tab that
+// needs to know "who's this course's TaughtWith partner" and "which of them
+// is the lead" (feedback_80): Term Scheduling, Term Schedule (view), and
+// Faculty Schedule.
+export function buildEffectiveTaughtWith(courses: Course[], termTaughtWith: TermTaughtWithGroup[]): {
+  partnerIds: Map<number, number[]>
+  leadId: Map<number, number>
+} {
+  const partnerIds = new Map<number, number[]>()
+  const leadId = new Map<number, number>()
+  for (const c of courses) {
+    const partners = [...c.taught_with_partner_ids]
+    if (c.taught_with_lead_id != null) leadId.set(c.id, c.taught_with_lead_id)
+    for (const g of termTaughtWith) {
+      if (g.course_ids.includes(c.id)) {
+        for (const pid of g.course_ids) {
+          if (pid !== c.id && !partners.includes(pid)) partners.push(pid)
+        }
+        if (g.lead_course_id != null) leadId.set(c.id, g.lead_course_id)
+      }
+    }
+    if (partners.length) partnerIds.set(c.id, partners)
+  }
+  return { partnerIds, leadId }
+}
+
 export interface Term {
   id: number
   semester_id: number
